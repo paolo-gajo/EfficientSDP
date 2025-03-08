@@ -173,7 +173,6 @@ class StepParser(torch.nn.Module):
                 'edge_index': torch.tensor(list(edge_index)).T - 1,
             }
             batch_step_reps.append(out_dict)
-        
         return batch_step_reps
 
     def make_step_mask(self, attention_mask: torch.Tensor, step_graph: Set[Tuple[int, int]], step_idx_tokens: torch.Tensor):

@@ -124,35 +124,27 @@ class GraphDataset(Dataset):
                     max = n_all_topos
                     max_step_sample = sample
         self.data = [max_step_sample]
-
-    # @check_io
-    # def permute_graph(self, G, order_idx):
-    #     step_indices = G['step_indices']
-    #     step_indices_tokens = G['step_indices_tokens']
-    #     G_perm = G.copy()
-        
-    #     for key, value in G_perm.items():    
-    #         idx = step_indices_tokens if ('tokens' in key or 'encoded_input' == key) else step_indices
-    #         if is_tensorizable(value):
-    #             G_perm[key] = apply_sub_dicts(value, lambda x: reorder_tensor(x, idx=idx, permutation=order_idx))
-    #         elif key != 'step_graph':
-    #             G_perm[key] = reorder_list(value, idx=idx, permutation=order_idx)
-    #     return G_perm
     
     # @check_io
     def permute_graph(self, G, order_idx):
         # TODO: FIRST PERMUTE WORDS AND THEN REPROCESS
         step_indices = G['step_indices']
         step_indices_tokens = G['step_indices_tokens']
+        attention_mask = G['encoded_input']['attention_mask']
+        words_mask_custom = G['encoded_input']['words_mask_custom']
+
+        G.pop('encoded_input')
         G_perm = G.copy()
         
         for key, value in G_perm.items():    
             idx = step_indices_tokens if ('tokens' in key or 'encoded_input' == key) else step_indices
+            cutoff = sum(attention_mask) if ('tokens' in key or 'encoded_input' == key) else sum(words_mask_custom)
             if key not in ['head_indices', 'head_indices_tokens']:
                 if is_tensorizable(value):
-                    G_perm[key] = apply_sub_dicts(value, lambda x: reorder_tensor(x, idx=idx, permutation=order_idx))
+                    G_perm[key] = apply_sub_dicts(value, lambda x: reorder_tensor(x, idx=idx, permutation=order_idx))[:cutoff]
                 elif key != 'step_graph':
-                    G_perm[key] = reorder_list(value, idx=idx, permutation=order_idx)
+                    G_perm[key] = reorder_list(value, idx=idx, permutation=order_idx)[:cutoff]
+        
         for key, value in G_perm.items():
             idx = step_indices_tokens if ('tokens' in key or 'encoded_input' == key) else step_indices
             if key in ['head_indices', 'head_indices_tokens']:
@@ -168,16 +160,18 @@ class GraphDataset(Dataset):
                             if v1[1] == v2[0]:
                                 h_idx_perm.append(k2 + 1)
                 G_perm[key] = torch.tensor(h_idx_perm)
-        word_ids_custom = G_perm['encoded_input']['word_ids_custom']
-        words_mask_custom = G_perm['encoded_input']['words_mask_custom']
-        G_perm['encoded_input'] = self.tokenizer(G_perm['words'][:sum(words_mask_custom)],
-                                        is_split_into_words = True,
-                                        return_tensors = 'pt',
-                                        # padding = 'max_length' if self.padding else False,
-                                        )
-        G_perm['encoded_input']['word_ids_custom'] = word_ids_custom
-        G_perm['encoded_input']['words_mask_custom'] = words_mask_custom
-        G_perm['decoded'] = self.get_original_words(G_perm['encoded_input']['input_ids'], G['encoded_input']['word_ids_custom'])
+        
+        encoding = self.tokenizer(G_perm['words'],
+                                    is_split_into_words = True,
+                                    return_tensors = 'pt',
+                                    # padding = 'max_length' if self.padding else False,
+                                    )
+        word_ids = torch.as_tensor([elem if elem is not None else -100 for elem in encoding.word_ids()])
+        words_mask_custom = torch.as_tensor([1 for _ in range(len(G_perm['words']))])
+        encoding.update({'words_mask_custom': words_mask_custom, 'word_ids_custom': word_ids})
+        G_perm['encoded_input'] = encoding
+
+        G_perm['decoded'] = self.get_original_words(G_perm['encoded_input']['input_ids'], G_perm['encoded_input']['word_ids_custom'])
         G_perm = apply_sub_dicts(G_perm, self.tensorize)
         G_perm = apply_sub_dicts(G_perm, self.pad)
         return G_perm
@@ -186,6 +180,8 @@ class GraphDataset(Dataset):
         # turns all fields into appropriate tensors
         processed_data = []
         for sample in data:
+            for key in ['sent_indices', 'word_sent_indices']:
+                sample.pop(key)
             processed_sample = {}
             processed_sample.update(sample)
             encoding = self.tokenizer(sample['words'],
@@ -203,10 +199,10 @@ class GraphDataset(Dataset):
             processed_sample['head_tags'] = torch.tensor([self.label_index_map['edgelabel2class'][el] for el in sample['head_tags']])
             processed_sample['head_tags_tokens'] = self.convert_to_token_indices(processed_sample['head_tags'], word_ids)
             processed_sample['head_indices_tokens'] = self.convert_to_token_indices(processed_sample['head_indices'], word_ids)
-            processed_sample['edge_index'] = torch.as_tensor([[head, tail] for head, tail in enumerate(sample['head_indices'])])
-            processed_sample['edge_index_steps'] = torch.as_tensor([[head, tail] for head, tail in enumerate(sample['step_indices'])])
-            processed_sample['edge_index_tokens'] = torch.as_tensor([[head, tail] for head, tail in enumerate(processed_sample['head_indices_tokens'])])
-            processed_sample['edge_index_steps_tokens'] = torch.as_tensor([[head, tail] for head, tail in enumerate(processed_sample['step_indices_tokens'])])
+            # processed_sample['edge_index'] = torch.as_tensor([[head, tail] for head, tail in enumerate(sample['head_indices'])])
+            # processed_sample['edge_index_steps'] = torch.as_tensor([[head, tail] for head, tail in enumerate(sample['step_indices'])])
+            # processed_sample['edge_index_tokens'] = torch.as_tensor([[head, tail] for head, tail in enumerate(processed_sample['head_indices_tokens'])])
+            # processed_sample['edge_index_steps_tokens'] = torch.as_tensor([[head, tail] for head, tail in enumerate(processed_sample['step_indices_tokens'])])
             processed_sample = apply_sub_dicts(processed_sample, self.tensorize)
             processed_sample = apply_sub_dicts(processed_sample, self.pad)
             processed_sample['step_graph'] = self.get_step_graph(sample)
@@ -227,9 +223,6 @@ class GraphDataset(Dataset):
         G_masked = G_masked[:, mask_zeros].T.tolist()
         G = [tuple(sorted([el[0], el[1]])) for el in G_masked]
         G = set(sorted(G, key=lambda x: x[0]))
-        # G_s = torch.tensor([el[0] for el in G])
-        # G_t = torch.tensor([el[1] for el in G])
-        # G = torch.stack([G_s, G_t])
         return G
 
     def pad_zeros(self, t):

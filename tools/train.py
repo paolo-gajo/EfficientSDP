@@ -28,7 +28,7 @@ import numpy as np
 from pprint import pprint
 import sys
 import json
-torch.set_printoptions(linewidth=100000, threshold=100000)
+torch.set_printoptions(linewidth=100, threshold=100)
 
 ## get the arguments to modify the config
 args = get_args()
