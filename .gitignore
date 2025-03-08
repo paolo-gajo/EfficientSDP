@@ -1,0 +1,8 @@
+**/__pycache__/**
+**/.ipynb_checkpoints/**
+saved_models/
+**/*.egg-info/
+data/
+.env/
+.vscode/
+notebooks/
