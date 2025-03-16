@@ -2,7 +2,7 @@
 	Here, we train the MLM model on large corpus of recipes.
 	corpus dataset!
 
-	CUDA_VISIBLE_DEVICES=2 python3 tools/train_MLM.py --opts --dataset_name "Recipe1M" --save_dir "saved_models/MLM_models" --model_name "bert-base-uncased"
+	CUDA_VISIBLE_DEVICES=2 python3 tools/train_MLM.py --opts --dataset_name "Recipe1M" --save_dir "results/MLM_models" --model_name "bert-base-uncased"
 """
 
 import os
@@ -24,7 +24,7 @@ args = get_args()
 
 ## get variables based on args 
 dataset_name = args['dataset_name'] if 'dataset_name' in args else 'Recip1M'
-save_dir = args['save_dir'] if 'save_dir' in args else 'saved_models/MLM_models'
+save_dir = args['save_dir'] if 'save_dir' in args else 'results/MLM_models'
 model_name = args['model_name'] if 'model_name' in args else 'bert-base-uncased'
 
 save_dir = os.path.join(save_dir, f'{dataset_name}_{get_current_time_string()}')

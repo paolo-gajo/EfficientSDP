@@ -1,6 +1,6 @@
 **/__pycache__/**
 **/.ipynb_checkpoints/**
-saved_models/
+# results/
 **/*.egg-info/
 data/
 .env/
@@ -9,3 +9,4 @@ notebooks/
 *.log
 *.pdf
 *.tex
+*.pth

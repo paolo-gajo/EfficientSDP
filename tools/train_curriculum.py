@@ -8,7 +8,7 @@
         3. 'data_splits' --> Number of data splits where model is trained! 
         4. 'epoch_per_training' --> How many epochs should each model be trained on. 
 
-    CUDA_VISIBLE_DEVICES=1 python3 tools/train_curriculum.py --opts --dir_path "./saved_models/curriculum_learning_models/training_1" --data_splits "10" --epoch_per_training "10" --curriculum_data_dir "/data/Multitask_RFG/curriculum_learning_data" --data_exposure_strategy "bin_by_bin"
+    CUDA_VISIBLE_DEVICES=1 python3 tools/train_curriculum.py --opts --dir_path "./results/curriculum_learning_models/training_1" --data_splits "10" --epoch_per_training "10" --curriculum_data_dir "/data/Multitask_RFG/curriculum_learning_data" --data_exposure_strategy "bin_by_bin"
 """
 
 import os

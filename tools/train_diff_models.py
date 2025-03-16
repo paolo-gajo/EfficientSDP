@@ -10,7 +10,7 @@ from stepparser.utils import make_dir
 """
 model_names = ['bert-base-uncased', 'roberta-base', 'albert-base-v1', 'albert-large-v1', 'xlm-roberta-base', 'facebook/bart-base', 'microsoft/layoutlm-base-uncased', 'sentence-transformers/all-MiniLM-L6-v2', 'dslim/bert-base-NER', 'xlm-roberta-large-finetuned-conll03-english', 'google/electra-small-discriminator']
 
-save_dir = "saved_models/FG_parsing_with_sparse_embedding/"
+save_dir = "results/FG_parsing_with_sparse_embedding/"
 make_dir(save_dir)
 
 models_failed = []

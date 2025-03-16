@@ -45,7 +45,7 @@ default_cfg = {
     'epochs': 100,
     'learning_rate': 0.001,
     'shuffle' : True, 
-    'save_dir': './saved_models',
+    'save_dir': './results',
     'model_name': 'bert-base-uncased', ## model name, should be key in hugging face pretrained model zoo
     'batch_size': 8,
     'encoder_output_dim': 768,

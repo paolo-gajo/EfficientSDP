@@ -30,7 +30,7 @@ def train(config):
 
             ## build a model
             model = build_model(config)
-            # model.load_state_dict(torch.load('saved_models/model_1_bert-base-multilingual-cased_20220725-172537/model.pth'))
+            # model.load_state_dict(torch.load('results/model_1_bert-base-multilingual-cased_20220725-172537/model.pth'))
             # model.eval()
 
             ## optimizer ## write build_optimizer function!

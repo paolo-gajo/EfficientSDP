@@ -110,14 +110,14 @@ for split in range(splits):
 ## let's train
 for i, (train_path, test_path, val_path) in enumerate(zip(train_paths, test_paths, val_paths)):
 
-    save_dir = f"./saved_models/{splits}_splits_finetune_with_new_softmax_on_old_split/"
+    save_dir = f"./results/{splits}_splits_finetune_with_new_softmax_on_old_split/"
     split = str(i).zfill(5)
     save_dir_split = os.path.join(save_dir, f'split_{split}')
     ## if training from scratch
     train_cmd = f'python3 tools/train.py --opts --train_file "{train_path}" --val_file "{val_path}" --test_file "{test_path}" --save_dir "{save_dir_split}" --seed "{seed}" --model_name "bert-base-uncased" --use_pred_tags "True" '
 
     ## if finetuning from a pretrained silver model
-    # train_cmd = f'python3 tools/train.py --opts --train_file "{train_path}" --val_file "{val_path}" --test_file "{test_path}" --save_dir "{save_dir_split}" --seed "{seed}" --model_name "bert-base-uncased" --use_pred_tags "True" --model_start_path "saved_models/Silver_data_pretraining/Recipe1_Silver_data_with_different_softmax_bert-base-uncased_2022-10-05--22:37:54/model.pth" --labels_json_path "saved_models/Silver_data_pretraining/Recipe1_Silver_data_with_different_softmax_bert-base-uncased_2022-10-05--22:37:54/labels.json"'
+    # train_cmd = f'python3 tools/train.py --opts --train_file "{train_path}" --val_file "{val_path}" --test_file "{test_path}" --save_dir "{save_dir_split}" --seed "{seed}" --model_name "bert-base-uncased" --use_pred_tags "True" --model_start_path "results/Silver_data_pretraining/Recipe1_Silver_data_with_different_softmax_bert-base-uncased_2022-10-05--22:37:54/model.pth" --labels_json_path "results/Silver_data_pretraining/Recipe1_Silver_data_with_different_softmax_bert-base-uncased_2022-10-05--22:37:54/labels.json"'
     if os.system(train_cmd) != 0:
         print("Training failed, deleting {split_data_dir} and {save_dir} directories.")
         if 'split_data_dir' not in args:
