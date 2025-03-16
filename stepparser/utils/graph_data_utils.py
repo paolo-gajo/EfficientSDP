@@ -1,3 +1,4 @@
+from collections import Counter
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data._utils.collate import default_collate
@@ -7,42 +8,58 @@ from networkx import DiGraph, all_topological_sorts, from_edgelist
 import numpy as np
 import random
 from tqdm.auto import tqdm
-import os
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
 from collections import OrderedDict
+from copy import deepcopy
+import matplotlib.pyplot as plt
 
 def check_io(func):
     def wrapper(self, G, order_idx, *args, **kwargs):
-        words = G['words']
-        head_indices = G['head_indices'].tolist()
-        for i, el in enumerate(zip(words, head_indices)):
-            if el[0] != '0':
-                print(i + 1, el)
+        # Store original data for comparison
+        words_orig = G['words']
+        head_indices_orig = G['head_indices'].tolist()
+        step_indices_orig = G['step_indices'].tolist()
         
-        # Call the original permute_graph function.
+        # Call the original permute_graph function
         G_perm = func(self, G, order_idx, *args, **kwargs)
-
-        # keys_to_check = ['pos_tags', 'head_tags', 'head_indices']
-
-        # for mod in ['', '_tokens']:
-        #     for key in keys_to_check:
-        #         idx_reordered = torch.arange(G_perm[f'step_indices{mod}'].shape[-1])
-        #         max_step = torch.max(G_perm[f'step_indices{mod}'])
-        #         for i in range(1, max_step + 1):
-        #             mask_og = torch.where(G[f'step_indices{mod}'] == i)[0]
-        #             mask_perm = torch.where(G_perm[f'step_indices{mod}'] == i)[0]
-        #             idx_reordered[min(mask_og):max(mask_og) + 1] = mask_perm
-
-        #         if not torch.equal(G[f'{key}{mod}'], G_perm[f'{key}{mod}'][idx_reordered]):
-        #             raise ValueError("Mismatch between input and output words after permutation")   
+        
+        # Get permuted data
         words_perm = G_perm['words']
         head_indices_perm = G_perm['head_indices'].tolist()
-        for i, el in enumerate(zip(words_perm, head_indices_perm)):
-            if el[0] != '0':
-                print(i + 1, el)
+        step_indices_perm = G_perm['step_indices'].tolist()
+        
+        # Determine the number of non-padding items to display
+        valid_items_orig = [i for i, word in enumerate(words_orig) if word != '0']
+        valid_items_perm = [i for i, word in enumerate(words_perm) if word != '0']
+        max_items = max(len(valid_items_orig), len(valid_items_perm))
+        
+        # Print header
+        print("=" * 160)
+        print(f"{'ORIGINAL GRAPH':<80} | {'PERMUTED GRAPH (Order: ' + str(order_idx.tolist()) + ')'}")
+        print("=" * 160)
+        print(f"{'Index':<6}{'Word':<15}{'Head Index':<12}{'Points To':<15}{'Step':<6} | {'Index':<6}{'Word':<15}{'Head Index':<12}{'Points To':<15}{'Step':<6}")
+        print("-" * 160)
+        
+        # Build rows for both graphs
+        orig_rows = []
+        for i, (word, head_idx, step_idx) in enumerate(zip(words_orig, head_indices_orig, step_indices_orig)):
+            if word != '0':  # Skip padding
+                pointing_to = words_orig[head_idx-1] if head_idx > 0 else "ROOT"
+                orig_rows.append(f"{i+1:<6}{word:<15}{head_idx:<12}{pointing_to:<15}{step_idx:<6}")
+        
+        perm_rows = []
+        for i, (word, head_idx, step_idx) in enumerate(zip(words_perm, head_indices_perm, step_indices_perm)):
+            if word != '0':  # Skip padding
+                pointing_to = words_perm[head_idx-1] if head_idx > 0 else "ROOT"
+                perm_rows.append(f"{i+1:<6}{word:<15}{head_idx:<12}{pointing_to:<15}{step_idx:<6}")
+        
+        # Print rows side by side
+        for i in range(max_items):
+            orig_row = orig_rows[i] if i < len(orig_rows) else " " * 54
+            perm_row = perm_rows[i] if i < len(perm_rows) else ""
+            print(f"{orig_row} | {perm_row}")
+        
         return G_perm
+    
     return wrapper
 
 class GraphDataset(Dataset):
@@ -124,17 +141,68 @@ class GraphDataset(Dataset):
                     max = n_all_topos
                     max_step_sample = sample
         self.data = [max_step_sample]
-    
+
+    def plot_topological_sorts_histogram(self, savename: str = 'hist.pdf', column_threshold: int = 0):
+        """
+        Calculates the number of topological sortings for each sample's step graph 
+        and plots a histogram. Only bins (columns) with a frequency (number of samples)
+        greater than or equal to column_threshold are shown, and they are evenly spaced.
+        
+        Parameters:
+            column_threshold (int): Minimum frequency for a histogram column to be displayed.
+        """
+        topo_counts = []
+        for sample in self.data:
+            if sample['step_graph']:
+                G = from_edgelist(list(sample['step_graph']), create_using=DiGraph)
+                try:
+                    n_topos = len(list(all_topological_sorts(G)))
+                except Exception as e:
+                    print(f"Error computing topological sorts for a sample: {e}")
+                    n_topos = 0
+                topo_counts.append(n_topos)
+        
+        if not topo_counts:
+            print("No valid step graphs found in the dataset for topological sorting.")
+            return
+
+        # Compute frequency counts for each number of topological sorts.
+        freq = Counter(topo_counts)
+        
+        # Filter out bins with frequency below the specified threshold.
+        filtered_freq = {k: v for k, v in freq.items() if v >= column_threshold}
+        
+        if not filtered_freq:
+            print(f"No histogram columns have a frequency >= {column_threshold}.")
+            return
+        
+        # Sort the bins for consistent plotting.
+        bins = sorted(filtered_freq.keys())
+        frequencies = [filtered_freq[k] for k in bins]
+        
+        # Create evenly spaced positions for the bins.
+        x_positions = np.arange(len(bins))
+        
+        plt.figure(figsize=(10, 6))
+        plt.bar(x_positions, frequencies, edgecolor='black', align='center')
+        plt.xlabel('Number of Topological Sortings')
+        plt.ylabel('Number of Samples')
+        plt.title(f'Histogram of Topological Sorting Counts (Columns with frequency >= {column_threshold})')
+        # Set x-ticks using the evenly spaced positions, but label them with the actual bin values.
+        plt.xticks(x_positions, [str(b) for b in bins], rotation=45, ha='right')
+        plt.tight_layout()
+        plt.savefig(savename, format='pdf')
+
+
     # @check_io
     def permute_graph(self, G, order_idx):
-        # TODO: FIRST PERMUTE WORDS AND THEN REPROCESS
         step_indices = G['step_indices']
         step_indices_tokens = G['step_indices_tokens']
         attention_mask = G['encoded_input']['attention_mask']
         words_mask_custom = G['encoded_input']['words_mask_custom']
 
-        G.pop('encoded_input')
-        G_perm = G.copy()
+        G_perm = deepcopy(G)
+        G_perm.pop('encoded_input')
         
         for key, value in G_perm.items():    
             idx = step_indices_tokens if ('tokens' in key or 'encoded_input' == key) else step_indices
@@ -170,8 +238,6 @@ class GraphDataset(Dataset):
         words_mask_custom = torch.as_tensor([1 for _ in range(len(G_perm['words']))])
         encoding.update({'words_mask_custom': words_mask_custom, 'word_ids_custom': word_ids})
         G_perm['encoded_input'] = encoding
-
-        G_perm['decoded'] = self.get_original_words(G_perm['encoded_input']['input_ids'], G_perm['encoded_input']['word_ids_custom'])
         G_perm = apply_sub_dicts(G_perm, self.tensorize)
         G_perm = apply_sub_dicts(G_perm, self.pad)
         return G_perm

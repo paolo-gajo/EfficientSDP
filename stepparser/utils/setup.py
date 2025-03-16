@@ -13,24 +13,14 @@ import warnings
 
 
 def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode = 'train') -> Dict:
-    """
-        modify config params here before storing them
-    """
-
-    """
-        modify config
-        from arguments based on command line
-    """
-    
-    for key in args:
-        if key not in config:
-            warnings.warn(f'{key} is passed as an input but not a valid key in current config. So it is ignored while overriding config.')
-        else:
-            config[key] = args[key]
 
     for key in custom_config:
         config[key] = custom_config[key]
-
+    for key in args:
+        if key not in config and key not in custom_config:
+            warnings.warn(f'{key} is passed as an input but not a valid key in current config. So it is ignored while overriding config.')
+        else:
+            config[key] = args[key]
 
     ## when we are doing validation or test, we just need to change variables
     ## from command line args
@@ -39,11 +29,23 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
 
     ## let's set the device correctly
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+    splits = ['train', 'val', 'test']
     ## correct directory name
-    aug_string = ''.join([str(el) for el in config['augment_splits'].values()])
+    aug_string = ''.join([str(el) for el in [config[f'augment_{split}'] for split in splits]])
+    k_string = '-'.join([str(el) for el in [config[f'augment_k_{split}'] for split in splits]])
+    keep_og_string = ''.join([str(el) for el in [config[f'keep_og_{split}'] for split in splits]])
+    lstm_string = 1 if (config['use_tagger_lstm'] or config['use_parser_lstm']) else 0
     save_dir, model_name = config['save_dir'], config['model_name'].replace('/', '-').replace(' ', '')
-    dir_path = os.path.join(save_dir, f"{model_name}_{get_current_time_string()}_aug={aug_string}")
+    dir_path = os.path.join(save_dir,
+                            f"stepmask_{config['use_step_mask']}",
+                            f"gnn_{config['use_gnn']}",
+                            f"bpos_{config['use_bert_positional_embeddings']}",
+                            f"tagemb_{config['use_tag_embeddings_in_parser']}",
+                            f"aug_{aug_string}",
+                            f'lstm_{lstm_string}',
+                            f"keep_{keep_og_string}_k_{k_string}",
+                            f"{model_name}_{get_current_time_string()}")
+
     config['save_dir'] = dir_path
 
     ## model path

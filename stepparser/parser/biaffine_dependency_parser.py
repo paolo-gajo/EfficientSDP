@@ -95,7 +95,9 @@ class BiaffineDependencyParser(nn.Module):
 
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = nn.Dropout(input_dropout)
-        self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder_dim]))
+        self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
+        if self.config['use_gnn']:
+            self.sentinel_fusion = HeadSentinelFusion(encoder_dim + self.config['encoder_output_dim'], encoder_dim)
 
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
 
@@ -109,6 +111,7 @@ class BiaffineDependencyParser(nn.Module):
                 metadata: List[Dict[str, Any]] = [],
                 head_tags: torch.LongTensor = None,
                 head_indices: torch.LongTensor = None,
+                gnn_pooled_vector: torch.Tensor = None,
                 ) -> Dict[str, torch.Tensor]:
         """
         Parameters
@@ -170,8 +173,10 @@ class BiaffineDependencyParser(nn.Module):
         
         encoded_text = self._input_dropout(encoded_text)
         batch_size, _, encoding_dim = encoded_text.size()
-
-        head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
+        head_sentinel = self._head_sentinel
+        if gnn_pooled_vector is not None:
+            head_sentinel = self.sentinel_fusion(head_sentinel, gnn_pooled_vector)
+        head_sentinel = head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         # Concatenate the head sentinel onto the sentence representation.
         encoded_text = torch.cat([head_sentinel, encoded_text], dim = 1)
 
@@ -1173,3 +1178,23 @@ def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     
     plt.savefig(filename, format="pdf", bbox_inches="tight")
     plt.close()
+
+class HeadSentinelFusion(nn.Module):
+    def __init__(self, input_dim, output_dim, use_nonlinearity=True):
+        """
+        Args:
+            input_dim: The dimension of the concatenated vector.
+            output_dim: The desired output dimension (same as the original head vector dim).
+            use_nonlinearity: Whether to apply a non-linear activation after projection.
+        """
+        super().__init__()
+        self.projection = nn.Linear(input_dim, output_dim)
+        self.use_nonlinearity = use_nonlinearity
+
+    def forward(self, head_sentinel, pooled_vector):
+        # Concatenate the two vectors along the last dimension.
+        fused_vector = torch.cat([head_sentinel, pooled_vector], dim=-1)
+        projected = self.projection(fused_vector)
+        if self.use_nonlinearity:
+            projected = F.relu(projected)  # or another activation function like GELU/Tanh
+        return projected

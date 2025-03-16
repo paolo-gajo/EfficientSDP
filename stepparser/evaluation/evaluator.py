@@ -76,7 +76,7 @@ def evaluate_model(model_output, label_to_class_map, ignore_tags=[], ignore_edge
     
     # If we're in token mode and want word-level evaluation, we need to aggregate tokens into words
     if is_token_mode and use_word_level and 'word_ids_custom' in model_output[0]:
-        print('Using word-level token majority evaluation!')
+        # print('Using word-level token majority evaluation!')
         # Process each sample for word-level evaluation
         tagger_gts = []
         tagger_preds = []
@@ -125,7 +125,7 @@ def evaluate_model(model_output, label_to_class_map, ignore_tags=[], ignore_edge
                 parser_unlabeled_gt.append(f'{i}-{word_id}-{word}-{gt_head}')
                 parser_unlabeled_pred.append(f'{i}-{word_id}-{word}-{pred_head}')
     else:
-        print('Using original evaluation!')
+        # print('Using original evaluation!')
         tagger_preds = [f'{i}-{j}-{word}-{pred_tag}' for i, elem in enumerate(model_output) for j, (word, pred_tag) in enumerate(zip(elem[token_id_field], elem['pos_tags_pred']))]
         tagger_gts = [f'{i}-{j}-{word}-{gt_tag}' for i, elem in enumerate(model_output) for j, (word, gt_tag) in enumerate(zip(elem[token_id_field], elem['pos_tags_gt']))]
         

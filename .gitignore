@@ -6,3 +6,6 @@ data/
 .env/
 .vscode/
 notebooks/
+*.log
+*.pdf
+*.tex

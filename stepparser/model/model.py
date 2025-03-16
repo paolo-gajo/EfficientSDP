@@ -6,6 +6,7 @@ from transformers import AutoTokenizer
 from stepparser.encoder import Encoder, BERTWordEmbeddings
 from stepparser.parser import BiaffineDependencyParser
 from stepparser.tagger import Tagger
+from stepparser.gnn import GATNet
 import numpy as np
 import warnings
 from typing import Set, Tuple, List
@@ -20,11 +21,7 @@ class StepParser(torch.nn.Module):
         # self.encoder = BERTWordEmbeddings(self.config['model_name'])
         # self.config['encoder_output_dim'] = self.encoder.word_embeddings.weight.shape[-1]
         if self.config['use_gnn']:
-            self.gnn = GATv2Conv(self.config['encoder_output_dim'],
-                                self.config['encoder_output_dim'],
-                                self.config['gat_conv_heads'],
-                                dropout=0.2)
-            self.gnn_down_proj = nn.Linear(self.config['encoder_output_dim'] * self.config['gat_conv_heads'], self.config['encoder_output_dim'])
+            self.gnn = GATNet(self.config['encoder_output_dim'], self.config['encoder_output_dim'], num_layers=3, heads=8)
             self.gnn_merge = nn.Linear(self.config['encoder_output_dim'] * 2, self.config['encoder_output_dim'])
         self.tagger = Tagger(self.config)
         self.parser = BiaffineDependencyParser.get_model(self.config)
@@ -34,32 +31,23 @@ class StepParser(torch.nn.Module):
     def forward(self, model_input):
         # encoder
         model_input = {k: v.to(self.config['device']) if isinstance(v, torch.Tensor) else v for k, v in model_input.items()}
-        # for b in range(len(model_input['words'])):
-        #     for i, (word, head_idx) in enumerate(zip(model_input['words'][b], model_input['head_indices'][b])):
-        #         if head_idx != 0:
-        #             print(i + 1, word, int(head_idx))
         encoder_input = {k: v.to(self.config['device']) if isinstance(v, torch.Tensor) else v for k, v in model_input['encoded_input'].items()}
-        # If we use a step mask, its token-wise version needs to go into BERT
-        # but after that there's no need to care about the step mask, just use `words_mask_custom`.
+        
+        # Original masks
         og_mask_tokens = encoder_input['attention_mask']
         og_mask_words = encoder_input['words_mask_custom']
         
         if self.config['use_step_mask']:
-            # TODO: this will have to be learned by the gnn for inference time
-            # as we won't have the labels needed to create the step graph in that case
+            # Create step mask for attention
             encoder_input['attention_mask'] = self.make_step_mask(encoder_input['attention_mask'],
-                                                                  model_input['step_graph'],
-                                                                  model_input['step_indices_tokens'])
+                                                                model_input['step_graph'],
+                                                                model_input['step_indices_tokens'])
             encoder_input['words_mask_custom'] = self.token_mask_to_word_mask(encoder_input['attention_mask'], encoder_input)
             
-        # The token-wise normal mask/step mask goes into BERT here.
-        # In the encoder below and in the next if statement
-        # we control whether we are going to use word-wise or token-wise representations.
-        encoder_output = self.encoder(encoder_input) ## We get new attention mask because we have merged representations.
+        # Run encoder to get token/word representations
+        encoder_output = self.encoder(encoder_input)
 
-        # # check permutation equivariance
-        # print(self.tokenizer.batch_decode(encoder_input['input_ids']))
-        
+        # Determine which representation mode to use
         if self.config['rep_mode'] == 'words':
             tagger_labels = model_input['pos_tags']
             downstream_mask = encoder_input['words_mask_custom']
@@ -75,58 +63,45 @@ class StepParser(torch.nn.Module):
             step_indices = model_input['step_indices_tokens']
             og_mask = og_mask_tokens
 
-        # GNN
+        # GNN processing
+        gnn_out_pooled = None
         if self.config['use_gnn']:
-            step_representations = self.get_step_reps(h = encoder_output, step_indices=step_indices, step_graphs = model_input['step_graph'])
-            gnn_outputs = []
-            for sample in step_representations:
-                if sample['edge_index'].numel() > 0:
-                    gnn_out = self.gnn(sample['x'], sample['edge_index'].to(self.config['device']))
-                    gnn_out = self.gnn_down_proj(gnn_out)
-                else:
-                    gnn_out = torch.zeros(sample['x'].shape).to(self.config['device'])
-                gnn_outputs.append(gnn_out)
-
-            for enc_out, gnn_out, step_idx in zip(encoder_output, gnn_outputs, step_indices):
-                # if the encoder is frozen we need to clone its output
-                if not enc_out.requires_grad:
-                    enc_out = enc_out.clone()
-                step_idx = step_idx - 1
-                step_num = int(torch.max(step_idx).item())
-                for i in range(step_num + 1):
-                    step_i_indices = torch.where(step_idx == i)[0]
-                    enc_out[step_i_indices] = F.relu(self.gnn_merge(torch.cat([enc_out[step_i_indices], gnn_out[i]], dim = -1)))
-
-        ## tagging the input
-        tagger_output = self.tagger(encoder_output, mask = downstream_mask, labels = tagger_labels)
-
-        ## predicted tags
+            encoder_output, gnn_out_pooled = self.gnn.process_step_representations(
+                encoder_output=encoder_output,
+                step_indices=step_indices,
+                step_graphs=model_input['step_graph']
+            )
+        
+        # Tagging
+        tagger_output = self.tagger(encoder_output, mask=downstream_mask, labels=tagger_labels)
         pos_tags_pred = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
-
-        ## tags
+        
+        # Ground truth tags
         try:
-            pos_tags_gt = torch.nn.functional.one_hot(tagger_labels, num_classes = self.config['n_tags'])
+            pos_tags_gt = torch.nn.functional.one_hot(tagger_labels, num_classes=self.config['n_tags'])
         except:
             warnings.warn("Ground truth tags are unavailable, using predicted tags for all purposes.")
             pos_tags_gt = pos_tags_pred
 
-        ## during training, we use gt labels, otherwise, we use predicted labels
+        # Use appropriate tags based on mode
         if self.mode in ['train', 'validation']:  
             head_tags, head_indices = head_tags, head_indices
-        
         elif self.mode == 'test':
-            # pos_tags = tagger_labels
             head_tags, head_indices = None, None
+            
+        # Use predicted or ground truth tags based on config
         pos_tags_parser = pos_tags_pred if self.config['use_pred_tags'] else pos_tags_gt
+        
+        # Parsing
         parser_output = self.parser(encoder_output,
                                     pos_tags_parser.float(),
                                     downstream_mask,
-                                    og_mask = og_mask,
-                                    head_tags = head_tags,
-                                    head_indices = head_indices,
-                                    )
+                                    og_mask=og_mask,
+                                    head_tags=head_tags,
+                                    head_indices=head_indices,
+                                    gnn_pooled_vector=gnn_out_pooled)
 
-        ## calculate loss, when training or validation
+        # Calculate loss or return predictions
         if self.mode in ['train', 'validation']:
             loss = parser_output['loss'] * self.config['loss_alpha'] + tagger_output.loss * (1 - self.config['loss_alpha'])
             return loss
