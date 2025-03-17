@@ -10,7 +10,7 @@ custom_config = {
     'test_ignore_edge_dep': ['root', '-'], ## this will be ignored during evaluation
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'loss_alpha': 0.5,
-    'freeze_encoder': 0,
+    'freeze_encoder': 1,
     'learning_rate': 1e-4,
     'batch_size': 8,
     'plot': 0,
@@ -31,8 +31,9 @@ custom_config = {
     'use_tag_embeddings_in_parser': 0,
     'use_tagger_lstm': 0,
     'use_parser_lstm': 0,
-    'use_gnn': 'mpnn',  # 'gat' or 'mpnn'
+    'use_gnn': '',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
+    'arc_pred': 'dgmc',
 }
 
 default_cfg = {

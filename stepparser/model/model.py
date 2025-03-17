@@ -13,123 +13,163 @@ import warnings
 from typing import Set, Tuple, List
 import matplotlib.pyplot as plt
 
+
 class StepParser(torch.nn.Module):
-    def __init__(self, config): 
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.encoder = Encoder(config)
-        self.config['encoder_output_dim'] = self.encoder.encoder.embeddings.word_embeddings.weight.shape[-1]
+        self.config["encoder_output_dim"] = (
+            self.encoder.encoder.embeddings.word_embeddings.weight.shape[-1]
+        )
         # self.encoder = BERTWordEmbeddings(self.config['model_name'])
         # self.config['encoder_output_dim'] = self.encoder.word_embeddings.weight.shape[-1]
-        if self.config['use_gnn'] == 'gat':
-            self.gnn = GATNet(self.config['encoder_output_dim'], self.config['encoder_output_dim'], num_layers=3, heads=8)
-        if self.config['use_gnn'] == 'mpnn':
+        if self.config["use_gnn"] == "gat":
+            self.gnn = GATNet(
+                self.config["encoder_output_dim"],
+                self.config["encoder_output_dim"],
+                num_layers=3,
+                heads=8,
+            )
+        if self.config["use_gnn"] == "mpnn":
             self.gnn = MPNNNet(
-                input_dim=self.config['encoder_output_dim'],
-                output_dim=self.config['encoder_output_dim'],
+                input_dim=self.config["encoder_output_dim"],
+                output_dim=self.config["encoder_output_dim"],
                 num_layers=3,  # or adjust as needed
                 dropout=0.2,
-                aggr='mean',  # mean aggregation as specified
+                aggr="mean",  # mean aggregation as specified
             )
         self.tagger = Tagger(self.config)
         self.parser = BiaffineDependencyParser.get_model(self.config)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config['model_name'])
-        self.mode = 'train'
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config["model_name"])
+        self.mode = "train"
 
     def forward(self, model_input):
         # encoder
-        model_input = {k: v.to(self.config['device']) if isinstance(v, torch.Tensor) else v for k, v in model_input.items()}
-        encoder_input = {k: v.to(self.config['device']) if isinstance(v, torch.Tensor) else v for k, v in model_input['encoded_input'].items()}
-        
+        model_input = {
+            k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
+            for k, v in model_input.items()
+        }
+        encoder_input = {
+            k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
+            for k, v in model_input["encoded_input"].items()
+        }
+
         # Original masks
-        og_mask_tokens = encoder_input['attention_mask']
-        og_mask_words = encoder_input['words_mask_custom']
-        
-        if self.config['use_step_mask']:
+        og_mask_tokens = encoder_input["attention_mask"]
+        og_mask_words = encoder_input["words_mask_custom"]
+
+        if self.config["use_step_mask"]:
             # Create step mask for attention
-            encoder_input['attention_mask'] = self.make_step_mask(encoder_input['attention_mask'],
-                                                                model_input['step_graph'],
-                                                                model_input['step_indices_tokens'])
-            encoder_input['words_mask_custom'] = self.token_mask_to_word_mask(encoder_input['attention_mask'], encoder_input)
-            
+            encoder_input["attention_mask"] = self.make_step_mask(
+                encoder_input["attention_mask"],
+                model_input["step_graph"],
+                model_input["step_indices_tokens"],
+            )
+            encoder_input["words_mask_custom"] = self.token_mask_to_word_mask(
+                encoder_input["attention_mask"], encoder_input
+            )
+
         # Run encoder to get token/word representations
         encoder_output = self.encoder(encoder_input)
 
         # Determine which representation mode to use
-        if self.config['rep_mode'] == 'words':
-            tagger_labels = model_input['pos_tags']
-            downstream_mask = encoder_input['words_mask_custom']
+        if self.config["rep_mode"] == "words":
+            tagger_labels = model_input["pos_tags"]
+            downstream_mask = encoder_input["words_mask_custom"]
             og_mask = og_mask_words
-            head_indices = model_input['head_indices']
-            head_tags = model_input['head_tags']
-            step_indices = model_input['step_indices']
-        elif self.config['rep_mode'] == 'tokens':
-            tagger_labels = model_input['pos_tags_tokens']
-            downstream_mask = encoder_input['attention_mask']
-            head_indices = model_input['head_indices_tokens']
-            head_tags = model_input['head_tags_tokens']
-            step_indices = model_input['step_indices_tokens']
+            head_indices = model_input["head_indices"]
+            head_tags = model_input["head_tags"]
+            step_indices = model_input["step_indices"]
+        elif self.config["rep_mode"] == "tokens":
+            tagger_labels = model_input["pos_tags_tokens"]
+            downstream_mask = encoder_input["attention_mask"]
+            head_indices = model_input["head_indices_tokens"]
+            head_tags = model_input["head_tags_tokens"]
+            step_indices = model_input["step_indices_tokens"]
             og_mask = og_mask_tokens
 
         # GNN processing
         gnn_out_pooled = None
-        if self.config['use_gnn'] in ['mpnn', 'gat']:
+        if self.config["use_gnn"] in ["mpnn", "gat"]:
             encoder_output, gnn_out_pooled = self.gnn.process_step_representations(
                 encoder_output=encoder_output,
                 step_indices=step_indices,
-                step_graphs=model_input['step_graph']
+                step_graphs=model_input["step_graph"],
             )
-        
+
         # Tagging
-        tagger_output = self.tagger(encoder_output, mask=downstream_mask, labels=tagger_labels)
-        pos_tags_pred = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
-        
+        tagger_output = self.tagger(
+            encoder_output, mask=downstream_mask, labels=tagger_labels
+        )
+        pos_tags_pred = self.tagger.get_predicted_classes_as_one_hot(
+            tagger_output.logits
+        )
+
         # Ground truth tags
         try:
-            pos_tags_gt = torch.nn.functional.one_hot(tagger_labels, num_classes=self.config['n_tags'])
+            pos_tags_gt = torch.nn.functional.one_hot(
+                tagger_labels, num_classes=self.config["n_tags"]
+            )
         except:
-            warnings.warn("Ground truth tags are unavailable, using predicted tags for all purposes.")
+            warnings.warn(
+                "Ground truth tags are unavailable, using predicted tags for all purposes."
+            )
             pos_tags_gt = pos_tags_pred
 
         # Use appropriate tags based on mode
-        if self.mode in ['train', 'validation']:  
+        if self.mode in ["train", "validation"]:
             head_tags, head_indices = head_tags, head_indices
-        elif self.mode == 'test':
+        elif self.mode == "test":
             head_tags, head_indices = None, None
-            
+
         # Use predicted or ground truth tags based on config
-        pos_tags_parser = pos_tags_pred if self.config['use_pred_tags'] else pos_tags_gt
-        
+        pos_tags_parser = pos_tags_pred if self.config["use_pred_tags"] else pos_tags_gt
+
         # Parsing
-        parser_output = self.parser(encoder_output,
-                                    pos_tags_parser.float(),
-                                    downstream_mask,
-                                    og_mask=og_mask,
-                                    head_tags=head_tags,
-                                    head_indices=head_indices,
-                                    gnn_pooled_vector=gnn_out_pooled)
+        parser_output = self.parser(
+            encoder_output,
+            pos_tags_parser.float(),
+            downstream_mask,
+            og_mask=og_mask,
+            head_tags=head_tags,
+            head_indices=head_indices,
+            gnn_pooled_vector=gnn_out_pooled,
+        )
 
         # Calculate loss or return predictions
-        if self.mode in ['train', 'validation']:
-            loss = parser_output['loss'] * self.config['loss_alpha'] + tagger_output.loss * (1 - self.config['loss_alpha'])
+        if self.mode in ["train", "validation"]:
+            loss = parser_output["loss"] * self.config[
+                "loss_alpha"
+            ] + tagger_output.loss * (1 - self.config["loss_alpha"])
             return loss
-        elif self.mode == 'test':
-            tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, og_mask)
-            parser_human_readable = self.parser.make_output_human_readable(parser_output)
-            if self.config['rep_mode'] == 'words':
-                output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(tagger_human_readable, parser_human_readable, model_input)
-            elif self.config['rep_mode'] == 'tokens':
-                output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(tagger_human_readable, parser_human_readable, model_input, og_mask)
+        elif self.mode == "test":
+            tagger_human_readable = self.tagger.make_output_human_readable(
+                tagger_output, og_mask
+            )
+            parser_human_readable = self.parser.make_output_human_readable(
+                parser_output
+            )
+            if self.config["rep_mode"] == "words":
+                output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(
+                    tagger_human_readable, parser_human_readable, model_input
+                )
+            elif self.config["rep_mode"] == "tokens":
+                output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
+                    tagger_human_readable, parser_human_readable, model_input, og_mask
+                )
             return output_as_list_of_dicts
 
-    def get_step_reps(self, h: torch.Tensor, step_indices: torch.Tensor, step_graphs: List[Set[Tuple]]):
+    def get_step_reps(
+        self, h: torch.Tensor, step_indices: torch.Tensor, step_graphs: List[Set[Tuple]]
+    ):
         """
         Compute step-level representations by averaging token representations for each step.
-        
+
         Args:
             h (torch.Tensor): Tensor of shape [batch, seqlen, dim] containing token-level representations.
             step_indices (torch.Tensor): Tensor of shape [batch, seqlen] with integer step indices for each token.
-        
+
         Returns:
             list[torch.Tensor]: List of length batch where each element is a tensor of shape [num_steps, dim].
         """
@@ -138,8 +178,10 @@ class StepParser(torch.nn.Module):
         for sample_reps, sample_steps, edge_index in zip(h, step_indices, step_graphs):
             # Get unique step indices in sorted order.
             # (If you want to ignore a particular step (e.g. index 0), you can filter it out here.)
-            unique_steps = torch.unique(sample_steps[torch.where(sample_steps!=0)[0]], sorted=True)
-            
+            unique_steps = torch.unique(
+                sample_steps[torch.where(sample_steps != 0)[0]], sorted=True
+            )
+
             x = []
             for step in unique_steps:
                 # Create a boolean mask for tokens corresponding to this step.
@@ -148,28 +190,35 @@ class StepParser(torch.nn.Module):
                 # This produces a representation with shape [dim].
                 rep = sample_reps[mask].mean(dim=0)
                 x.append(rep)
-            
+
             # Stack step representations to obtain a tensor of shape [num_steps, dim] for this sample.
             x = torch.stack(x, dim=0)
             out_dict = {
-                'x': x,
-                'edge_index': torch.tensor(list(edge_index)).T - 1,
+                "x": x,
+                "edge_index": torch.tensor(list(edge_index)).T - 1,
             }
             batch_step_reps.append(out_dict)
         return batch_step_reps
 
-    def make_step_mask(self, attention_mask: torch.Tensor, step_graph: Set[Tuple[int, int]], step_idx_tokens: torch.Tensor):
-        '''
+    def make_step_mask(
+        self,
+        attention_mask: torch.Tensor,
+        step_graph: Set[Tuple[int, int]],
+        step_idx_tokens: torch.Tensor,
+    ):
+        """
         This function takes in an attention mask, a step graph, and per-token step indices
         to return a mask where the ones (1) are only present in areas
         relative to nodes connected within the step graph
-        '''
-        step_idx_tokens = step_idx_tokens.to(self.config['device'])
-        
+        """
+        step_idx_tokens = step_idx_tokens.to(self.config["device"])
+
         _, seq_len = attention_mask.shape
         step_mask_list = []
 
-        for nodes, step_indices, attn_mask in zip(step_graph, step_idx_tokens, attention_mask):
+        for nodes, step_indices, attn_mask in zip(
+            step_graph, step_idx_tokens, attention_mask
+        ):
             # get inverse edge directions
             nodes_reverse = set([tuple(sorted(el, reverse=True)) for el in nodes])
             # nodes = nodes.union(nodes_reverse)
@@ -177,34 +226,40 @@ class StepParser(torch.nn.Module):
             unique_nodes = set(step_indices.tolist()).difference({0})
 
             # Initialize mask with zeros
-            mask = torch.zeros((seq_len, seq_len), dtype=torch.float32, device=self.config['device'])
+            mask = torch.zeros(
+                (seq_len, seq_len), dtype=torch.float32, device=self.config["device"]
+            )
 
             # Add self-loops
             for i in unique_nodes:
-                mask += ((step_indices[:, None] == i) & (step_indices[None, :] == i)).int()
+                mask += (
+                    (step_indices[:, None] == i) & (step_indices[None, :] == i)
+                ).int()
 
             # Add edges
             for src, tgt in nodes:
-                mask += ((step_indices[:, None] == src) & (step_indices[None, :] == tgt)).int()
+                mask += (
+                    (step_indices[:, None] == src) & (step_indices[None, :] == tgt)
+                ).int()
 
             pad_limit = torch.max(torch.where(attn_mask == 1)[0])
 
             # NOTE: these two lines include the SEP tokens, don't remove
-            mask[:pad_limit+1,pad_limit:pad_limit+1] = 1
-            mask[pad_limit:pad_limit+1,:pad_limit+1] = 1
+            mask[: pad_limit + 1, pad_limit : pad_limit + 1] = 1
+            mask[pad_limit : pad_limit + 1, : pad_limit + 1] = 1
             # NOTE: this line includes the original padding, don't remove
-            mask[pad_limit:,:pad_limit+1] = 1
+            mask[pad_limit:, : pad_limit + 1] = 1
 
             # NOTE: the line below is the equivalent of using the original mask
             # mask[:,:pad_limit+1] = 1
 
             step_mask_list.append(mask)
-        
+
         # save_heatmap(mask, filename='step_mask.pdf')
-        
+
         batch_step_mask = torch.stack(step_mask_list, dim=0)
         return batch_step_mask
-        
+
     def token_mask_to_word_mask(self, token_step_mask, encoder_input):
         """
         Convert a 3D token-level step mask to a word-level step mask using word_ids_custom.
@@ -217,30 +272,39 @@ class StepParser(torch.nn.Module):
             torch.Tensor: Word-level mask (batch, max_words, max_words) where 1s indicate active word pairs.
         """
         batch_size, seq_len, _ = token_step_mask.shape
-        max_words = encoder_input['words_mask_custom'].shape[1]
+        max_words = encoder_input["words_mask_custom"].shape[1]
         device = token_step_mask.device
 
-        word_step_mask = torch.zeros((batch_size, max_words, max_words), dtype=torch.long, device=device)
+        word_step_mask = torch.zeros(
+            (batch_size, max_words, max_words), dtype=torch.long, device=device
+        )
 
         for b in range(batch_size):
-            word_ids = encoder_input['word_ids_custom'][b]  # (seq_len)
-            words_mask = encoder_input['words_mask_custom'][b]  # (max_words)
-            
+            word_ids = encoder_input["word_ids_custom"][b]  # (seq_len)
+            words_mask = encoder_input["words_mask_custom"][b]  # (max_words)
+
             current_token_mask = token_step_mask[b].float()  # (seq_len, seq_len)
             # save_heatmap(current_token_mask, f'current_token_mask_{b}.pdf')
             # Create a new tensor for mapped word IDs
             # Map all special tokens (-100) to a temporary index and ensure all indices are valid
             mapped_word_ids = word_ids.clone()
-            
+
             # Create a mask for valid word IDs (not -100 and within range)
             valid_mask = (mapped_word_ids >= 0) & (mapped_word_ids < max_words)
-            
+
             # For invalid indices, we'll temporarily use 0 (we'll filter these out later)
-            mapped_word_ids = torch.where(valid_mask, mapped_word_ids, torch.zeros_like(mapped_word_ids))
-            
+            mapped_word_ids = torch.where(
+                valid_mask, mapped_word_ids, torch.zeros_like(mapped_word_ids)
+            )
+
             # Create one-hot matrix: (max_words, seq_len)
-            W = torch.nn.functional.one_hot(mapped_word_ids, num_classes=max_words).float().permute(1, 0).to(device)
-            
+            W = (
+                torch.nn.functional.one_hot(mapped_word_ids, num_classes=max_words)
+                .float()
+                .permute(1, 0)
+                .to(device)
+            )
+
             # Apply valid mask to zero out contributions from special tokens
             W = W * valid_mask.float().unsqueeze(0)
 
@@ -255,115 +319,198 @@ class StepParser(torch.nn.Module):
             pad_limit = torch.max(torch.where(words_mask == 1)[0])
 
             # NOTE: these two lines include the SEP tokens, don't remove
-            current_word_mask[:pad_limit+1,pad_limit:pad_limit+1] = 1
-            current_word_mask[pad_limit:pad_limit+1,:pad_limit+1] = 1
+            current_word_mask[: pad_limit + 1, pad_limit : pad_limit + 1] = 1
+            current_word_mask[pad_limit : pad_limit + 1, : pad_limit + 1] = 1
             # NOTE: this line includes the original padding, don't remove
-            current_word_mask[pad_limit:,:pad_limit+1] = 1
-            
+            current_word_mask[pad_limit:, : pad_limit + 1] = 1
+
             # Optionally save heatmap (consider commenting this out for production)
             # save_heatmap(current_word_mask, f'word_step_mask_batch_{b}.pdf')
-            
+
             word_step_mask[b] = current_word_mask
 
         return word_step_mask
-    
+
     def freeze_tagger(self):
-        """ Freeze tagger if asked for!"""
+        """Freeze tagger if asked for!"""
         for param in self.tagger.parameters():
             param.requires_grad = False
 
     def freeze_parser(self):
-        """ Freeze parser if asked for!"""
+        """Freeze parser if asked for!"""
         for param in self.parser.parameters():
             param.requires_grad = False
 
-    def get_output_as_list_of_dicts_words(self, tagger_output, parser_output, model_input):
+    def get_output_as_list_of_dicts_words(
+        self, tagger_output, parser_output, model_input
+    ):
         """
-            Returns list of dictionaries, each element in the dictionary is 
-            1 item in the batch, list has same length as batchsize. The dictionary
-            will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
-            'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
-            should have exactly identical length, during testing, '*_gt' keys() will have empty 
-            tensors.
-        """
-        outputs = []
-        batch_size = len(tagger_output)
-
-        for i in range(batch_size):
-            elem_dict = {}
-            
-            ## find non-masked indices
-            valid_input_indices = torch.where(model_input['encoded_input']['words_mask_custom'][i] == 1)[0].cpu().detach().numpy().tolist()
-
-            input_length = len(valid_input_indices)
-
-            elem_dict['words'] = np.array(model_input['words'][i])[valid_input_indices].tolist()
-            
-            elem_dict['head_tags_gt'] = model_input['head_tags'][i].cpu().detach().numpy()[valid_input_indices].tolist()
-            elem_dict['head_tags_pred'] = [int(el) for el in parser_output['predicted_dependencies'][i]]
-
-            elem_dict['head_indices_gt'] = model_input['head_indices'][i].cpu().detach().numpy()[valid_input_indices].tolist()
-            elem_dict['head_indices_pred'] = [int(el) for el in parser_output['predicted_heads'][i]]
-            
-            elem_dict['pos_tags_gt'] = model_input['pos_tags'][i].cpu().detach().numpy()[valid_input_indices].tolist()
-            elem_dict['pos_tags_pred'] = tagger_output[i]
-            
-            elem_dict['word_ids_custom'] = model_input['encoded_input']['word_ids_custom'][i].cpu().detach().numpy()[valid_input_indices].tolist()            
-            
-            assert np.all([len(elem_dict[key]) == input_length for key in elem_dict]), "Predictions are not same length as input!"
-
-            ## append
-            outputs.append(elem_dict)
-
-        return outputs
-    
-    def get_output_as_list_of_dicts_tokens(self, tagger_output, parser_output, model_input, mask):
-        """
-            Returns list of dictionaries, each element in the dictionary is 
-            1 item in the batch, list has same length as batchsize. The dictionary
-            will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
-            'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
-            should have exactly identical length, during testing, '*_gt' keys() will have empty 
-            tensors.
+        Returns list of dictionaries, each element in the dictionary is
+        1 item in the batch, list has same length as batchsize. The dictionary
+        will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
+        'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
+        should have exactly identical length, during testing, '*_gt' keys() will have empty
+        tensors.
         """
         outputs = []
         batch_size = len(tagger_output)
 
         for i in range(batch_size):
             elem_dict = {}
-            
+
             ## find non-masked indices
-            valid_input_indices = torch.where(mask[i] == 1)[0].cpu().detach().numpy().tolist()
+            valid_input_indices = (
+                torch.where(model_input["encoded_input"]["words_mask_custom"][i] == 1)[
+                    0
+                ]
+                .cpu()
+                .detach()
+                .numpy()
+                .tolist()
+            )
 
             input_length = len(valid_input_indices)
 
-            elem_dict['input_ids'] = np.array(model_input['encoded_input']['input_ids'][i])[valid_input_indices].tolist()
-            
-            elem_dict['head_tags_gt'] = model_input['head_tags_tokens'][i].cpu().detach().numpy()[valid_input_indices].tolist()
-            elem_dict['head_tags_pred'] = [int(el) for el in parser_output['predicted_dependencies'][i]]
+            elem_dict["words"] = np.array(model_input["words"][i])[
+                valid_input_indices
+            ].tolist()
 
-            elem_dict['head_indices_gt'] = model_input['head_indices_tokens'][i].cpu().detach().numpy()[valid_input_indices].tolist()
-            elem_dict['head_indices_pred'] = [int(el) for el in parser_output['predicted_heads'][i]]
-            
-            elem_dict['pos_tags_gt'] = model_input['pos_tags_tokens'][i].cpu().detach().numpy()[valid_input_indices].tolist()
-            elem_dict['pos_tags_pred'] = tagger_output[i]
-            
-            elem_dict['word_ids_custom'] = model_input['encoded_input']['word_ids_custom'][i].cpu().detach().numpy()[valid_input_indices].tolist()
-            
-            assert np.all([len(elem_dict[key]) == input_length for key in elem_dict]), "Predictions are not same length as input!"
-            
+            elem_dict["head_tags_gt"] = (
+                model_input["head_tags"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["head_tags_pred"] = [
+                int(el) for el in parser_output["predicted_dependencies"][i]
+            ]
+
+            elem_dict["head_indices_gt"] = (
+                model_input["head_indices"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["head_indices_pred"] = [
+                int(el) for el in parser_output["predicted_heads"][i]
+            ]
+
+            elem_dict["pos_tags_gt"] = (
+                model_input["pos_tags"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["pos_tags_pred"] = tagger_output[i]
+
+            elem_dict["word_ids_custom"] = (
+                model_input["encoded_input"]["word_ids_custom"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+
+            assert np.all(
+                [len(elem_dict[key]) == input_length for key in elem_dict]
+            ), "Predictions are not same length as input!"
+
             ## append
             outputs.append(elem_dict)
 
         return outputs
 
-    def set_mode(self, mode = 'train'):
+    def get_output_as_list_of_dicts_tokens(
+        self, tagger_output, parser_output, model_input, mask
+    ):
         """
-            This function will determine if loss should be computed or evaluation metrics
+        Returns list of dictionaries, each element in the dictionary is
+        1 item in the batch, list has same length as batchsize. The dictionary
+        will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
+        'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
+        should have exactly identical length, during testing, '*_gt' keys() will have empty
+        tensors.
         """
-        assert mode in ['train', 'test', 'validation'], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
+        outputs = []
+        batch_size = len(tagger_output)
+
+        for i in range(batch_size):
+            elem_dict = {}
+
+            ## find non-masked indices
+            valid_input_indices = (
+                torch.where(mask[i] == 1)[0].cpu().detach().numpy().tolist()
+            )
+
+            input_length = len(valid_input_indices)
+
+            elem_dict["input_ids"] = np.array(
+                model_input["encoded_input"]["input_ids"][i]
+            )[valid_input_indices].tolist()
+
+            elem_dict["head_tags_gt"] = (
+                model_input["head_tags_tokens"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["head_tags_pred"] = [
+                int(el) for el in parser_output["predicted_dependencies"][i]
+            ]
+
+            elem_dict["head_indices_gt"] = (
+                model_input["head_indices_tokens"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["head_indices_pred"] = [
+                int(el) for el in parser_output["predicted_heads"][i]
+            ]
+
+            elem_dict["pos_tags_gt"] = (
+                model_input["pos_tags_tokens"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["pos_tags_pred"] = tagger_output[i]
+
+            elem_dict["word_ids_custom"] = (
+                model_input["encoded_input"]["word_ids_custom"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+
+            assert np.all(
+                [len(elem_dict[key]) == input_length for key in elem_dict]
+            ), "Predictions are not same length as input!"
+
+            ## append
+            outputs.append(elem_dict)
+
+        return outputs
+
+    def set_mode(self, mode="train"):
+        """
+        This function will determine if loss should be computed or evaluation metrics
+        """
+        assert mode in [
+            "train",
+            "test",
+            "validation",
+        ], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
         self.tagger.set_mode(mode)
         self.mode = mode
+
 
 def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     """
@@ -377,7 +524,9 @@ def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     if matrix.dim() < 2:
         matrix = matrix.expand(matrix.shape[0], -1)
     if isinstance(matrix, torch.Tensor):
-        matrix = matrix.clone().detach().cpu().numpy()  # Convert PyTorch tensor to NumPy
+        matrix = (
+            matrix.clone().detach().cpu().numpy()
+        )  # Convert PyTorch tensor to NumPy
 
     # if matrix.shape[0] != matrix.shape[1]:
     #     raise ValueError("Input matrix must be square.")
@@ -386,6 +535,6 @@ def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     plt.imshow(matrix, cmap=cmap, aspect="auto")
     plt.colorbar()
     plt.title("Heatmap")
-    
+
     plt.savefig(filename, format="pdf", bbox_inches="tight")
     plt.close()

@@ -8,10 +8,12 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import numpy
 import matplotlib.pyplot as plt
+from stepparser.gnn import DGM_c
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-POS_TO_IGNORE = {'``', "''", ':', ',', '.', 'PU', 'PUNCT', 'SYM'}
+POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
+
 
 class BiaffineDependencyParser(nn.Module):
     """
@@ -53,66 +55,73 @@ class BiaffineDependencyParser(nn.Module):
     regularizer : ``RegularizerApplicator``, optional (default=``None``)
         If provided, will be used to calculate the regularization penalty during training.
     """
-    def __init__(self,
-                config: Dict,
-                encoder: nn.LSTM,
-                embedding_dim: int,
-                n_edge_labels: int,
-                tag_embedder: nn.Linear, 
-                tag_representation_dim: int,
-                arc_representation_dim: int,
-                use_mst_decoding_for_validation: bool = True,
-                dropout: float = 0.0,
-                input_dropout: float = 0.0,
-                ) -> None:
+
+    def __init__(
+        self,
+        config: Dict,
+        encoder: nn.LSTM,
+        embedding_dim: int,
+        n_edge_labels: int,
+        tag_embedder: nn.Linear,
+        tag_representation_dim: int,
+        arc_representation_dim: int,
+        use_mst_decoding_for_validation: bool = True,
+        dropout: float = 0.0,
+        input_dropout: float = 0.0,
+    ) -> None:
         super().__init__()
         self.config = config
 
-        if self.config['use_parser_lstm']:
+        if self.config["use_parser_lstm"]:
             self.seq_encoder = encoder
-            encoder_dim = self.config['parser_lstm_hidden_size'] * 2
+            encoder_dim = self.config["parser_lstm_hidden_size"] * 2
         else:
             encoder_dim = embedding_dim
-        
-        if self.config['use_tag_embeddings_in_parser']:
+
+        if self.config["use_tag_embeddings_in_parser"]:
             self.tag_embedder = tag_embedder
         self.tag_dropout = nn.Dropout(0.2)
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
 
-        self.child_arc_feedforward = copy.deepcopy(self.head_arc_feedforward)
-
-        self.arc_attention = BilinearMatrixAttention(arc_representation_dim,
-                                                     arc_representation_dim,
-                                                     use_input_biases=True)
+        if self.config["arc_pred"] == "attn":
+            self.child_arc_feedforward = copy.deepcopy(self.head_arc_feedforward)
+            self.arc_pred = BilinearMatrixAttention(
+                arc_representation_dim, arc_representation_dim, use_input_biases=True
+            )
+        elif self.config["arc_pred"] == "dgmc":
+            self.arc_pred = DGM_c(input_dim=arc_representation_dim)
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
         self.child_tag_feedforward = copy.deepcopy(self.head_tag_feedforward)
 
-        self.tag_bilinear = torch.nn.modules.Bilinear(tag_representation_dim,
-                                                      tag_representation_dim,
-                                                      n_edge_labels)
+        self.tag_bilinear = torch.nn.modules.Bilinear(
+            tag_representation_dim, tag_representation_dim, n_edge_labels
+        )
 
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = nn.Dropout(input_dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
-        if self.config['use_gnn']:
-            self.sentinel_fusion = HeadSentinelFusion(encoder_dim + self.config['encoder_output_dim'], encoder_dim)
+        if self.config["use_gnn"]:
+            self.sentinel_fusion = HeadSentinelFusion(
+                encoder_dim + self.config["encoder_output_dim"], encoder_dim
+            )
 
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
 
         self.apply(self._init_weights)
 
-    def forward(self,
-                encoded_text_input: torch.FloatTensor,
-                pos_tags: torch.LongTensor,
-                mask: torch.LongTensor,
-                og_mask: torch.LongTensor,
-                metadata: List[Dict[str, Any]] = [],
-                head_tags: torch.LongTensor = None,
-                head_indices: torch.LongTensor = None,
-                gnn_pooled_vector: torch.Tensor = None,
-                ) -> Dict[str, torch.Tensor]:
+    def forward(
+        self,
+        encoded_text_input: torch.FloatTensor,
+        pos_tags: torch.LongTensor,
+        mask: torch.LongTensor,
+        og_mask: torch.LongTensor,
+        metadata: List[Dict[str, Any]] = [],
+        head_tags: torch.LongTensor = None,
+        head_indices: torch.LongTensor = None,
+        gnn_pooled_vector: torch.Tensor = None,
+    ) -> Dict[str, torch.Tensor]:
         """
         Parameters
         ----------
@@ -122,7 +131,7 @@ class BiaffineDependencyParser(nn.Module):
         pos_tags: torch.LongTensor
             A tensor of shape [batch_size, sequence_length] that contains the tags ( predicted or groundtruth )
         mask: torch.LongTensor
-            A tensor of shape [batch_size, sequence_length] denoting the padded elements in the batch. 
+            A tensor of shape [batch_size, sequence_length] denoting the padded elements in the batch.
             (0 if padding, 1 if non-padding)
         metadata : List[Dict[str, Any]], optional (default=None)
             A list of dictionaries of metadata for each batch element which has keys:
@@ -156,21 +165,25 @@ class BiaffineDependencyParser(nn.Module):
         """
 
         # encoded_text_input, mask, head_tags, head_indices = self.remove_extra_padding(encoded_text_input, mask, head_tags, head_indices)
-        if self.config['use_tag_embeddings_in_parser']:
+        if self.config["use_tag_embeddings_in_parser"]:
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
-            encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim = -1)
-        
-        if self.config['use_parser_lstm']:
+            encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
+
+        if self.config["use_parser_lstm"]:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.
-            packed_input = pack_padded_sequence(encoded_text_input, lengths, batch_first=True, enforce_sorted=False)
+            packed_input = pack_padded_sequence(
+                encoded_text_input, lengths, batch_first=True, enforce_sorted=False
+            )
             packed_output, _ = self.seq_encoder(packed_input)
             # Unpack the sequence, ensuring the output has the original sequence length.
-            encoded_text, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=encoded_text_input.size(1))
+            encoded_text, _ = pad_packed_sequence(
+                packed_output, batch_first=True, total_length=encoded_text_input.size(1)
+            )
         else:
             encoded_text = encoded_text_input
-        
+
         encoded_text = self._input_dropout(encoded_text)
         batch_size, _, encoding_dim = encoded_text.size()
         head_sentinel = self._head_sentinel
@@ -178,101 +191,127 @@ class BiaffineDependencyParser(nn.Module):
             head_sentinel = self.sentinel_fusion(head_sentinel, gnn_pooled_vector)
         head_sentinel = head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         # Concatenate the head sentinel onto the sentence representation.
-        encoded_text = torch.cat([head_sentinel, encoded_text], dim = 1)
+        encoded_text = torch.cat([head_sentinel, encoded_text], dim=1)
 
-        if not self.config['use_step_mask']:
+        if not self.config["use_step_mask"]:
             mask_ones = mask.new_ones(batch_size, 1)
-            mask = torch.cat([mask_ones, mask], dim = 1)
+            mask = torch.cat([mask_ones, mask], dim=1)
         else:
             # save_heatmap(mask[0], filename='mask_1.pdf')
-            ones_limit = max(torch.where(mask[0,-1] == 1)[0])
+            ones_limit = max(torch.where(mask[0, -1] == 1)[0])
             mask_ones = mask.new_ones(batch_size, mask.shape[1], 1)
-            mask = torch.cat([mask_ones, mask], dim = 2)
+            mask = torch.cat([mask_ones, mask], dim=2)
             mask_ones = mask.new_ones(batch_size, 1, mask.shape[2])
-            mask_ones[:, :, ones_limit+2:] = 0
-            mask = torch.cat([mask_ones, mask], dim = 1)
-            mask[:, ones_limit+2:, :] = 0
+            mask_ones[:, :, ones_limit + 2 :] = 0
+            mask = torch.cat([mask_ones, mask], dim=1)
+            mask[:, ones_limit + 2 :, :] = 0
             # save_heatmap(mask[0], filename='mask_2.pdf')
-        og_mask = torch.cat([og_mask.new_ones(batch_size, 1), og_mask], dim = 1)
-            
+        og_mask = torch.cat([og_mask.new_ones(batch_size, 1), og_mask], dim=1)
+
         if head_indices is not None:
-            head_indices = torch.cat([head_indices.new_zeros(batch_size, 1), head_indices], dim = 1)
+            head_indices = torch.cat(
+                [head_indices.new_zeros(batch_size, 1), head_indices], dim=1
+            )
         if head_tags is not None:
-            head_tags = torch.cat([head_tags.new_zeros(batch_size, 1), head_tags], dim = 1)
+            head_tags = torch.cat(
+                [head_tags.new_zeros(batch_size, 1), head_tags], dim=1
+            )
         float_mask = mask.float()
         # save_heatmap(float_mask[0], filename='mask_3.pdf')
         encoded_text = self._dropout(encoded_text)
 
         # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc_representation = self._dropout(F.elu(self.head_arc_feedforward(encoded_text)))
-        child_arc_representation = self._dropout(F.elu(self.child_arc_feedforward(encoded_text)))
+        head_arc_representation = self._dropout(
+            F.elu(self.head_arc_feedforward(encoded_text))
+        )
 
         # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag_representation = self._dropout(F.elu(self.head_tag_feedforward(encoded_text)))
-        child_tag_representation = self._dropout(F.elu(self.child_tag_feedforward(encoded_text)))
-        # shape (batch_size, sequence_length, sequence_length)
-        attended_arcs = self.arc_attention(head_arc_representation,
-                                           child_arc_representation)
+        head_tag_representation = self._dropout(
+            F.elu(self.head_tag_feedforward(encoded_text))
+        )
+        child_tag_representation = self._dropout(
+            F.elu(self.child_tag_feedforward(encoded_text))
+        )
+
+        if self.config["arc_pred"] == "attn":
+            # shape (batch_size, sequence_length, arc_representation_dim)
+            child_arc_representation = self._dropout(
+                F.elu(self.child_arc_feedforward(encoded_text))
+            )
+            # shape (batch_size, sequence_length, sequence_length)
+            attended_arcs = self.arc_pred(
+                head_arc_representation, child_arc_representation
+            )
+        elif self.config["arc_pred"] == "dgmc":
+            attended_arcs = self.arc_pred(x=head_arc_representation, A=None)["adj"]
+        else:
+            raise ValueError("arc_pred can either be `attn` or `dgmc`")
 
         # mask scores before decoding
         minus_inf = -1e8
         minus_mask = (1 - float_mask) * minus_inf
         # save_heatmap(minus_mask[0], filename='mask_4.pdf')
         # save_heatmap(attended_arcs[0], filename='attended_arcs_1.pdf')
-        
-        if not self.config['use_step_mask']:
-            attended_arcs = attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
+
+        if not self.config["use_step_mask"]:
+            attended_arcs = (
+                attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
+            )
         else:
             attended_arcs = attended_arcs + minus_mask
-        
+
         # save_heatmap(attended_arcs[0], filename='attended_arcs_2.pdf')
 
         if self.training or not self.use_mst_decoding_for_validation:
-            predicted_heads, predicted_head_tags = self._greedy_decode(head_tag_representation,
-                                                                       child_tag_representation,
-                                                                       attended_arcs,
-                                                                       mask)
+            predicted_heads, predicted_head_tags = self._greedy_decode(
+                head_tag_representation, child_tag_representation, attended_arcs, mask
+            )
         else:
-            predicted_heads, predicted_head_tags = self._mst_decode(head_tag_representation,
-                                                                child_tag_representation,
-                                                                attended_arcs,
-                                                                og_mask)
-                                                  
+            predicted_heads, predicted_head_tags = self._mst_decode(
+                head_tag_representation,
+                child_tag_representation,
+                attended_arcs,
+                og_mask,
+            )
+
         predicted_heads = predicted_heads.to(head_tag_representation.device)
         predicted_head_tags = predicted_head_tags.to(head_tag_representation.device)
-        
+
         if head_indices is not None and head_tags is not None:
 
-            arc_nll, tag_nll = self._construct_loss(head_tag_representation=head_tag_representation,
-                                                    child_tag_representation=child_tag_representation,
-                                                    attended_arcs=attended_arcs,
-                                                    head_indices=head_indices,
-                                                    head_tags=head_tags,
-                                                    mask=mask,
-                                                    og_mask=og_mask,
-                                                    )
+            arc_nll, tag_nll = self._construct_loss(
+                head_tag_representation=head_tag_representation,
+                child_tag_representation=child_tag_representation,
+                attended_arcs=attended_arcs,
+                head_indices=head_indices,
+                head_tags=head_tags,
+                mask=mask,
+                og_mask=og_mask,
+            )
             loss = arc_nll + tag_nll
-            
+
         else:
-            arc_nll, tag_nll = self._construct_loss(head_tag_representation=head_tag_representation,
-                                                    child_tag_representation=child_tag_representation,
-                                                    attended_arcs=attended_arcs,
-                                                    head_indices=predicted_heads.long(),
-                                                    head_tags=predicted_head_tags.long(),
-                                                    mask=mask,
-                                                    og_mask=og_mask,)
+            arc_nll, tag_nll = self._construct_loss(
+                head_tag_representation=head_tag_representation,
+                child_tag_representation=child_tag_representation,
+                attended_arcs=attended_arcs,
+                head_indices=predicted_heads.long(),
+                head_tags=predicted_head_tags.long(),
+                mask=mask,
+                og_mask=og_mask,
+            )
             loss = arc_nll + tag_nll
-        
+
         output_dict = {
-                "heads": predicted_heads,
-                "head_tags": predicted_head_tags,
-                "arc_loss": arc_nll,
-                "tag_loss": tag_nll,
-                "loss": loss,
-                "mask": mask,
-                "og_mask": og_mask,
-                "words": [meta["words"] for meta in metadata]
-                }
+            "heads": predicted_heads,
+            "head_tags": predicted_head_tags,
+            "arc_loss": arc_nll,
+            "tag_loss": tag_nll,
+            "loss": loss,
+            "mask": mask,
+            "og_mask": og_mask,
+            "words": [meta["words"] for meta in metadata],
+        }
 
         return output_dict
 
@@ -283,7 +322,7 @@ class BiaffineDependencyParser(nn.Module):
         For 1D tensors (e.g., biases), temporarily unsqueeze to make them 2D.
         """
         # Initialize weights if they exist and are tensors.
-        if hasattr(module, 'weight') and isinstance(module.weight, torch.Tensor):
+        if hasattr(module, "weight") and isinstance(module.weight, torch.Tensor):
             if module.weight.dim() < 2:
                 # For 1D tensors, unsqueeze to apply Xavier uniform.
                 weight_unsqueezed = module.weight.unsqueeze(0)
@@ -291,9 +330,9 @@ class BiaffineDependencyParser(nn.Module):
                 module.weight.data = weight_unsqueezed.squeeze(0)
             else:
                 nn.init.xavier_uniform_(module.weight)
-                
+
         # Initialize biases if they exist and are tensors.
-        if hasattr(module, 'bias') and isinstance(module.bias, torch.Tensor):
+        if hasattr(module, "bias") and isinstance(module.bias, torch.Tensor):
             if module.bias.dim() < 2:
                 bias_unsqueezed = module.bias.unsqueeze(0)
                 nn.init.xavier_uniform_(bias_unsqueezed)
@@ -303,40 +342,56 @@ class BiaffineDependencyParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        if config['use_tag_embeddings_in_parser']:
-            embedding_dim = config['encoder_output_dim'] + config['tag_embedding_dimension']
-        else:
-            embedding_dim = config['encoder_output_dim']
-        n_edge_labels = config['n_edge_labels']
-        encoder = nn.LSTM(
-                input_size=embedding_dim,
-                hidden_size=config['parser_lstm_hidden_size'],
-                num_layers=3,
-                batch_first=True,
-                bidirectional=True,
-                dropout=0.3,
+        if config["use_tag_embeddings_in_parser"]:
+            embedding_dim = (
+                config["encoder_output_dim"] + config["tag_embedding_dimension"]
             )
+        else:
+            embedding_dim = config["encoder_output_dim"]
+        n_edge_labels = config["n_edge_labels"]
+        encoder = nn.LSTM(
+            input_size=embedding_dim,
+            hidden_size=config["parser_lstm_hidden_size"],
+            num_layers=3,
+            batch_first=True,
+            bidirectional=True,
+            dropout=0.3,
+        )
 
-        tag_embedder = nn.Linear(config['n_tags'], config['tag_embedding_dimension'])
-        model_obj = cls(config=config, encoder=encoder, embedding_dim=embedding_dim, n_edge_labels=n_edge_labels, tag_embedder= tag_embedder, arc_representation_dim=500, tag_representation_dim=100, dropout=0.3, input_dropout=0.3)
-        model_obj.softmax_multiplier = config['softmax_scaling_coeff']
+        tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+        model_obj = cls(
+            config=config,
+            encoder=encoder,
+            embedding_dim=embedding_dim,
+            n_edge_labels=n_edge_labels,
+            tag_embedder=tag_embedder,
+            arc_representation_dim=500,
+            tag_representation_dim=100,
+            dropout=0.3,
+            input_dropout=0.3,
+        )
+        model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj
 
     def remove_extra_padding(self, encoded_text_input, mask, head_tags, head_indices):
         """
-            For the inputs, we have padding, and we are going to remove 
-            additional padding
+        For the inputs, we have padding, and we are going to remove
+        additional padding
         """
-        
-        largest_batch_input_len = max([torch.sum(mask_elem).item() for mask_elem in mask])
-        mask = mask[:,:largest_batch_input_len]
-        head_tags = head_tags[:,:largest_batch_input_len]
-        head_indices = head_indices[:,:largest_batch_input_len]
-        encoded_text_input = encoded_text_input[:,:largest_batch_input_len]
+
+        largest_batch_input_len = max(
+            [torch.sum(mask_elem).item() for mask_elem in mask]
+        )
+        mask = mask[:, :largest_batch_input_len]
+        head_tags = head_tags[:, :largest_batch_input_len]
+        head_indices = head_indices[:, :largest_batch_input_len]
+        encoded_text_input = encoded_text_input[:, :largest_batch_input_len]
 
         return encoded_text_input, mask, head_tags, head_indices
 
-    def make_output_human_readable(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def make_output_human_readable(
+        self, output_dict: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
 
         head_tags = output_dict.pop("head_tags").cpu().detach().numpy()
         heads = output_dict.pop("heads").cpu().detach().numpy()
@@ -357,14 +412,16 @@ class BiaffineDependencyParser(nn.Module):
         output_dict["predicted_heads"] = head_indices
         return output_dict
 
-    def _construct_loss(self,
-                        head_tag_representation: torch.Tensor,
-                        child_tag_representation: torch.Tensor,
-                        attended_arcs: torch.Tensor,
-                        head_indices: torch.Tensor,
-                        head_tags: torch.Tensor,
-                        mask: torch.Tensor,
-                        og_mask: torch.Tensor,) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _construct_loss(
+        self,
+        head_tag_representation: torch.Tensor,
+        child_tag_representation: torch.Tensor,
+        attended_arcs: torch.Tensor,
+        head_indices: torch.Tensor,
+        head_tags: torch.Tensor,
+        mask: torch.Tensor,
+        og_mask: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes the arc and tag loss for a sequence given gold head indices and tags.
 
@@ -402,13 +459,18 @@ class BiaffineDependencyParser(nn.Module):
         og_float_mask = og_mask.float()
         batch_size, sequence_length, _ = attended_arcs.size()
         # shape (batch_size, 1)
-        range_vector = get_range_vector(batch_size, get_device_of(attended_arcs)).unsqueeze(1)
+        range_vector = get_range_vector(
+            batch_size, get_device_of(attended_arcs)
+        ).unsqueeze(1)
         # shape (batch_size, sequence_length, sequence_length)
-        if not self.config['use_step_mask']:
-            normalised_arc_logits = masked_log_softmax(attended_arcs,
-                                                   mask)
+        if not self.config["use_step_mask"]:
+            normalised_arc_logits = masked_log_softmax(attended_arcs, mask)
             # save_heatmap(normalised_arc_logits[0], filename='normalised_arc_logits_1_og.pdf')
-            normalised_arc_logits = normalised_arc_logits * float_mask.unsqueeze(2) * float_mask.unsqueeze(1)
+            normalised_arc_logits = (
+                normalised_arc_logits
+                * float_mask.unsqueeze(2)
+                * float_mask.unsqueeze(1)
+            )
             # save_heatmap(normalised_arc_logits[0], filename='normalised_arc_logits_2_og.pdf')
         else:
             normalised_arc_logits = masked_log_softmax(attended_arcs, mask)
@@ -417,12 +479,17 @@ class BiaffineDependencyParser(nn.Module):
             # save_heatmap(normalised_arc_logits[0], filename='normalised_arc_logits_2.pdf')
 
         # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self._get_head_tags(head_tag_representation, child_tag_representation, head_indices)
+        head_tag_logits = self._get_head_tags(
+            head_tag_representation, child_tag_representation, head_indices
+        )
         # if not self.config['use_step_mask']:
-        normalised_head_tag_logits = masked_log_softmax(head_tag_logits,
-                                                        og_mask.unsqueeze(-1))
+        normalised_head_tag_logits = masked_log_softmax(
+            head_tag_logits, og_mask.unsqueeze(-1)
+        )
         # save_heatmap(normalised_head_tag_logits[0], filename='normalised_head_tag_logits_1.pdf')
-        normalised_head_tag_logits = normalised_head_tag_logits * og_float_mask.unsqueeze(-1)
+        normalised_head_tag_logits = (
+            normalised_head_tag_logits * og_float_mask.unsqueeze(-1)
+        )
         # save_heatmap(normalised_head_tag_logits[0], filename='normalised_head_tag_logits_2.pdf')
         # else:
         #     normalised_head_tag_logits = masked_log_softmax(head_tag_logits,
@@ -431,8 +498,12 @@ class BiaffineDependencyParser(nn.Module):
         #     normalised_head_tag_logits = normalised_head_tag_logits
         #     save_heatmap(normalised_head_tag_logits[0], filename='normalised_head_tag_logits_2.pdf')
         # index matrix with shape (batch, sequence_length)
-        timestep_index = get_range_vector(sequence_length, get_device_of(attended_arcs)) 
-        child_index = timestep_index.view(1, sequence_length).expand(batch_size, sequence_length).long()
+        timestep_index = get_range_vector(sequence_length, get_device_of(attended_arcs))
+        child_index = (
+            timestep_index.view(1, sequence_length)
+            .expand(batch_size, sequence_length)
+            .long()
+        )
         # shape (batch_size, sequence_length)
         arc_loss = normalised_arc_logits[range_vector, child_index, head_indices]
         tag_loss = normalised_head_tag_logits[range_vector, child_index, head_tags]
@@ -447,14 +518,16 @@ class BiaffineDependencyParser(nn.Module):
 
         arc_nll = -arc_loss.sum() / valid_positions.float()
         tag_nll = -tag_loss.sum() / valid_positions.float()
-        
+
         return arc_nll, tag_nll
 
-    def _greedy_decode(self,
-                       head_tag_representation: torch.Tensor,
-                       child_tag_representation: torch.Tensor,
-                       attended_arcs: torch.Tensor,
-                       mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _greedy_decode(
+        self,
+        head_tag_representation: torch.Tensor,
+        child_tag_representation: torch.Tensor,
+        attended_arcs: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Decodes the head and head tag predictions by decoding the unlabeled arcs
         independently for each word and then again, predicting the head tags of
@@ -493,7 +566,7 @@ class BiaffineDependencyParser(nn.Module):
         # save_heatmap(attended_arcs[0], filename='attended_arcs_2.pdf')
         # Mask padded tokens, because we only want to consider actual words as heads.
         if mask is not None:
-            if not self.config['use_step_mask']:
+            if not self.config["use_step_mask"]:
                 minus_mask = (1 - mask).byte().unsqueeze(2)
             else:
                 minus_mask = (1 - mask).byte()
@@ -505,17 +578,19 @@ class BiaffineDependencyParser(nn.Module):
 
         # Given the greedily predicted heads, decode their dependency tags.
         # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self._get_head_tags(head_tag_representation,
-                                              child_tag_representation,
-                                              heads)
+        head_tag_logits = self._get_head_tags(
+            head_tag_representation, child_tag_representation, heads
+        )
         _, head_tags = head_tag_logits.max(dim=2)
         return heads, head_tags
 
-    def _mst_decode(self,
-                    head_tag_representation: torch.Tensor,
-                    child_tag_representation: torch.Tensor,
-                    attended_arcs: torch.Tensor,
-                    mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _mst_decode(
+        self,
+        head_tag_representation: torch.Tensor,
+        child_tag_representation: torch.Tensor,
+        attended_arcs: torch.Tensor,
+        mask: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Decodes the head and head tag predictions using the Edmonds' Algorithm
         for finding maximum spanning trees on directed graphs. Nodes in the
@@ -547,22 +622,34 @@ class BiaffineDependencyParser(nn.Module):
             A tensor of shape (batch_size, sequence_length) representing the
             dependency tags of the optimally decoded heads of each word.
         """
-        batch_size, sequence_length, tag_representation_dim = head_tag_representation.size()
+        batch_size, sequence_length, tag_representation_dim = (
+            head_tag_representation.size()
+        )
 
         lengths = mask.data.sum(dim=1).long().cpu().numpy()
-        
-        expanded_shape = [batch_size, sequence_length, sequence_length, tag_representation_dim]
+
+        expanded_shape = [
+            batch_size,
+            sequence_length,
+            sequence_length,
+            tag_representation_dim,
+        ]
         head_tag_representation = head_tag_representation.unsqueeze(2)
-        head_tag_representation = head_tag_representation.expand(*expanded_shape).contiguous()
+        head_tag_representation = head_tag_representation.expand(
+            *expanded_shape
+        ).contiguous()
         child_tag_representation = child_tag_representation.unsqueeze(1)
-        child_tag_representation = child_tag_representation.expand(*expanded_shape).contiguous()
+        child_tag_representation = child_tag_representation.expand(
+            *expanded_shape
+        ).contiguous()
         # Shape (batch_size, sequence_length, sequence_length, num_head_tags)
-        pairwise_head_logits = self.tag_bilinear(head_tag_representation, child_tag_representation)
+        pairwise_head_logits = self.tag_bilinear(
+            head_tag_representation, child_tag_representation
+        )
 
         # Note that this log_softmax is over the tag dimension, and we don't consider pairs
         # of tags which are invalid (e.g are a pair which includes a padded element) anyway below.
         # Shape (batch, num_labels,sequence_length, sequence_length)
-        
 
         """
             Here, before feeding scores to the MST algorithm, we perform softmax
@@ -571,27 +658,38 @@ class BiaffineDependencyParser(nn.Module):
             and we won't run into an issue of low precision and high recall. We do this
             softmax for both, arc labels and edge labels. 
         """
-        pairwise_head_logits = self.softmax_multiplier * (pairwise_head_logits - torch.max(pairwise_head_logits, dim=3)[0].unsqueeze(dim=3))
-        normalized_pairwise_head_logits = F.log_softmax(pairwise_head_logits, dim=3).permute(0, 3, 1, 2)
+        pairwise_head_logits = self.softmax_multiplier * (
+            pairwise_head_logits
+            - torch.max(pairwise_head_logits, dim=3)[0].unsqueeze(dim=3)
+        )
+        normalized_pairwise_head_logits = F.log_softmax(
+            pairwise_head_logits, dim=3
+        ).permute(0, 3, 1, 2)
 
         # Shape (batch_size, sequence_length, sequence_length)
-        attended_arcs = self.softmax_multiplier * (attended_arcs - torch.max(attended_arcs, dim = 2)[0].unsqueeze(dim=2))
+        attended_arcs = self.softmax_multiplier * (
+            attended_arcs - torch.max(attended_arcs, dim=2)[0].unsqueeze(dim=2)
+        )
         normalized_arc_logits = F.log_softmax(attended_arcs, dim=2).transpose(1, 2)
 
         # Shape (batch_size, num_head_tags, sequence_length, sequence_length)
         # This energy tensor expresses the following relation:
         # energy[i,j] = "Score that i is the head of j". In this
         # case, we have heads pointing to their children.
-        
-        batch_energy = torch.exp(normalized_arc_logits.unsqueeze(1) + normalized_pairwise_head_logits)
+
+        batch_energy = torch.exp(
+            normalized_arc_logits.unsqueeze(1) + normalized_pairwise_head_logits
+        )
         return self._run_mst_decoding(batch_energy, lengths)
 
     @staticmethod
-    def _run_mst_decoding(batch_energy: torch.Tensor, lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _run_mst_decoding(
+        batch_energy: torch.Tensor, lengths: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         heads = []
         head_tags = []
         for energy, length in zip(batch_energy.detach().cpu(), lengths):
-            
+
             scores, tag_ids = energy.max(dim=0)
             # Although we need to include the root node so that the MST includes it,
             # we do not want any word to be the parent of the root node.
@@ -613,13 +711,17 @@ class BiaffineDependencyParser(nn.Module):
             instance_head_tags[0] = 0
             heads.append(instance_heads)
             head_tags.append(instance_head_tags)
-        
-        return torch.from_numpy(numpy.stack(heads)), torch.from_numpy(numpy.stack(head_tags))
 
-    def _get_head_tags(self,
-                       head_tag_representation: torch.Tensor,
-                       child_tag_representation: torch.Tensor,
-                       head_indices: torch.Tensor) -> torch.Tensor:
+        return torch.from_numpy(numpy.stack(heads)), torch.from_numpy(
+            numpy.stack(head_tags)
+        )
+
+    def _get_head_tags(
+        self,
+        head_tag_representation: torch.Tensor,
+        child_tag_representation: torch.Tensor,
+        head_indices: torch.Tensor,
+    ) -> torch.Tensor:
         """
         Decodes the head tags given the head and child tag representations
         and a tensor of head indices to compute tags for. Note that these are
@@ -649,7 +751,9 @@ class BiaffineDependencyParser(nn.Module):
         """
         batch_size = head_tag_representation.size(0)
         # shape (batch_size,)
-        range_vector = get_range_vector(batch_size, get_device_of(head_tag_representation)).unsqueeze(1)
+        range_vector = get_range_vector(
+            batch_size, get_device_of(head_tag_representation)
+        ).unsqueeze(1)
 
         # This next statement is quite a complex piece of indexing, which you really
         # need to read the docs to understand. See here:
@@ -658,17 +762,20 @@ class BiaffineDependencyParser(nn.Module):
         # sequence length dimension for each element in the batch.
 
         # shape (batch_size, sequence_length, tag_representation_dim)
-        selected_head_tag_representations = head_tag_representation[range_vector, head_indices]
-        selected_head_tag_representations = selected_head_tag_representations.contiguous()
+        selected_head_tag_representations = head_tag_representation[
+            range_vector, head_indices
+        ]
+        selected_head_tag_representations = (
+            selected_head_tag_representations.contiguous()
+        )
         # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self.tag_bilinear(selected_head_tag_representations,
-                                            child_tag_representation)
+        head_tag_logits = self.tag_bilinear(
+            selected_head_tag_representations, child_tag_representation
+        )
         return head_tag_logits
-
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return self._attachment_scores.get_metric(reset)
-
 
 
 class BilinearMatrixAttention(nn.Module):
@@ -704,7 +811,7 @@ class BilinearMatrixAttention(nn.Module):
         self,
         matrix_1_dim: int,
         matrix_2_dim: int,
-        activation = None,
+        activation=None,
         use_input_biases: bool = False,
         out_features: int = 1,
     ) -> None:
@@ -716,7 +823,9 @@ class BilinearMatrixAttention(nn.Module):
         if out_features == 1:
             self._weight_matrix = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim))
         else:
-            self._weight_matrix = nn.Parameter(torch.Tensor(out_features, matrix_1_dim, matrix_2_dim))
+            self._weight_matrix = nn.Parameter(
+                torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
+            )
 
         self._bias = nn.Parameter(torch.Tensor(1))
         self.activation = activation or Passthrough()
@@ -732,8 +841,8 @@ class BilinearMatrixAttention(nn.Module):
             bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
             bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
 
-            matrix_1 = torch.cat([matrix_1, bias1], dim = -1)
-            matrix_2 = torch.cat([matrix_2, bias2], dim = -1)
+            matrix_1 = torch.cat([matrix_1, bias1], dim=-1)
+            matrix_2 = torch.cat([matrix_2, bias2], dim=-1)
 
         weight = self._weight_matrix
         if weight.dim() == 2:
@@ -743,7 +852,10 @@ class BilinearMatrixAttention(nn.Module):
         final_biased = final.squeeze(1) + self._bias
         return self.activation(final_biased)
 
-def masked_log_softmax(vector: torch.Tensor, mask: torch.BoolTensor, dim: int = -1) -> torch.Tensor:
+
+def masked_log_softmax(
+    vector: torch.Tensor, mask: torch.BoolTensor, dim: int = -1
+) -> torch.Tensor:
     """
     `torch.nn.functional.log_softmax(vector)` does not work if some elements of `vector` should be
     masked.  This performs a log_softmax on just the non-masked portions of `vector`.  Passing
@@ -773,6 +885,7 @@ def masked_log_softmax(vector: torch.Tensor, mask: torch.BoolTensor, dim: int = 
         vector = vector + (mask + tiny_value_of_dtype(vector.dtype)).log()
     return torch.nn.functional.log_softmax(vector, dim=dim)
 
+
 def tiny_value_of_dtype(dtype: torch.dtype):
     """
     Returns a moderately tiny value for a given PyTorch data type that is used to avoid numerical
@@ -788,16 +901,18 @@ def tiny_value_of_dtype(dtype: torch.dtype):
         return 1e-4
     else:
         raise TypeError("Does not support dtype " + str(dtype))
-    
+
+
 def get_range_vector(size: int, device: int) -> torch.Tensor:
     """
     Returns a range vector with the desired size, starting at 0. The CUDA implementation
     is meant to avoid copy data from CPU to GPU.
     """
     if device > -1:
-        return torch.arange(size, dtype=torch.long, device=f'cuda:{device}')
+        return torch.arange(size, dtype=torch.long, device=f"cuda:{device}")
     else:
         return torch.arange(0, size, dtype=torch.long)
+
 
 def get_device_of(tensor: torch.Tensor) -> int:
     """
@@ -807,7 +922,8 @@ def get_device_of(tensor: torch.Tensor) -> int:
         return -1
     else:
         return tensor.get_device()
-    
+
+
 def get_lengths_from_binary_sequence_mask(mask: torch.BoolTensor) -> torch.LongTensor:
     """
     Compute sequence lengths for each batch element in a tensor using a
@@ -832,6 +948,7 @@ class Passthrough(torch.nn.Module):
     def forward(self, output):
         return output
 
+
 class InputVariationalDropout(torch.nn.Dropout):
     """
     (from AllenNLP)
@@ -845,7 +962,6 @@ class InputVariationalDropout(torch.nn.Dropout):
     """
 
     def forward(self, input_tensor):
-
         """
         Apply dropout to input tensor.
 
@@ -860,12 +976,16 @@ class InputVariationalDropout(torch.nn.Dropout):
             A tensor of shape `(batch_size, num_timesteps, embedding_dim)` with dropout applied.
         """
         ones = input_tensor.data.new_ones(input_tensor.shape[0], input_tensor.shape[-1])
-        dropout_mask = torch.nn.functional.dropout(ones, self.p, self.training, inplace=False)
+        dropout_mask = torch.nn.functional.dropout(
+            ones, self.p, self.training, inplace=False
+        )
         if self.inplace:
             input_tensor *= dropout_mask.unsqueeze(1)
             return None
         else:
             return dropout_mask.unsqueeze(1) * input_tensor
+
+
 def decode_mst(
     energy: numpy.ndarray, length: int, has_labels: bool = True
 ) -> Tuple[numpy.ndarray, numpy.ndarray]:
@@ -931,7 +1051,13 @@ def decode_mst(
 
     # The main algorithm operates inplace.
     chu_liu_edmonds(
-        length, score_matrix, current_nodes, final_edges, old_input, old_output, representatives
+        length,
+        score_matrix,
+        current_nodes,
+        final_edges,
+        old_input,
+        old_output,
+        representatives,
     )
 
     heads = numpy.zeros([max_length], numpy.int32)
@@ -1086,7 +1212,13 @@ def chu_liu_edmonds(
                 representatives[cycle_representative].add(node)
 
     chu_liu_edmonds(
-        length, score_matrix, current_nodes, final_edges, old_input, old_output, representatives
+        length,
+        score_matrix,
+        current_nodes,
+        final_edges,
+        old_input,
+        old_output,
+        representatives,
     )
 
     # Expansion stage.
@@ -1154,6 +1286,7 @@ def _find_cycle(
 
     return has_cycle, list(cycle)
 
+
 def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     """
     Saves a heatmap of a square matrix as a PDF.
@@ -1166,7 +1299,9 @@ def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     if matrix.dim() < 2:
         matrix = matrix.expand(matrix.shape[0], -1)
     if isinstance(matrix, torch.Tensor):
-        matrix = matrix.clone().detach().cpu().numpy()  # Convert PyTorch tensor to NumPy
+        matrix = (
+            matrix.clone().detach().cpu().numpy()
+        )  # Convert PyTorch tensor to NumPy
 
     # if matrix.shape[0] != matrix.shape[1]:
     #     raise ValueError("Input matrix must be square.")
@@ -1175,9 +1310,10 @@ def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     plt.imshow(matrix, cmap=cmap, aspect="auto")
     plt.colorbar()
     plt.title("Heatmap")
-    
+
     plt.savefig(filename, format="pdf", bbox_inches="tight")
     plt.close()
+
 
 class HeadSentinelFusion(nn.Module):
     def __init__(self, input_dim, output_dim, use_nonlinearity=True):
@@ -1196,5 +1332,7 @@ class HeadSentinelFusion(nn.Module):
         fused_vector = torch.cat([head_sentinel, pooled_vector], dim=-1)
         projected = self.projection(fused_vector)
         if self.use_nonlinearity:
-            projected = F.relu(projected)  # or another activation function like GELU/Tanh
+            projected = F.relu(
+                projected
+            )  # or another activation function like GELU/Tanh
         return projected
