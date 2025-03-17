@@ -1,1 +1,2 @@
-from .gnn import GATNet
+from .gat import GATNet
+from .mpnn import MPNNNet

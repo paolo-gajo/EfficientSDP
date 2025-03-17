@@ -8,7 +8,7 @@
 #SBATCH --output=./.slurm/%j_output.log
 #SBATCH --error=./.slurm/%j_error.log
 
-augment_train=1
+augment_train=0
 augment_val=0
 augment_test=0
 
@@ -33,14 +33,13 @@ use_bert_positional_embeddings=1
 use_tag_embeddings_in_parser=1
 use_tagger_lstm=0
 use_parser_lstm=0
-use_gnn=0
+use_gnn=1
 use_step_mask=0
 
 freeze_encoder=0
 learning_rate=1e-4
 
 for k in "${augment_k_train[@]}"; do
-    echo "Training with augment_k_train = $k"
     python ./tools/train.py --opts \
     --augment_train $augment_train \
     --augment_val $augment_val \

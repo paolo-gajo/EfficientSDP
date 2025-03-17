@@ -7,6 +7,7 @@ from stepparser.encoder import Encoder, BERTWordEmbeddings
 from stepparser.parser import BiaffineDependencyParser
 from stepparser.tagger import Tagger
 from stepparser.gnn import GATNet
+from stepparser.gnn import MPNNNet
 import numpy as np
 import warnings
 from typing import Set, Tuple, List
@@ -20,9 +21,16 @@ class StepParser(torch.nn.Module):
         self.config['encoder_output_dim'] = self.encoder.encoder.embeddings.word_embeddings.weight.shape[-1]
         # self.encoder = BERTWordEmbeddings(self.config['model_name'])
         # self.config['encoder_output_dim'] = self.encoder.word_embeddings.weight.shape[-1]
-        if self.config['use_gnn']:
+        if self.config['use_gnn'] == 'gat':
             self.gnn = GATNet(self.config['encoder_output_dim'], self.config['encoder_output_dim'], num_layers=3, heads=8)
-            self.gnn_merge = nn.Linear(self.config['encoder_output_dim'] * 2, self.config['encoder_output_dim'])
+        if self.config['use_gnn'] == 'mpnn':
+            self.gnn = MPNNNet(
+                input_dim=self.config['encoder_output_dim'],
+                output_dim=self.config['encoder_output_dim'],
+                num_layers=3,  # or adjust as needed
+                dropout=0.2,
+                aggr='mean',  # mean aggregation as specified
+            )
         self.tagger = Tagger(self.config)
         self.parser = BiaffineDependencyParser.get_model(self.config)
         self.tokenizer = AutoTokenizer.from_pretrained(self.config['model_name'])
@@ -65,7 +73,7 @@ class StepParser(torch.nn.Module):
 
         # GNN processing
         gnn_out_pooled = None
-        if self.config['use_gnn']:
+        if self.config['use_gnn'] in ['mpnn', 'gat']:
             encoder_output, gnn_out_pooled = self.gnn.process_step_representations(
                 encoder_output=encoder_output,
                 step_indices=step_indices,

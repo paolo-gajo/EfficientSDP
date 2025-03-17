@@ -171,6 +171,29 @@ test_results_f1={'P': 0.5752, 'R': 0.5703, 'F1': 0.5728}
 ## Experiment 2:
 Attempt to improve the performance by:
 1. integrating a GNN in the model
+
+with a gnn in the model we shouldn't need to use data augmentation in the train and be able to handle permutations in the validation/testing
+
+## Experiment 2.1-4:
+Repeat 1.1, 1.2, 1.3, 1.4 with gnn=1
+
+## Experiment 2.5:
+
+keep train fixed and augment validation
+
+config:
+'augment_train': 0,
+'augment_val': 1,
+'augment_test': 0,
+
+'augment_k_train': 1,
+'augment_k_val': [1, 5, 10, 20, 40, 60, 80, 100],
+'augment_k_test': 0,
+
+'keep_og_train': 1,
+'keep_og_val': 1,
+'keep_og_test': 1, (irrelevant since no augmentation)
+
 2. using relative positional encodings between the step nodes
 LEARNING EFFICIENT POSITIONAL ENCODINGS WITH GRAPH NEURAL NETWORKS: https://arxiv.org/pdf/2502.01122
 Comparing Graph Transformers via Positional Encodings: https://arxiv.org/pdf/2402.14202
@@ -180,6 +203,12 @@ treat the step reps as a fully connected graph where the adj matrix is the atten
 
 EDGE inference:
 rather than considering the fully connected attention, calculate new weighted edges between the steps and use them to weigh the different blocks of the attention
+
+Experiment 3:
+use different latent graph inference model:
+1. [Differentiable Graph Module (DGM) for Graph Convolutional Networks](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9763421): during training DGM takes A_gold and X to get a better A. during inference it will take only X as the input.
+2. [LATENT GRAPH INFERENCE USING PRODUCT MANIFOLDS](https://openreview.net/pdf?id=JLR_B7n_Wqr)
+3. [Latent Graph Inference with Limited Supervision](https://proceedings.neurips.cc/paper_files/paper/2023/file/67101f97dc23fcc10346091181fff6cb-Paper-Conference.pdf)
 
 ## Questions:
 1. Do we care about augmenting the test set to show robustness to permutation?

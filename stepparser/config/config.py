@@ -31,7 +31,7 @@ custom_config = {
     'use_tag_embeddings_in_parser': 0,
     'use_tagger_lstm': 0,
     'use_parser_lstm': 0,
-    'use_gnn': 0,
+    'use_gnn': 'mpnn',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
 }
 
