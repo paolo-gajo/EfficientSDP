@@ -10,3 +10,4 @@ notebooks/
 *.pdf
 *.tex
 *.pth
+results_old/

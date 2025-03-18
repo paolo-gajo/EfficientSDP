@@ -89,7 +89,15 @@ class BiaffineDependencyParser(nn.Module):
                 arc_representation_dim, arc_representation_dim, use_input_biases=True
             )
         elif self.config["arc_pred"] == "dgmc":
-            self.arc_pred = DGM_c(input_dim=arc_representation_dim)
+            self.arc_pred = DGM_c(self.config,
+                                  input_dim=arc_representation_dim,
+                                  hidden_dims=arc_representation_dim,
+                                  num_layers=1,
+                                  num_gnn_layers=2,
+                                  conv_type='gcn',
+                                  heads=4,
+                                  apply_diffusion=True,
+                                  )
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
@@ -369,6 +377,8 @@ class BiaffineDependencyParser(nn.Module):
             tag_representation_dim=100,
             dropout=0.3,
             input_dropout=0.3,
+            use_mst_decoding_for_validation = config['use_mst_decoding_for_validation']
+            
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj
@@ -1285,35 +1295,6 @@ def _find_cycle(
             break
 
     return has_cycle, list(cycle)
-
-
-def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
-    """
-    Saves a heatmap of a square matrix as a PDF.
-
-    Parameters:
-    - matrix (torch.Tensor or np.ndarray): Square matrix to visualize.
-    - filename (str): Output filename (default: "heatmap.pdf").
-    - cmap (str): Matplotlib colormap (default: "viridis").
-    """
-    if matrix.dim() < 2:
-        matrix = matrix.expand(matrix.shape[0], -1)
-    if isinstance(matrix, torch.Tensor):
-        matrix = (
-            matrix.clone().detach().cpu().numpy()
-        )  # Convert PyTorch tensor to NumPy
-
-    # if matrix.shape[0] != matrix.shape[1]:
-    #     raise ValueError("Input matrix must be square.")
-
-    plt.figure(figsize=(8, 8))
-    plt.imshow(matrix, cmap=cmap, aspect="auto")
-    plt.colorbar()
-    plt.title("Heatmap")
-
-    plt.savefig(filename, format="pdf", bbox_inches="tight")
-    plt.close()
-
 
 class HeadSentinelFusion(nn.Module):
     def __init__(self, input_dim, output_dim, use_nonlinearity=True):

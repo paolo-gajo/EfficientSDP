@@ -37,6 +37,8 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     lstm_string = 1 if (config['use_tagger_lstm'] or config['use_parser_lstm']) else 0
     save_dir, model_name = config['save_dir'], config['model_name'].replace('/', '-').replace(' ', '')
     dir_path = os.path.join(save_dir,
+                            f"freeze_encoder_{config['freeze_encoder']}",
+                            f"arc_pred{config['arc_pred']}",
                             f"stepmask_{config['use_step_mask']}",
                             f"gnn_{config['use_gnn']}",
                             f"bpos_{config['use_bert_positional_embeddings']}",
