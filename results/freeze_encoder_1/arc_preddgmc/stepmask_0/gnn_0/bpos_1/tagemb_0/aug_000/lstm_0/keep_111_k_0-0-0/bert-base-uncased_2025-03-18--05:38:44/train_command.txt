@@ -1,0 +1,1 @@
+python3 /home/pgajo/Multitask-RFG-torch/tools/train.py

@@ -10,20 +10,20 @@ custom_config = {
     'test_ignore_edge_dep': ['root', '-'], ## this will be ignored during evaluation
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'loss_alpha': 0.5,
-    'freeze_encoder': 1,
-    'learning_rate': 1e-3,
+    'freeze_encoder': 0,
+    'learning_rate': 1e-4,
     'batch_size': 8,
     'plot': 0,
 
     'only_use_biggest_graph': {'train': 0, 'val': 0, 'test': 0},
     'biggest_graph_threshold': 0,
-    'augment_train': 0,
+    'augment_train': 1,
     'augment_val': 0,
     'augment_test': 0,
-    'augment_k_train': 0,
+    'augment_k_train': 1,
     'augment_k_val': 0,
     'augment_k_test': 0,
-    'keep_og_train': 1,
+    'keep_og_train': 0,
     'keep_og_val': 1,
     'keep_og_test': 1,
     'rep_mode': 'words', # either 'words' or 'tokens'. right now 'tokens' doesn't work in the evaluation because the correct labels need to be used o.w. the lenghts don't match.
@@ -31,9 +31,10 @@ custom_config = {
     'use_tag_embeddings_in_parser': 1,
     'use_tagger_lstm': 0,
     'use_parser_lstm': 0,
+    'use_parser_gnn': 0,
     'use_gnn': '0',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
-    'arc_pred': 'dgmc',
+    'arc_pred': 'attn',
 }
 
 default_cfg = {

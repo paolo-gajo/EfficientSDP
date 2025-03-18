@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import numpy
 import matplotlib.pyplot as plt
-from stepparser.gnn import DGM_c
+from stepparser.gnn import DGM_c, GATNet
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -88,15 +88,17 @@ class BiaffineDependencyParser(nn.Module):
             self.arc_pred = BilinearMatrixAttention(
                 arc_representation_dim, arc_representation_dim, use_input_biases=True
             )
+            if self.config['use_parser_gnn']:
+                self.gnn = GATNet(arc_representation_dim, arc_representation_dim, num_layers = 1, heads = 1, dropout=0.2)
         elif self.config["arc_pred"] == "dgmc":
             self.arc_pred = DGM_c(self.config,
                                   input_dim=arc_representation_dim,
                                   hidden_dims=arc_representation_dim,
-                                  num_layers=1,
-                                  num_gnn_layers=2,
-                                  conv_type='gcn',
+                                  num_layers=2,
+                                  num_gnn_layers=1,
+                                  conv_type='gat',
                                   heads=4,
-                                  apply_diffusion=True,
+                                  apply_diffusion=False,
                                   )
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -250,6 +252,20 @@ class BiaffineDependencyParser(nn.Module):
             attended_arcs = self.arc_pred(
                 head_arc_representation, child_arc_representation
             )
+            if self.config['use_parser_gnn']:
+                arc_edge_index = []
+                head_arc_reps = []
+                child_arc_reps = []
+                for i, b in enumerate(attended_arcs):
+                    arc_edge_index = b.nonzero(as_tuple=False).t()
+                    head_arc_reps.append(self.gnn(head_arc_representation[i], arc_edge_index))
+                    child_arc_reps.append(self.gnn(child_arc_representation[i], arc_edge_index))
+                head_arc_representation = torch.stack(head_arc_reps, dim = 0)
+                child_arc_representation = torch.stack(child_arc_reps, dim = 0)
+
+                attended_arcs = self.arc_pred(
+                    head_arc_representation, child_arc_representation
+                )
         elif self.config["arc_pred"] == "dgmc":
             attended_arcs = self.arc_pred(x=head_arc_representation, A=None)["adj"]
         else:

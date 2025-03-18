@@ -8,7 +8,7 @@
 #SBATCH --output=./.slurm/%j_output.log
 #SBATCH --error=./.slurm/%j_error.log
 
-augment_train=0
+augment_train=1
 augment_val=0
 augment_test=0
 
@@ -26,7 +26,7 @@ augment_k_train=(
 augment_k_val=0
 augment_k_test=0
 
-keep_og_train=1
+keep_og_train=0
 keep_og_val=1
 keep_og_test=1
 
