@@ -36,6 +36,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     keep_og_string = ''.join([str(el) for el in [config[f'keep_og_{split}'] for split in splits]])
     lstm_string = 1 if (config['use_tagger_lstm'] or config['use_parser_lstm']) else 0
     save_dir, model_name = config['save_dir'], config['model_name'].replace('/', '-').replace(' ', '')
+    model_name = model_name if not config['use_abs_step_embeddings'] else 'step-bert'
     dir_path = os.path.join(save_dir,
                             f"freeze_encoder_{config['freeze_encoder']}",
                             f"arc_pred{config['arc_pred']}",
@@ -45,8 +46,9 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"tagemb_{config['use_tag_embeddings_in_parser']}",
                             f"aug_{aug_string}",
                             f'lstm_{lstm_string}',
+                            f"laplacian_pe_{config['laplacian_pe']}",
                             f"keep_{keep_og_string}_k_{k_string}",
-                            f"{model_name}_{get_current_time_string()}")
+                            f"{model_name}_{get_current_time_string()}_seed_{config['seed']}")
 
     config['save_dir'] = dir_path
 

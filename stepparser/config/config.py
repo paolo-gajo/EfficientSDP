@@ -10,8 +10,6 @@ custom_config = {
     'test_ignore_edge_dep': ['root', '-'], ## this will be ignored during evaluation
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'loss_alpha': 0.5,
-    'freeze_encoder': 0,
-    'learning_rate': 1e-4,
     'batch_size': 8,
     'plot': 0,
 
@@ -23,18 +21,30 @@ custom_config = {
     'augment_k_train': 1,
     'augment_k_val': 0,
     'augment_k_test': 0,
-    'keep_og_train': 0,
+    'keep_og_train': 1,
     'keep_og_val': 1,
     'keep_og_test': 1,
     'rep_mode': 'words', # either 'words' or 'tokens'. right now 'tokens' doesn't work in the evaluation because the correct labels need to be used o.w. the lenghts don't match.
-    'use_bert_positional_embeddings': 1,
-    'use_tag_embeddings_in_parser': 1,
+
+    # tagger options
     'use_tagger_lstm': 0,
-    'use_parser_lstm': 0,
+
+    # parser options
+    'step_bilinear_attn': 0,
+    'laplacian_pe': 1,
+    'arc_pred': 'attn',
     'use_parser_gnn': 0,
+    'use_parser_lstm': 0,
+    'use_tag_embeddings_in_parser': 0,
+
+    # model options
+    'seed': 27,
+    'use_abs_step_embeddings': 0,
+    'freeze_encoder': 0,
+    'learning_rate': 1e-4,
     'use_gnn': '0',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
-    'arc_pred': 'attn',
+    'use_bert_positional_embeddings': 1,
 }
 
 default_cfg = {

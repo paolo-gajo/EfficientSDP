@@ -15,7 +15,7 @@ from stepparser.utils import (save_json,
 from stepparser.model import StepParser
 from stepparser.config import default_cfg, custom_config
 from stepparser.evaluation import evaluate_model, evaluate_model_with_all_labels
-from stepparser.utils.graph_data_utils import get_mappings
+from stepparser.utils.graph_data_utils import get_mappings, get_max_steps
 from tqdm import tqdm
 import numpy as np
 from pprint import pprint
@@ -44,9 +44,11 @@ val_loader = build_dataloader(config, loader_type='val')
 test_loader = build_dataloader(config, loader_type='test')
 
 # Build label index map from graph files
-label_index_map = get_mappings(load_json(config['train_file_graphs']) +
-                            load_json(config['val_file_graphs']) +
-                            load_json(config['test_file_graphs']))
+all_splits_data = load_json(config['train_file_graphs']) \
+                + load_json(config['val_file_graphs']) \
+                + load_json(config['test_file_graphs'])
+label_index_map = get_mappings(all_splits_data)
+config['max_steps'] = get_max_steps(all_splits_data)
 
 config['n_tags'] = len(label_index_map['tag2class'])
 config['n_edge_labels'] = len(label_index_map['edgelabel2class'])

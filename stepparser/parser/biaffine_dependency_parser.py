@@ -8,8 +8,10 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import numpy
 import matplotlib.pyplot as plt
-from stepparser.gnn import DGM_c, GATNet
-
+from stepparser.gnn import DGM_c, GATNet, get_step_reps, pad_square_matrix
+import sys
+sys.path.append('./debug')
+from viz import save_heatmap
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
@@ -101,8 +103,17 @@ class BiaffineDependencyParser(nn.Module):
                                   apply_diffusion=False,
                                   )
 
-        self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
+        if self.config['step_bilinear_attn']:
+            self.step_mlp_1 = nn.Linear(encoder_dim, arc_representation_dim)
+            self.step_mlp_2 = nn.Linear(encoder_dim, arc_representation_dim)
+            self.step_bilinear_attn = BilinearMatrixAttention(
+                arc_representation_dim, arc_representation_dim, use_input_biases=True
+            )
 
+        if self.config['laplacian_pe']:
+            self.lap_proj = nn.Linear(self.config['max_steps'], arc_representation_dim)
+        
+        self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.child_tag_feedforward = copy.deepcopy(self.head_tag_feedforward)
 
         self.tag_bilinear = torch.nn.modules.Bilinear(
@@ -131,6 +142,10 @@ class BiaffineDependencyParser(nn.Module):
         head_tags: torch.LongTensor = None,
         head_indices: torch.LongTensor = None,
         gnn_pooled_vector: torch.Tensor = None,
+        step_indices: torch.Tensor = None,
+        step_reps: torch.Tensor = None,
+        step_graphs: torch.Tensor = None,
+        laplacian_matrix_list: torch.Tensor = None,
     ) -> Dict[str, torch.Tensor]:
         """
         Parameters
@@ -248,6 +263,33 @@ class BiaffineDependencyParser(nn.Module):
             child_arc_representation = self._dropout(
                 F.elu(self.child_arc_feedforward(encoded_text))
             )
+
+            if self.config['laplacian_pe']:
+                # we want to take the eigenvectors of the graph laplacian
+                # and pass them through a linear layer [k, d]
+                # and sum that with each representation of the index
+                # corresponding to that node index i \in 1, ..., k
+
+                sentinel_index = torch.zeros(step_indices.shape[0], dtype=torch.long).unsqueeze(1)
+                step_idx_batch = torch.cat([sentinel_index.to(self.config['device']), step_indices], dim = 1)
+                
+                for i, (L, step_idx) in enumerate(zip(laplacian_matrix_list, step_idx_batch)):
+                    eigenvalues, eigenvectors = torch.linalg.eigh(L)
+                    eigenvectors = pad_square_matrix(eigenvectors, self.config['max_steps'])#[:L.shape[0], :]
+                    eigen_pad = torch.zeros(self.config['max_steps']).unsqueeze(0).to(self.config['device'])
+                    eigenvectors = torch.cat([eigen_pad, eigenvectors], dim = 0)
+                    laplacian_pe = self.lap_proj(eigenvectors)
+                    laplacian_pe_extended = laplacian_pe[step_idx, :]
+                    # save_heatmap(laplacian_pe_extended, 'lap_pe.pdf')
+                    # TODO: could maybe apply the F.elu here after the sum insted of before
+                    # TODO: also i need to apply batch norm
+                    head_arc_representation[i] = head_arc_representation[i] + laplacian_pe_extended
+                    child_arc_representation[i] = child_arc_representation[i] + laplacian_pe_extended
+                    ...
+                # eig_vectors = torch.cat(eig_vector_list, dim = 0)
+                ...
+                
+
             # shape (batch_size, sequence_length, sequence_length)
             attended_arcs = self.arc_pred(
                 head_arc_representation, child_arc_representation
@@ -274,8 +316,6 @@ class BiaffineDependencyParser(nn.Module):
         # mask scores before decoding
         minus_inf = -1e8
         minus_mask = (1 - float_mask) * minus_inf
-        # save_heatmap(minus_mask[0], filename='mask_4.pdf')
-        # save_heatmap(attended_arcs[0], filename='attended_arcs_1.pdf')
 
         if not self.config["use_step_mask"]:
             attended_arcs = (
@@ -284,7 +324,12 @@ class BiaffineDependencyParser(nn.Module):
         else:
             attended_arcs = attended_arcs + minus_mask
 
-        # save_heatmap(attended_arcs[0], filename='attended_arcs_2.pdf')
+        if self.config['step_bilinear_attn']:
+            step_reps = get_step_reps(encoded_text, step_indices)
+            step_matrix_1 = F.elu(self.step_mlp_1(step_reps))
+            step_matrix_2 = F.elu(self.step_mlp_2(step_reps))
+            self.step_bilinear_attn(step_matrix_1, step_matrix_2)
+            pass
 
         if self.training or not self.use_mst_decoding_for_validation:
             predicted_heads, predicted_head_tags = self._greedy_decode(
@@ -878,6 +923,80 @@ class BilinearMatrixAttention(nn.Module):
         final_biased = final.squeeze(1) + self._bias
         return self.activation(final_biased)
 
+class BilinearMatrixAttentionDozatManning(nn.Module):
+    """
+    Computes attention between two matrices using a bilinear attention function. This function has
+    a matrix of weights `W` and a bias `b`, and the similarity between the two matrices `X`
+    and `Y` is computed as `X W Y^T + b`.
+
+    # Parameters
+
+    matrix_1_dim : `int`, required
+        The dimension of the matrix `X`, described above.  This is `X.size()[-1]` - the length
+        of the vector that will go into the similarity computation.  We need this so we can build
+        the weight matrix correctly.
+    matrix_2_dim : `int`, required
+        The dimension of the matrix `Y`, described above.  This is `Y.size()[-1]` - the length
+        of the vector that will go into the similarity computation.  We need this so we can build
+        the weight matrix correctly.
+    activation : `Activation`, optional (default=`linear`)
+        An activation function applied after the `X W Y^T + b` calculation.  Default is
+        linear, i.e. no activation.
+    use_input_biases : `bool`, optional (default = `False`)
+        If True, we add biases to the inputs such that the final computation
+        is equivalent to the original bilinear matrix multiplication plus a
+        projection of both inputs.
+    out_features : `int`, optional (default = `1`)
+        The number of output classes. Typically in an attention setting this will be one,
+        but this parameter allows this class to function as an equivalent to `torch.nn.Bilinear`
+        for matrices, rather than vectors.
+    """
+
+    def __init__(
+        self,
+        matrix_1_dim: int,
+        matrix_2_dim: int,
+        activation=None,
+        use_input_biases: bool = False,
+        out_features: int = 1,
+    ) -> None:
+        super().__init__()
+        if use_input_biases:
+            matrix_1_dim += 1
+            matrix_2_dim += 1
+
+        if out_features == 1:
+            self._weight_matrix = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim))
+        else:
+            self._weight_matrix = nn.Parameter(
+                torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
+            )
+
+        self._bias = nn.Parameter(torch.Tensor(matrix_1_dim))
+        self.activation = activation or Passthrough()
+        self.use_input_biases = use_input_biases
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.xavier_uniform_(self._weight_matrix)
+        self._bias.data.fill_(0)
+
+    def forward(self, matrix_1: torch.Tensor, matrix_2: torch.Tensor) -> torch.Tensor:
+        if self.use_input_biases:
+            bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
+            bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
+
+            matrix_1 = torch.cat([matrix_1, bias1], dim=-1)
+            matrix_2 = torch.cat([matrix_2, bias2], dim=-1)
+
+        weight = self._weight_matrix
+        if weight.dim() == 2:
+            weight = weight.unsqueeze(0)
+        intermediate = torch.matmul(matrix_1.unsqueeze(1), weight)
+        final = torch.matmul(intermediate, matrix_2.unsqueeze(1).transpose(2, 3))
+        bias = torch.matmul(matrix_1, self._bias.unsqueeze(1))
+        final_biased = final.squeeze(1) + bias
+        return self.activation(final_biased)
 
 def masked_log_softmax(
     vector: torch.Tensor, mask: torch.BoolTensor, dim: int = -1

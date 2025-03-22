@@ -6,8 +6,7 @@ from transformers import AutoTokenizer
 from stepparser.encoder import Encoder, BERTWordEmbeddings
 from stepparser.parser import BiaffineDependencyParser
 from stepparser.tagger import Tagger
-from stepparser.gnn import GATNet
-from stepparser.gnn import MPNNNet
+from stepparser.gnn import GATNet, MPNNNet
 import numpy as np
 import warnings
 from typing import Set, Tuple, List
@@ -24,6 +23,7 @@ class StepParser(torch.nn.Module):
         )
         # self.encoder = BERTWordEmbeddings(self.config['model_name'])
         # self.config['encoder_output_dim'] = self.encoder.word_embeddings.weight.shape[-1]
+
         if self.config["use_gnn"] == "gat":
             self.gnn = GATNet(
                 self.config["encoder_output_dim"],
@@ -50,10 +50,17 @@ class StepParser(torch.nn.Module):
             k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
             for k, v in model_input.items()
         }
+
+        model_input = {
+            k: [el.to(self.config["device"]) for el in v] if (isinstance(v, list) and isinstance(v[0], torch.Tensor)) else v
+            for k, v in model_input.items()
+        }
+        
         encoder_input = {
             k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
             for k, v in model_input["encoded_input"].items()
         }
+        encoder_input['step_indices'] = model_input["step_indices_tokens"]
 
         # Original masks
         og_mask_tokens = encoder_input["attention_mask"]
@@ -69,7 +76,7 @@ class StepParser(torch.nn.Module):
             encoder_input["words_mask_custom"] = self.token_mask_to_word_mask(
                 encoder_input["attention_mask"], encoder_input
             )
-
+        
         # Run encoder to get token/word representations
         encoder_output = self.encoder(encoder_input)
 
@@ -89,13 +96,27 @@ class StepParser(torch.nn.Module):
             step_indices = model_input["step_indices_tokens"]
             og_mask = og_mask_tokens
 
+        # Use appropriate tags based on mode
+        if self.mode in ["train", "validation"]:
+            head_tags, head_indices = head_tags, head_indices
+            step_graphs = model_input['step_graph']
+            laplacian_matrix = model_input['lap_m']
+            edge_index=model_input["edge_index"]
+        elif self.mode == "test":
+            head_tags, head_indices = None, None
+            step_graphs = None
+            laplacian_matrix = model_input['lap_m'] # TODO: THIS NEEDS TO BE NONE AFTER I'M DONE TESTING!
+            # IT NEEDS TO BE INFERRED DURING EVAL/TEST!
+            # OR PUT A FLAG TO LET ME CONTROL WHETHER TO USE ORACLE/NOT ORACLE FOR LAPLACIAN
+            edge_index=None
+
         # GNN processing
         gnn_out_pooled = None
         if self.config["use_gnn"] in ["mpnn", "gat"]:
             encoder_output, gnn_out_pooled = self.gnn.process_step_representations(
                 encoder_output=encoder_output,
                 step_indices=step_indices,
-                step_graphs=model_input["step_graph"],
+                edge_index_batch=edge_index,
             )
 
         # Tagging
@@ -106,7 +127,7 @@ class StepParser(torch.nn.Module):
             tagger_output.logits
         )
 
-        # Ground truth tags
+        # Ground-truth tags
         try:
             pos_tags_gt = torch.nn.functional.one_hot(
                 tagger_labels, num_classes=self.config["n_tags"]
@@ -116,12 +137,6 @@ class StepParser(torch.nn.Module):
                 "Ground truth tags are unavailable, using predicted tags for all purposes."
             )
             pos_tags_gt = pos_tags_pred
-
-        # Use appropriate tags based on mode
-        if self.mode in ["train", "validation"]:
-            head_tags, head_indices = head_tags, head_indices
-        elif self.mode == "test":
-            head_tags, head_indices = None, None
 
         # Use predicted or ground truth tags based on config
         pos_tags_parser = pos_tags_pred if self.config["use_pred_tags"] else pos_tags_gt
@@ -134,7 +149,10 @@ class StepParser(torch.nn.Module):
             og_mask=og_mask,
             head_tags=head_tags,
             head_indices=head_indices,
-            gnn_pooled_vector=gnn_out_pooled,
+            gnn_pooled_vector=None, # this would be `gnn_out_pooled` if we wanted to concat the gnn pooled output to the sentinel used in the parser
+            step_indices=step_indices,
+            step_graphs=step_graphs,
+            laplacian_matrix_list=laplacian_matrix,
         )
 
         # Calculate loss or return predictions
@@ -159,46 +177,6 @@ class StepParser(torch.nn.Module):
                     tagger_human_readable, parser_human_readable, model_input, og_mask
                 )
             return output_as_list_of_dicts
-
-    def get_step_reps(
-        self, h: torch.Tensor, step_indices: torch.Tensor, step_graphs: List[Set[Tuple]]
-    ):
-        """
-        Compute step-level representations by averaging token representations for each step.
-
-        Args:
-            h (torch.Tensor): Tensor of shape [batch, seqlen, dim] containing token-level representations.
-            step_indices (torch.Tensor): Tensor of shape [batch, seqlen] with integer step indices for each token.
-
-        Returns:
-            list[torch.Tensor]: List of length batch where each element is a tensor of shape [num_steps, dim].
-        """
-        batch_step_reps = []
-        # Iterate over each sample in the batch
-        for sample_reps, sample_steps, edge_index in zip(h, step_indices, step_graphs):
-            # Get unique step indices in sorted order.
-            # (If you want to ignore a particular step (e.g. index 0), you can filter it out here.)
-            unique_steps = torch.unique(
-                sample_steps[torch.where(sample_steps != 0)[0]], sorted=True
-            )
-
-            x = []
-            for step in unique_steps:
-                # Create a boolean mask for tokens corresponding to this step.
-                mask = sample_steps == step
-                # Average over the tokens for this step along the sequence length dimension.
-                # This produces a representation with shape [dim].
-                rep = sample_reps[mask].mean(dim=0)
-                x.append(rep)
-
-            # Stack step representations to obtain a tensor of shape [num_steps, dim] for this sample.
-            x = torch.stack(x, dim=0)
-            out_dict = {
-                "x": x,
-                "edge_index": torch.tensor(list(edge_index)).T - 1,
-            }
-            batch_step_reps.append(out_dict)
-        return batch_step_reps
 
     def make_step_mask(
         self,
@@ -510,7 +488,6 @@ class StepParser(torch.nn.Module):
         ], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
         self.tagger.set_mode(mode)
         self.mode = mode
-
 
 def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     """

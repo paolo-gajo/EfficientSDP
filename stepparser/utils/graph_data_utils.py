@@ -70,6 +70,7 @@ class GraphDataset(Dataset):
                  split = None,
                  shuffle = False,
                  ):
+        self.ignore_keys = ['edge_index', 'adj_m', 'deg_m', 'lap_m']
         self.tokenizer = tokenizer
         self.padding = padding
         if not self.padding:
@@ -96,7 +97,7 @@ class GraphDataset(Dataset):
             for el in path:
                 data += load_json(el)
         return cls(data, **kwargs)
-    
+
     def augment(self, k = 1, keep_og = False):
         augmented_data = []
         for sample in tqdm(self.data, total=len(self.data), desc=f'Augmenting {self.split} dataset...'):
@@ -115,7 +116,10 @@ class GraphDataset(Dataset):
                     perms = all_topos[perms_mask].tolist()
                     for i, perm in enumerate(perms):
                         perm_filled = torch.as_tensor(add_isolated_nodes(perm))
-                        permuted_graph = self.permute_graph(sample, perm_filled)
+                        # NOTE: we +1 the index nodes because the step indices start from 1
+                        # but we need edge_index (and hence the step_graph from which it originates)
+                        # to start from 0
+                        permuted_graph = self.permute_graph(sample, perm_filled + 1)
                         augmented_data.append(permuted_graph)
                     
         print(f'Augmented {self.split} dataset from {len(self.data)} to {len(augmented_data)} samples.')
@@ -203,6 +207,9 @@ class GraphDataset(Dataset):
 
         G_perm = deepcopy(G)
         G_perm.pop('encoded_input')
+        bypass_keys = []
+        for key in self.ignore_keys:
+            bypass_keys.append({key: G_perm.pop(key)})
         
         for key, value in G_perm.items():    
             idx = step_indices_tokens if ('tokens' in key or 'encoded_input' == key) else step_indices
@@ -240,6 +247,9 @@ class GraphDataset(Dataset):
         G_perm['encoded_input'] = encoding
         G_perm = apply_sub_dicts(G_perm, self.tensorize)
         G_perm = apply_sub_dicts(G_perm, self.pad)
+
+        for ignored_dict in bypass_keys:
+            G_perm.update(ignored_dict)
         return G_perm
 
     def preprocess_data(self, data):
@@ -272,6 +282,10 @@ class GraphDataset(Dataset):
             processed_sample = apply_sub_dicts(processed_sample, self.tensorize)
             processed_sample = apply_sub_dicts(processed_sample, self.pad)
             processed_sample['step_graph'] = self.get_step_graph(sample)
+            processed_sample['edge_index'] = graph_to_edge_index(processed_sample['step_graph'])
+            processed_sample['adj_m'] = edge_index_to_adj_matrix(processed_sample['edge_index'])
+            processed_sample['deg_m'] = get_deg_matrix(processed_sample['adj_m'])
+            processed_sample['lap_m'] = get_graph_laplacian(processed_sample['deg_m'], processed_sample['adj_m'])
             processed_data.append(processed_sample)
         return processed_data
 
@@ -279,8 +293,8 @@ class GraphDataset(Dataset):
         return torch.tensor([input[el] if el != -100 else 0 for el in word_ids], dtype=torch.long)
 
     def get_step_graph(self, sample):
-        step_indices = torch.as_tensor(sample['step_indices'])
-        head_indices = torch.as_tensor(sample['head_indices'])
+        step_indices = torch.as_tensor(sample['step_indices']) - 1
+        head_indices = torch.as_tensor(sample['head_indices']) - 1
         target_steps = torch.cat([torch.tensor([0]), step_indices])[head_indices]
         G_loops = torch.vstack([step_indices, target_steps])
         mask_steps = torch.where(G_loops[0] != G_loops[1], True, False) # filter out edges within the same step
@@ -343,6 +357,32 @@ class GraphDataset(Dataset):
                     original_words[word_id] += token
         
         return original_words
+
+def graph_to_edge_index(graph: Set[Tuple]):
+    if not (len(graph)) > 0:
+        return torch.empty(0)
+    return torch.tensor(list(graph), dtype=torch.long).T
+
+def edge_index_to_adj_matrix(edge_index: torch.Tensor):
+    if not edge_index.numel() > 0:
+        return edge_index
+    edge_index = edge_index
+    k = torch.max(edge_index) + 1
+    adj = torch.zeros((k, k), dtype=torch.float)
+    adj[edge_index[0], edge_index[1]] = 1
+    return adj
+
+def get_deg_matrix(adj_matrix: torch.Tensor):
+    N = adj_matrix.shape[0]
+    degs = []
+    for i in range(N):
+        degs.append(sum(adj_matrix[i]))
+    deg_matrix = torch.diag(torch.tensor(degs))
+    return deg_matrix
+
+def get_graph_laplacian(deg_m: torch.Tensor, adj_m: torch.Tensor):
+    L = deg_m - adj_m
+    return L
 
 def reorder_tensor(t: torch.Tensor = None, idx = None, permutation = None):
     '''
@@ -472,8 +512,8 @@ def is_tensorizable(L):
         raise NotImplementedError('Not a list, tensor, set, or dict-like.')
 
 class GraphCollator:
-    def __init__(self, keys = ['words', 'step_graph'], truncate_to_longest = True):
-        self.keys = keys
+    def __init__(self, keys_to_filter = ['words', 'step_graph', 'edge_index', 'adj_m', 'deg_m', 'lap_m'], truncate_to_longest = True):
+        self.keys_to_filter = keys_to_filter
         self.truncate_to_longest = truncate_to_longest
     
     def collate(self, input):
@@ -482,7 +522,7 @@ class GraphCollator:
             max = self.get_trunc_len(input)
             out = self.truncate(out, max)
         out = default_collate(out)
-        for key in self.keys:
+        for key in self.keys_to_filter:
             out[key] = [el[key] for el in filtered]
         return out
     
@@ -512,7 +552,7 @@ class GraphCollator:
             out_el = {}
             filtered_el = {}
             for key, value in el.items():
-                if key not in self.keys:
+                if key not in self.keys_to_filter:
                     out_el[key] = value
                 else:
                     filtered_el[key] = value
@@ -530,6 +570,13 @@ def build_dataloaders(dataset_dict, collate_fn, batch_size = 1, splits = ['train
                    collate_fn=collate_fn
                    ) for split in splits
         }
+def get_max_steps(data: List):
+    max_steps = 0
+    for line in data:
+        tmp = max(line['step_indices'])
+        if tmp > max_steps:
+            max_steps = tmp
+    return max_steps
 
 def main():
     pass

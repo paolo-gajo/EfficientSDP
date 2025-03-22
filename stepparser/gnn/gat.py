@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from typing import List, Set, Tuple
+from stepparser.gnn.utils import get_step_reps
 
 class GATNet(nn.Module):
     def __init__(self, input_dim, output_dim, num_layers, heads, dropout=0.2):
@@ -30,7 +31,7 @@ class GATNet(nn.Module):
         
         return x
     
-    def process_step_representations(self, encoder_output, step_indices, step_graphs):
+    def process_step_representations(self, encoder_output, step_indices, edge_index_batch):
         """
         Process step representations through GNN and merge with encoder output
         
@@ -43,15 +44,15 @@ class GATNet(nn.Module):
             Tuple[torch.Tensor, torch.Tensor]: Updated encoder output and pooled GNN output
         """
         # Get step-level representations
-        step_representations = self.get_step_reps(h=encoder_output, step_indices=step_indices, step_graphs=step_graphs)
+        step_representations = get_step_reps(h=encoder_output, step_indices=step_indices)
         
         # Process each sample in the batch through GNN
         gnn_outputs = []
-        for sample in step_representations:
-            if sample['edge_index'].numel() > 0:
-                gnn_out = self(sample['x'], sample['edge_index'].to(sample['x'].device))
+        for x, edge_index in zip(step_representations, edge_index_batch):
+            if edge_index.numel() > 0:
+                gnn_out = self(x, edge_index.to(x.device))
             else:
-                gnn_out = torch.zeros(sample['x'].shape).to(sample['x'].device)
+                gnn_out = torch.zeros(x.shape).to(x.device)
             gnn_outputs.append(gnn_out)
             
         # Update encoder outputs with GNN outputs
@@ -70,38 +71,3 @@ class GATNet(nn.Module):
         gnn_out_pooled = gnn_out.mean(dim=0)
         
         return encoder_output, gnn_out_pooled
-        
-    def get_step_reps(self, h: torch.Tensor, step_indices: torch.Tensor, step_graphs: List[Set[Tuple]]):
-        """
-        Compute step-level representations by averaging token representations for each step.
-        
-        Args:
-            h (torch.Tensor): Tensor of shape [batch, seqlen, dim] containing token-level representations
-            step_indices (torch.Tensor): Tensor of shape [batch, seqlen] with integer step indices for each token
-            step_graphs (List[Set[Tuple]]): List of edge sets for each sample in the batch
-        
-        Returns:
-            list[dict]: List of dictionaries with keys 'x' and 'edge_index' for each sample
-        """
-        batch_step_reps = []
-        # Iterate over each sample in the batch
-        for sample_reps, sample_steps, edge_index in zip(h, step_indices, step_graphs):
-            # Get unique step indices in sorted order (excluding index 0)
-            unique_steps = torch.unique(sample_steps[torch.where(sample_steps!=0)[0]], sorted=True)
-            
-            x = []
-            for step in unique_steps:
-                # Create a boolean mask for tokens corresponding to this step
-                mask = sample_steps == step
-                # Average over the tokens for this step along the sequence length dimension
-                rep = sample_reps[mask].mean(dim=0)
-                x.append(rep)
-            
-            # Stack step representations to obtain a tensor of shape [num_steps, dim] for this sample
-            x = torch.stack(x, dim=0) if x else torch.zeros((0, sample_reps.shape[-1]), device=sample_reps.device)
-            out_dict = {
-                'x': x,
-                'edge_index': torch.tensor(list(edge_index)).T - 1 if edge_index else torch.zeros((2, 0), dtype=torch.long),
-            }
-            batch_step_reps.append(out_dict)
-        return batch_step_reps
