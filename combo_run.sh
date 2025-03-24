@@ -15,14 +15,14 @@ augment_val=0
 augment_test=0
 
 augment_k_train=(
-    # 1
+    1
     5
     10
-    20
-    40
-    60
-    80
-    100
+    # 20
+    # 40
+    # 60
+    # 80
+    # 100
     )
 
 augment_k_val=0
@@ -39,7 +39,6 @@ use_tagger_lstm=0
 use_parser_lstm=0
 use_gnn=0
 use_step_mask=0
-
 laplacian_pe=0
 
 freeze_encoder=1
@@ -49,29 +48,34 @@ augment_type_toggle=('random'
                     'permute'
                     'hybrid')
 training='steps'
-training_steps=20000
+training_steps=10000
 eval_steps=100
+
+seed_list=(0)
 
 python ./tools/train.py --opts \
     --training $training \
     --training_steps $training_steps \
     --eval_steps $eval_steps
 
-for k in "${augment_k_train[@]}"; do
-    for augment_type in "${augment_type_toggle[@]}"; do
-        python ./tools/train.py --opts \
-        --augment_train $k \
-        --augment_val $augment_val \
-        --augment_test $augment_test \
-        --augment_k_train $augment_k_train \
-        --augment_k_val $augment_k_val \
-        --augment_k_test $augment_k_test \
-        --keep_og_train $keep_og_train \
-        --keep_og_val $keep_og_val \
-        --keep_og_test $keep_og_test \
-        --augment_type $augment_type \
-        --training $training \
-        --training_steps $training_steps \
-        --eval_steps $eval_steps
+for seed in "${seed_list[@]}"; do
+    for k in "${augment_k_train[@]}"; do
+        for augment_type in "${augment_type_toggle[@]}"; do
+            python ./tools/train.py --opts \
+            --augment_train $augment_train \
+            --augment_val $augment_val \
+            --augment_test $augment_test \
+            --augment_k_train $k \
+            --augment_k_val $augment_k_val \
+            --augment_k_test $augment_k_test \
+            --keep_og_train $keep_og_train \
+            --keep_og_val $keep_og_val \
+            --keep_og_test $keep_og_test \
+            --augment_type $augment_type \
+            --training $training \
+            --training_steps $training_steps \
+            --eval_steps $eval_steps \
+            --seed $seed
+        done
     done
 done

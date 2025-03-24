@@ -1,1 +1,0 @@
-python3 ./tools/train.py --opts --training "steps" --training_steps "20000" --eval_steps "100"

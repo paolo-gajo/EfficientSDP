@@ -1,0 +1,142 @@
+{
+    "config": {
+        "device": "cuda",
+        "freeze_encoder": 1,
+        "freeze_tagger": false,
+        "freeze_parser": false,
+        "early_stopping": true,
+        "patience": 0.3,
+        "epochs": 100,
+        "learning_rate": 0.001,
+        "shuffle": {
+            "train": 1,
+            "val": 0,
+            "test": 0
+        },
+        "save_dir": "./results_steps/freeze_encoder_1/arc_predattn/stepmask_0/gnn_0/bpos_1/tagemb_0/lstm_0/laplacian_pe_/use_abs_step_embeddings_0/aug_100_hybrid_keep_111_k_1-0-0_10000/bert-base-uncased_2025-03-24--19:27:10_seed_0",
+        "model_name": "bert-base-uncased",
+        "batch_size": 8,
+        "encoder_output_dim": 768,
+        "sparse_embedding_tags": false,
+        "n_tags": 22,
+        "n_edge_labels": 15,
+        "freeze_until_epoch": 999,
+        "test_ignore_tag": [
+            "O",
+            "no_label"
+        ],
+        "test_ignore_edge_dep": [
+            "root",
+            "-"
+        ],
+        "tag_embedding_dimension": 100,
+        "seed": 0,
+        "self_attention_heads": 2,
+        "use_multihead_attention": false,
+        "fraction_dataset": 1,
+        "betas": [
+            0.9,
+            0.9
+        ],
+        "use_pred_tags": true,
+        "keep_edge_labels": true,
+        "softmax_scaling_coeff": 1000,
+        "gumbel_softmax": false,
+        "keep_tags": true,
+        "model_path": "./results_steps/freeze_encoder_1/arc_predattn/stepmask_0/gnn_0/bpos_1/tagemb_0/lstm_0/laplacian_pe_/use_abs_step_embeddings_0/aug_100_hybrid_keep_111_k_1-0-0_10000/bert-base-uncased_2025-03-24--19:27:10_seed_0/model.pth",
+        "use_mst_decoding_for_validation": 1,
+        "train_file_graphs": "./data/val_stratified_80-20.json",
+        "val_file_graphs": "./data/train_stratified_80-20.json",
+        "test_file_graphs": "./data/test_stratified_80-20.json",
+        "word_majority_eval": 0,
+        "save_model": 1,
+        "data_len": {
+            "train": 56,
+            "val": 242,
+            "test": 29
+        },
+        "dataset_max_steps": {
+            "train": 7,
+            "val": 12,
+            "test": 7
+        },
+        "parser_lstm_hidden_size": 400,
+        "gat_conv_heads": 8,
+        "tagger_lambda": 0.1,
+        "parser_lambda": 1,
+        "plot": 1,
+        "only_use_biggest_graph": {
+            "train": 0,
+            "val": 0,
+            "test": 0
+        },
+        "biggest_graph_threshold": 0,
+        "augment_train": 1,
+        "augment_val": 0,
+        "augment_test": 0,
+        "augment_k_train": 1,
+        "augment_k_val": 0,
+        "augment_k_test": 0,
+        "keep_og_train": 1,
+        "keep_og_val": 1,
+        "keep_og_test": 1,
+        "augment_type": "hybrid",
+        "adjacency_direction": "directed",
+        "results_suffix": "_steps",
+        "padding": 1,
+        "use_tagger_lstm": 0,
+        "step_bilinear_attn": 0,
+        "arc_pred": "attn",
+        "use_parser_gnn": 0,
+        "use_parser_lstm": 0,
+        "use_tag_embeddings_in_parser": 0,
+        "rep_mode": "words",
+        "laplacian_pe": "",
+        "use_abs_step_embeddings": 0,
+        "use_gnn": "0",
+        "use_step_mask": 0,
+        "use_bert_positional_embeddings": 1,
+        "training": "steps",
+        "training_steps": 10000,
+        "eval_steps": 100,
+        "figures_dir": "./paper/figures_keep_111_k_1-0-0"
+    },
+    "val_results": {
+        "tagger_results": {
+            "P": 0.6783,
+            "R": 0.6807,
+            "F1": 0.6795
+        },
+        "parser_labeled_results": {
+            "P": 0.4305,
+            "R": 0.3633,
+            "F1": 0.3941
+        },
+        "parser_unlabeled_results": {
+            "P": 0.4948,
+            "R": 0.4176,
+            "F1": 0.453
+        },
+        "epoch": null,
+        "steps": null
+    },
+    "test_results": {
+        "tagger_results": {
+            "P": 0.6945,
+            "R": 0.6934,
+            "F1": 0.6939
+        },
+        "parser_labeled_results": {
+            "P": 0.3977,
+            "R": 0.3463,
+            "F1": 0.3702
+        },
+        "parser_unlabeled_results": {
+            "P": 0.4969,
+            "R": 0.4327,
+            "F1": 0.4625
+        },
+        "epoch": null,
+        "steps": null
+    }
+}

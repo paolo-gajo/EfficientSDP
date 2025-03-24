@@ -1,16 +1,9 @@
-"""
-    Functions to modify config based on parameters of current environment
-"""
-
 from typing import Dict
 import torch
 from model.utils import get_current_time_string, make_dir
 from transformers import AutoConfig, set_seed
 import os
-import numpy
-import random
 import warnings
-
 
 def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode = 'train') -> Dict:
     for key in custom_config:
@@ -53,6 +46,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"{model_name}_{get_current_time_string()}_seed_{config['seed']}")
 
     config['save_dir'] = dir_path
+    print(f'Created dir: {dir_path}')
     make_dir(config['save_dir'])
     config['figures_dir'] = f'./paper/figures_{keep_k_string}'
     make_dir(config['figures_dir'])

@@ -1,7 +1,10 @@
 custom_config = {
-    'train_file_graphs': './data/train.json',
-    'val_file_graphs': './data/val.json',
-    'test_file_graphs': './data/test.json',
+    # 'train_file_graphs': './data/train.json',
+    # 'val_file_graphs': './data/val.json',
+    # 'test_file_graphs': './data/test.json',
+    'train_file_graphs': './data/val_stratified_80-20.json',
+    'val_file_graphs': './data/train_stratified_80-20.json',
+    'test_file_graphs': './data/test_stratified_80-20.json',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
