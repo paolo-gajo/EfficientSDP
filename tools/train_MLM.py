@@ -7,7 +7,7 @@
 
 import os
 
-from stepparser.utils import (write_text,
+from model.utils import (write_text,
 						get_args,
 						download_json_annotation,
 						build_train_dev_list,

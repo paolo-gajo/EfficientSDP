@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name='stepparser',
+    name='proctext_stepparser',
     version='0.0.3',
-    packages=['stepparser'],
+    packages=['debug', 'model'],
 )

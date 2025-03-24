@@ -3,7 +3,7 @@
 """
 
 import os
-from stepparser.utils import make_dir
+from model.utils import make_dir
 
 """
     List of all the models to be trained

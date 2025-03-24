@@ -5,7 +5,7 @@ from allennlp.nn.initializers import InitializerApplicator, Initializer
 from allennlp.common.params import Params
 from allennlp.data.vocabulary import Vocabulary
 
-from stepparser.parser.biaffine_dependency_parser_simple import BiaffineDependencyParserSimple
+from model.parser.biaffine_dependency_parser_simple import BiaffineDependencyParserSimple
 
 class TestDependencyParserSimple(unittest.TestCase):
     @classmethod

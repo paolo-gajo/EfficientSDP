@@ -8,7 +8,7 @@
 
 import os
 
-from stepparser.utils import (make_dir,
+from model.utils import (make_dir,
                         get_args, 
                         read_conllu_dataset_allennlp,
                         get_current_time_string, 

@@ -11,11 +11,11 @@
 source ./.env/bin/activate
 
 augment_train=1
-augment_val=1
+augment_val=0
 augment_test=0
 
 augment_k_train=(
-    1
+    # 1
     5
     10
     20
@@ -33,36 +33,45 @@ keep_og_val=1
 keep_og_test=1
 
 use_bert_positional_embeddings=1
+use_abs_step_embeddings=0
 use_tag_embeddings_in_parser=0
 use_tagger_lstm=0
 use_parser_lstm=0
 use_gnn=0
 use_step_mask=0
 
-laplacian_pe=1
+laplacian_pe=0
 
-freeze_encoder=0
-learning_rate=1e-4
+freeze_encoder=1
+learning_rate=1e-3
+
+augment_type_toggle=('random'
+                    'permute'
+                    'hybrid')
+training='steps'
+training_steps=20000
+eval_steps=100
+
+python ./tools/train.py --opts \
+    --training $training \
+    --training_steps $training_steps \
+    --eval_steps $eval_steps
 
 for k in "${augment_k_train[@]}"; do
-    python ./tools/train.py --opts \
-    --augment_train $augment_train \
-    --augment_val $augment_val \
-    --augment_test $augment_test \
-    --augment_k_train $k \
-    --augment_k_val $augment_k_val \
-    --augment_k_test $augment_k_test \
-    --keep_og_train $keep_og_train \
-    --keep_og_val $keep_og_val \
-    --keep_og_test $keep_og_test \
-    --use_bert_positional_embeddings $use_bert_positional_embeddings \
-    --use_tag_embeddings_in_parser $use_tag_embeddings_in_parser \
-    --use_tagger_lstm $use_tagger_lstm \
-    --use_parser_lstm $use_parser_lstm \
-    --use_gnn $use_gnn \
-    --use_step_mask $use_step_mask \
-    --freeze_encoder $freeze_encoder \
-    --learning_rate $learning_rate \
-    --laplacian_pe $laplacian_pe
-    
+    for augment_type in "${augment_type_toggle[@]}"; do
+        python ./tools/train.py --opts \
+        --augment_train $k \
+        --augment_val $augment_val \
+        --augment_test $augment_test \
+        --augment_k_train $augment_k_train \
+        --augment_k_val $augment_k_val \
+        --augment_k_test $augment_k_test \
+        --keep_og_train $keep_og_train \
+        --keep_og_val $keep_og_val \
+        --keep_og_test $keep_og_test \
+        --augment_type $augment_type \
+        --training $training \
+        --training_steps $training_steps \
+        --eval_steps $eval_steps
+    done
 done

@@ -12,7 +12,7 @@
 """
 
 import os
-from stepparser.utils import (save_json, 
+from model.utils import (save_json, 
                         get_curriculum_learning_data_paths,
                         get_args, 
                         get_label_index_mapping, 

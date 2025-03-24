@@ -4,11 +4,11 @@
 
 import torch
 import os
-from stepparser.utils import save_json, build_dataloader, get_label_index_mapping, setup_config, build_model, get_index_label_mapping, build_optimizer
-from stepparser.model import StepParser
-from stepparser.config import default_cfg
-from stepparser.utils import ner_collate_fuction, train_epoch, run_evaluation
-from stepparser.evaluation import evaluate_model
+from model.utils import save_json, build_dataloader, get_label_index_mapping, setup_config, build_model, get_index_label_mapping, build_optimizer
+from model.stepparser import StepParser
+from model.config import default_cfg
+from model.utils import ner_collate_fuction, train_epoch, run_evaluation
+from model.evaluation import evaluate_model
 from tqdm import tqdm
 from pprint import pprint
 import copy, json, contextlib

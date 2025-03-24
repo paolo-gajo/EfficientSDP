@@ -4,7 +4,7 @@
 """
 
 import os
-from stepparser.utils import (build_dataloader, 
+from model.utils import (build_dataloader, 
                         build_model, 
                         get_args, 
                         load_json, 
@@ -13,8 +13,8 @@ from stepparser.utils import (build_dataloader,
                         ner_collate_fuction, 
                         run_evaluation,
                         pretty_print_json)
-from stepparser.evaluation import evaluate_model
-from stepparser.config import default_cfg
+from model.evaluation import evaluate_model
+from model.config import default_cfg
 from pprint import pprint
 
 ## get arguments from the command lind

@@ -14,7 +14,7 @@
 """
 
 import os
-from stepparser.utils import (build_dataloader, 
+from model.utils import (build_dataloader, 
                         build_model, 
                         get_args, 
                         load_json, 
@@ -28,7 +28,7 @@ from stepparser.utils import (build_dataloader,
                         write_text,
                         plot_from_conllu,
                         is_arborescence)
-from stepparser.config import default_cfg
+from model.config import default_cfg
 import sys
 
 ## get arguments from the command lind
