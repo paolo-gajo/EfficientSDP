@@ -1,0 +1,20 @@
+{
+    "tag2class": {
+        "O": 1,
+        "I-PERSON": 2,
+        "B-LOCATION": 3,
+        "B-PERSON": 4,
+        "I-ORGANIZATION": 5,
+        "I-LOCATION": 6,
+        "B-ORGANIZATION": 7,
+        "no_label": 0
+    },
+    "edgelabel2class": {
+        "root": 0,
+        "Work_for": 1,
+        "Live_in": 2,
+        "Kill": 3,
+        "Organization_based_in": 4,
+        "Located_in": 5
+    }
+}

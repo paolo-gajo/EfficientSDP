@@ -1,3 +1,6 @@
+from typing import Dict
+import pandas as pd
+
 # """
 # 	This file contains diffrent utility functions for 
 # 	play and process Yamakata'20 dataset. We assume that
@@ -368,3 +371,20 @@ def build_augmented_recipe(recipe):
 # 	batch_out['words'] = input_text_stacked
 
 # 	return batch_out
+
+def build_dataset_dict(config: Dict = None, dataset_name: str = 'ade'):
+    data_path_train = config['data_path'].format(dataset_name = dataset_name, split = 'train')
+    data_path_val = config['data_path'].format(dataset_name = dataset_name, split = 'val')
+    data_path_test = config['data_path'].format(dataset_name = dataset_name, split = 'test')
+    entity_dict_path = config['entity_dict_path'].format(dataset_name = dataset_name)
+    rel_dict_path = config['rel_dict_path'].format(dataset_name = dataset_name)
+
+    dataset_train = pd.read_json(data_path_train)
+    dataset_val = pd.read_json(data_path_val)
+    dataset_test = pd.read_json(data_path_test)
+
+    return {
+        'train': dataset_train,
+        'val': dataset_val,
+        'test': dataset_test,
+    }

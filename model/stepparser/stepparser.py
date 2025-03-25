@@ -60,8 +60,9 @@ class StepParser(torch.nn.Module):
             k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
             for k, v in model_input["encoded_input"].items()
         }
-        encoder_input['step_indices'] = model_input["step_indices_tokens"]
-        encoder_input['graph_laplacian'] = model_input["graph_laplacian"]
+        if self.config['procedural']:
+            encoder_input['step_indices'] = model_input["step_indices_tokens"]
+            encoder_input['graph_laplacian'] = model_input["graph_laplacian"]
 
         # Original masks
         og_mask_tokens = encoder_input["attention_mask"]
@@ -88,7 +89,7 @@ class StepParser(torch.nn.Module):
             og_mask = og_mask_words
             head_indices = model_input["head_indices"]
             head_tags = model_input["head_tags"]
-            step_indices = model_input["step_indices"]
+            step_indices = model_input["step_indices"] if self.config['procedural'] else None
         elif self.config["rep_mode"] == "tokens":
             tagger_labels = model_input["pos_tags_tokens"]
             downstream_mask = encoder_input["attention_mask"]
@@ -100,13 +101,13 @@ class StepParser(torch.nn.Module):
         # Use appropriate tags based on mode
         if self.mode in ["train", "validation"]:
             head_tags, head_indices = head_tags, head_indices
-            step_graphs = model_input['step_graph']
-            graph_laplacian = model_input['graph_laplacian']
-            edge_index=model_input["edge_index"]
+            step_graphs = model_input['step_graph'] if self.config['procedural'] else None
+            graph_laplacian = model_input['graph_laplacian'] if self.config['procedural'] else None
+            edge_index=model_input["edge_index"] if self.config['procedural'] else None
         elif self.mode == "test":
             head_tags, head_indices = None, None
             step_graphs = None
-            graph_laplacian = model_input['graph_laplacian'] # TODO: THIS NEEDS TO BE NONE AFTER I'M DONE TESTING!
+            graph_laplacian = model_input['graph_laplacian'] if self.config['procedural'] else None # TODO: THIS NEEDS TO BE NONE AFTER I'M DONE TESTING!
             # IT NEEDS TO BE INFERRED DURING EVAL/TEST!
             # OR PUT A FLAG TO LET ME CONTROL WHETHER TO USE ORACLE/NOT ORACLE FOR LAPLACIAN
             edge_index=None

@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import sys
 from torch_geometric.nn import GCNConv, GATConv
-sys.path.append('./debug')
-from viz import save_heatmap
+from debug.viz import save_heatmap
 
 class GraphNet(nn.Module):
     def __init__(self, input_dim, output_dim, num_layers, conv_type="gcn", heads=1):

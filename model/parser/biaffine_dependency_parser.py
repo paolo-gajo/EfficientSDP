@@ -219,8 +219,9 @@ class BiaffineDependencyParser(nn.Module):
         # Concatenate the head sentinel onto the sentence representation.
         encoded_text = torch.cat([head_sentinel, encoded_text], dim=1)
         
-        sentinel_step_index = torch.zeros(step_indices.shape[0], dtype=torch.long).unsqueeze(1)
-        step_indices = torch.cat([sentinel_step_index.to(self.config['device']), step_indices], dim = 1)
+        if self.config['procedural']:
+            sentinel_step_index = torch.zeros(step_indices.shape[0], dtype=torch.long).unsqueeze(1)
+            step_indices = torch.cat([sentinel_step_index.to(self.config['device']), step_indices], dim = 1)
 
         if not self.config["use_step_mask"]:
             mask_ones = mask.new_ones(batch_size, 1)
@@ -252,7 +253,8 @@ class BiaffineDependencyParser(nn.Module):
         if self.config['laplacian_pe'] == 'parser':
             encoded_text = self.lap_pe(input=encoded_text,
                                        graph_laplacian=graph_laplacian,
-                                       step_indices=step_indices)
+                                       step_indices=step_indices if self.config['procedural'] else None,
+                                       )
 
         # shape (batch_size, sequence_length, arc_representation_dim)
         head_arc_representation = self._dropout(

@@ -1,10 +1,8 @@
 custom_config = {
-    # 'train_file_graphs': './data/train.json',
-    # 'val_file_graphs': './data/val.json',
-    # 'test_file_graphs': './data/test.json',
-    'train_file_graphs': './data/val_stratified_80-20.json',
-    'val_file_graphs': './data/train_stratified_80-20.json',
-    'test_file_graphs': './data/test_stratified_80-20.json',
+    'train_file_graphs': './data/{dataset_name}/train.json',
+    'val_file_graphs': './data/{dataset_name}/val.json',
+    'test_file_graphs': './data/{dataset_name}/test.json',
+    'dataset_name': 'yamakata',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -15,8 +13,8 @@ custom_config = {
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'tagger_lambda': 0.1,
     'parser_lambda': 1,
-    'batch_size': 8,
-    'plot': 1,
+    'batch_size': 32,
+    'plot': 0,
 
     # data options
     'only_use_biggest_graph': {'train': 0, 'val': 0, 'test': 0},
@@ -34,6 +32,7 @@ custom_config = {
     'adjacency_direction': 'directed', # 'directed', 'mirrored', 'undirected'
     'results_suffix': '_steps',
     'padding': 1,
+    'procedural': 0,
 
     # tagger options
     'use_tagger_lstm': 0,
@@ -50,16 +49,16 @@ custom_config = {
     'rep_mode': 'words', # either 'words' or 'tokens'
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
-    'freeze_encoder': 1,
-    'learning_rate': 1e-3,
+    'freeze_encoder': 0,
+    'learning_rate': 1e-4,
     'use_gnn': '0',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
 
     # training options
     'training': 'steps',
-    'training_steps': 20000,
-    'eval_steps': 1000,
+    'training_steps': 10000,
+    'eval_steps': 100,
     'epochs': 100,
     'patience': 0.3,
 }

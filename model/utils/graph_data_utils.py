@@ -95,7 +95,8 @@ class GraphDataset(Dataset):
                 random.shuffle(data)
         if self.config['plot']:
             self.plot_topological_sorts_histogram(savename = f"{split}_hist.pdf")
-        self.max_steps = self.get_max_steps()
+        if self.config['procedural']:
+            self.max_steps = self.get_max_steps()
 
     def __len__(self):
         return len(self.data)
@@ -331,7 +332,10 @@ class GraphDataset(Dataset):
         processed_data = []
         for sample in data:
             for key in ['sent_indices', 'word_sent_indices']:
-                sample.pop(key)
+                try:
+                    sample.pop(key)
+                except KeyError:
+                    pass
             processed_sample = {}
             processed_sample.update(sample)
             encoding = self.tokenizer(sample['words'],
@@ -343,23 +347,21 @@ class GraphDataset(Dataset):
             words_mask_custom = torch.as_tensor([1 for _ in range(len(sample['words']))])
             encoding.update({'words_mask_custom': words_mask_custom, 'word_ids_custom': word_ids})
             processed_sample['encoded_input'] = encoding
-            processed_sample['step_indices_tokens'] = self.convert_to_token_indices(sample['step_indices'], word_ids)
             processed_sample['pos_tags'] = torch.tensor([self.label_index_map['tag2class'][el] for el in sample['pos_tags']])
             processed_sample['pos_tags_tokens'] = self.convert_to_token_indices(processed_sample['pos_tags'], word_ids)
             processed_sample['head_tags'] = torch.tensor([self.label_index_map['edgelabel2class'][el] for el in sample['head_tags']])
             processed_sample['head_tags_tokens'] = self.convert_to_token_indices(processed_sample['head_tags'], word_ids)
             processed_sample['head_indices_tokens'] = self.convert_to_token_indices(processed_sample['head_indices'], word_ids)
-            # processed_sample['edge_index'] = torch.as_tensor([[head, tail] for head, tail in enumerate(sample['head_indices'])])
-            # processed_sample['edge_index_steps'] = torch.as_tensor([[head, tail] for head, tail in enumerate(sample['step_indices'])])
-            # processed_sample['edge_index_tokens'] = torch.as_tensor([[head, tail] for head, tail in enumerate(processed_sample['head_indices_tokens'])])
-            # processed_sample['edge_index_steps_tokens'] = torch.as_tensor([[head, tail] for head, tail in enumerate(processed_sample['step_indices_tokens'])])
+            if self.config['procedural']:
+                processed_sample['step_indices_tokens'] = self.convert_to_token_indices(sample['step_indices'], word_ids)
             processed_sample = apply_sub_dicts(processed_sample, self.tensorize)
             processed_sample = apply_sub_dicts(processed_sample, self.pad)
-            processed_sample['step_graph'] = self.get_step_graph(sample)
-            processed_sample['edge_index'] = graph_to_edge_index(processed_sample['step_graph'])
-            processed_sample['adj_m'] = edge_index_to_adj_matrix(processed_sample['edge_index'])
-            processed_sample['deg_m'] = get_deg_matrix(processed_sample['adj_m'])
-            processed_sample['graph_laplacian'] = get_graph_laplacian(processed_sample['deg_m'], processed_sample['adj_m'])
+            if self.config['procedural']:
+                processed_sample['step_graph'] = self.get_step_graph(sample)
+                processed_sample['edge_index'] = graph_to_edge_index(processed_sample['step_graph'])
+                processed_sample['adj_m'] = edge_index_to_adj_matrix(processed_sample['edge_index'])
+                processed_sample['deg_m'] = get_deg_matrix(processed_sample['adj_m'])
+                processed_sample['graph_laplacian'] = get_graph_laplacian(processed_sample['deg_m'], processed_sample['adj_m'])
             processed_data.append(processed_sample)
         return processed_data
 
@@ -606,9 +608,12 @@ def is_tensorizable(L):
         raise NotImplementedError('Not a list, tensor, set, or dict-like.')
 
 class GraphCollator:
-    def __init__(self, keys_to_filter = ['words', 'step_graph', 'edge_index', 'adj_m', 'deg_m', 'graph_laplacian'], truncate_to_longest = True):
+    def __init__(self, config, keys_to_filter = ['words', 'step_graph', 'edge_index', 'adj_m', 'deg_m', 'graph_laplacian'], truncate_to_longest = True):
         self.keys_to_filter = keys_to_filter
         self.truncate_to_longest = truncate_to_longest
+        self.config = config
+        if not self.config['procedural']:
+            self.keys_to_filter = ['words']
     
     def collate(self, input):
         out, filtered = self.filter_keys(input)

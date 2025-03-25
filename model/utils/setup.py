@@ -42,6 +42,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f'lstm_{lstm_string}',
                             f"laplacian_pe_{config['laplacian_pe']}",
                             f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
+                            f"data={config['dataset_name']}",
                             f"aug_{aug_string}_{augment_type}_{keep_k_string}_{training_amount}",
                             f"{model_name}_{get_current_time_string()}_seed_{config['seed']}")
 
@@ -50,6 +51,10 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     make_dir(config['save_dir'])
     config['figures_dir'] = f'./paper/figures_{keep_k_string}'
     make_dir(config['figures_dir'])
+
+    config['train_file_graphs'] = config['train_file_graphs'].format(dataset_name = config['dataset_name'])
+    config['val_file_graphs'] = config['val_file_graphs'].format(dataset_name = config['dataset_name'])
+    config['test_file_graphs'] = config['test_file_graphs'].format(dataset_name = config['dataset_name'])
 
     ## model path
     config['model_path'] = os.path.join(config['save_dir'], 'model.pth')

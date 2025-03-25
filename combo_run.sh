@@ -1,13 +1,12 @@
 #!/bin/bash
 #SBATCH -J train
-#SBATCH -p local
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
 #SBATCH --output=./.slurm/%j_output.log
 #SBATCH --error=./.slurm/%j_error.log
-
+#SBATCH --mem=64G
 source ./.env/bin/activate
 
 augment_train=1
@@ -17,7 +16,7 @@ augment_test=0
 augment_k_train=(
     1
     5
-    10
+    # 10
     # 20
     # 40
     # 60
@@ -48,34 +47,43 @@ augment_type_toggle=('random'
                     'permute'
                     'hybrid')
 training='steps'
-training_steps=10000
+training_steps=2000
 eval_steps=100
 
-seed_list=(0)
+seed_list=(0 1 2 3 4)
 
-python ./tools/train.py --opts \
-    --training $training \
-    --training_steps $training_steps \
-    --eval_steps $eval_steps
+procedural=1
 
 for seed in "${seed_list[@]}"; do
+    python ./tools/train.py --opts \
+        --training $training \
+        --training_steps $training_steps \
+        --eval_steps $eval_steps \
+        --freeze_encoder $freeze_encoder \
+        --learning_rate $learning_rate \
+        --seed $seed \
+        --procedural $procedural
     for k in "${augment_k_train[@]}"; do
-        for augment_type in "${augment_type_toggle[@]}"; do
-            python ./tools/train.py --opts \
-            --augment_train $augment_train \
-            --augment_val $augment_val \
-            --augment_test $augment_test \
-            --augment_k_train $k \
-            --augment_k_val $augment_k_val \
-            --augment_k_test $augment_k_test \
-            --keep_og_train $keep_og_train \
-            --keep_og_val $keep_og_val \
-            --keep_og_test $keep_og_test \
-            --augment_type $augment_type \
-            --training $training \
-            --training_steps $training_steps \
-            --eval_steps $eval_steps \
-            --seed $seed
-        done
+        # for augment_type in "${augment_type_toggle[@]}"; do
+        python ./tools/train.py --opts \
+        --augment_train $augment_train \
+        --augment_val $augment_val \
+        --augment_test $augment_test \
+        --augment_k_train $k \
+        --augment_k_val $augment_k_val \
+        --augment_k_test $augment_k_test \
+        --keep_og_train $keep_og_train \
+        --keep_og_val $keep_og_val \
+        --keep_og_test $keep_og_test \
+        --augment_type $1 \
+        --training $training \
+        --training_steps $training_steps \
+        --eval_steps $eval_steps \
+        --seed $seed \
+        --freeze_encoder $freeze_encoder \
+        --learning_rate $learning_rate \
+        --procedural $procedural
+        # --results_suffix $results_suffix
+        # done
     done
 done
