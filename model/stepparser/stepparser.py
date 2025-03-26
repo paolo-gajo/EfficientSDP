@@ -146,7 +146,7 @@ class StepParser(torch.nn.Module):
         # Parsing
         parser_output = self.parser(
             encoder_output,
-            pos_tags_parser.float(),
+            pos_tags_parser.float() if self.config['one_hot_tags'] else tagger_output.logits,
             downstream_mask,
             og_mask=og_mask,
             head_tags=head_tags,

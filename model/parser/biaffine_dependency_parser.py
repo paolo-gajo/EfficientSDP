@@ -79,27 +79,29 @@ class BiaffineDependencyParser(nn.Module):
         else:
             encoder_dim = embedding_dim
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["use_tag_embeddings_in_parser"] and self.config['one_hot_tags']:
             self.tag_embedder = tag_embedder
         self.tag_dropout = nn.Dropout(0.2)
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
 
         if self.config["arc_pred"] == "attn":
             self.child_arc_feedforward = copy.deepcopy(self.head_arc_feedforward)
-            self.arc_pred = MHABMA(
-                arc_representation_dim,
-                arc_representation_dim,
-                use_input_biases=True,
-                num_heads=4,
-            )
-            # self.arc_pred = BilinearMatrixAttention(
-            #     arc_representation_dim,
-            #     arc_representation_dim,
-            #     use_input_biases=True,
-            # )
+            if self.config["mhabma"]:
+                self.arc_pred = MHABMA(
+                    arc_representation_dim,
+                    arc_representation_dim,
+                    use_input_biases=True,
+                    num_heads=16,
+                )
+            else:
+                self.arc_pred = BilinearMatrixAttention(
+                    arc_representation_dim,
+                    arc_representation_dim,
+                    use_input_biases=True,
+                )
             if self.config['use_parser_gnn']:
                 self.gnn = GATNet(arc_representation_dim, arc_representation_dim, num_layers = 1, heads = 1, dropout=0.2)
-        elif self.config["arc_pred"] == "dgmc":
+        elif self.config["arc_pred"] == "dgm":
             self.arc_pred = DGM_c(self.config,
                                   input_dim=arc_representation_dim,
                                   hidden_dims=arc_representation_dim,
@@ -301,7 +303,7 @@ class BiaffineDependencyParser(nn.Module):
                 attended_arcs = self.arc_pred(
                     head_arc_representation, child_arc_representation
                 )
-        elif self.config["arc_pred"] == "dgmc":
+        elif self.config["arc_pred"] == "dgm":
             attended_arcs = self.arc_pred(x=head_arc_representation, A=None)["adj"]
         else:
             raise ValueError("arc_pred can either be `attn` or `dgmc`")

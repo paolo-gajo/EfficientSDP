@@ -27,7 +27,7 @@ def main():
     # Get the arguments and set up configuration
     args = get_args()
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
-    print('Current args:\n\n', json.dumps(args, indent=4))
+    print('Current args:\n\n', json.dumps(config, indent=4))
     
     # Set seeds and show save directory
     set_seeds(config['seed'])

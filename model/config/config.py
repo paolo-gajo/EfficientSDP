@@ -13,7 +13,7 @@ custom_config = {
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'tagger_lambda': 0.1,
     'parser_lambda': 1,
-    'batch_size': 4,
+    'batch_size': 32,
     'plot': 0,
 
     # data options
@@ -42,7 +42,8 @@ custom_config = {
     'arc_pred': 'attn',
     'use_parser_gnn': 0,
     'use_parser_lstm': 0,
-    'use_tag_embeddings_in_parser': 0,
+    'use_tag_embeddings_in_parser': 1,
+    'mhabma': 0,
 
     # model options
     'seed': 27,
@@ -54,10 +55,11 @@ custom_config = {
     'use_gnn': '0',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
+    'one_hot_tags': 1, # TODO: maybe 0 needs lstm
 
     # training options
     'training': 'steps',
-    'training_steps': 10000,
+    'training_steps': 2000,
     'eval_steps': 100,
     'epochs': 100,
     'patience': 0.3,
