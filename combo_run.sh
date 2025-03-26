@@ -33,7 +33,7 @@ keep_og_test=1
 
 use_bert_positional_embeddings=1
 use_abs_step_embeddings=0
-use_tag_embeddings_in_parser=0
+use_tag_embeddings_in_parser=1
 use_tagger_lstm=0
 use_parser_lstm=0
 use_gnn=0
@@ -54,18 +54,22 @@ seed_list=(0 1 2 3 4)
 
 procedural=1
 
+base_params="--training $training \
+        --training_steps $training_steps \
+        --eval_steps $eval_steps \
+        --freeze_encoder $freeze_encoder \
+        --learning_rate $learning_rate \
+        --seed $seed \
+        --procedural $procedural"
+
 for seed in "${seed_list[@]}"; do
-    # python ./tools/train.py --opts \
-    #     --training $training \
-    #     --training_steps $training_steps \
-    #     --eval_steps $eval_steps \
-    #     --freeze_encoder $freeze_encoder \
-    #     --learning_rate $learning_rate \
-    #     --seed $seed \
-    #     --procedural $procedural
+    python ./tools/train.py --opts $base_params
+done
+
+for seed in "${seed_list[@]}"; do
     for k in "${augment_k_train[@]}"; do
-        # for augment_type in "${augment_type_toggle[@]}"; do
         python ./tools/train.py --opts \
+        $base_params \
         --augment_train $augment_train \
         --augment_val $augment_val \
         --augment_test $augment_test \
@@ -75,15 +79,6 @@ for seed in "${seed_list[@]}"; do
         --keep_og_train $keep_og_train \
         --keep_og_val $keep_og_val \
         --keep_og_test $keep_og_test \
-        --augment_type $1 \
-        --training $training \
-        --training_steps $training_steps \
-        --eval_steps $eval_steps \
-        --seed $seed \
-        --freeze_encoder $freeze_encoder \
-        --learning_rate $learning_rate \
-        --procedural $procedural
-        # --results_suffix $results_suffix
-        # done
+        --augment_type $1
     done
 done

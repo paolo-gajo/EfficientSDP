@@ -86,9 +86,17 @@ class BiaffineDependencyParser(nn.Module):
 
         if self.config["arc_pred"] == "attn":
             self.child_arc_feedforward = copy.deepcopy(self.head_arc_feedforward)
-            self.arc_pred = BilinearMatrixAttention(
-                arc_representation_dim, arc_representation_dim, use_input_biases=True
+            self.arc_pred = MHABMA(
+                arc_representation_dim,
+                arc_representation_dim,
+                use_input_biases=True,
+                num_heads=4,
             )
+            # self.arc_pred = BilinearMatrixAttention(
+            #     arc_representation_dim,
+            #     arc_representation_dim,
+            #     use_input_biases=True,
+            # )
             if self.config['use_parser_gnn']:
                 self.gnn = GATNet(arc_representation_dim, arc_representation_dim, num_layers = 1, heads = 1, dropout=0.2)
         elif self.config["arc_pred"] == "dgmc":
@@ -368,7 +376,7 @@ class BiaffineDependencyParser(nn.Module):
         }
 
         return output_dict
-
+    
     def _init_weights(self, module):
         """
         Initialize module parameters using Xavier Uniform initialization.
@@ -834,15 +842,59 @@ class BiaffineDependencyParser(nn.Module):
         return self._attachment_scores.get_metric(reset)
 
 class MHABMA(nn.Module):
-    def __init__(self, input_dim = 768, num_heads = 1):
+    def __init__(
+        self,
+        matrix_1_dim: int,
+        matrix_2_dim: int,
+        num_heads: int,
+        activation=None,
+        use_input_biases: bool = False,
+        out_features: int = 1,
+    ) -> None:
         super().__init__()
-        layers = [BilinearMatrixAttention(input_dim, input_dim, use_input_biases=True) for _ in range(num_heads)]
-    
-    def forward(input: torch.Tensor):
-        ...
-        
+        self.num_heads = num_heads
+        if use_input_biases:
+            matrix_1_dim += 1
+            matrix_2_dim += 1
 
-        
+        if out_features == 1:
+            self._weight_matrix = nn.Parameter(torch.Tensor(num_heads, matrix_1_dim, matrix_2_dim))
+        else:
+            self._weight_matrix = nn.Parameter(
+                torch.Tensor(num_heads, out_features, matrix_1_dim, matrix_2_dim)
+            )
+
+        self._bias = nn.Parameter(torch.Tensor(1))
+        self.activation = activation or Passthrough()
+        self.use_input_biases = use_input_biases
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.xavier_uniform_(self._weight_matrix)
+        self._bias.data.fill_(0)
+
+    def forward(self, matrix_1: torch.Tensor, matrix_2: torch.Tensor) -> torch.Tensor:
+        if self.use_input_biases:
+            bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
+            bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
+
+            matrix_1 = torch.cat([matrix_1, bias1], dim=-1).unsqueeze(1).expand(-1, self.num_heads, -1, -1)
+            matrix_2 = torch.cat([matrix_2, bias2], dim=-1).unsqueeze(1).expand(-1, self.num_heads, -1, -1)
+        B_m, N_m, L_m, d_m = matrix_1.shape
+        matrix_1 = matrix_1.reshape(B_m * N_m, L_m, d_m)
+        matrix_2 = matrix_2.reshape(B_m * N_m, L_m, d_m)
+        weight = self._weight_matrix.unsqueeze(0).expand(B_m, -1, -1, -1)
+        B_w, N_w, L_w, d_w = weight.shape
+        weight = weight.reshape(B_w * N_w, L_w, d_w)
+        if weight.dim() == 2:
+            weight = weight.unsqueeze(0)
+        intermediate = torch.bmm(matrix_1, weight)
+        final = torch.bmm(intermediate, matrix_2.transpose(1, 2))
+        final_biased = final.squeeze(1) + self._bias
+        out = final_biased.reshape(B_m, N_m, L_m, L_m)
+        out = out.mean(dim = 1)
+        return self.activation(out)
+       
 class BilinearMatrixAttention(nn.Module):
     """
     Computes attention between two matrices using a bilinear attention function. This function has
