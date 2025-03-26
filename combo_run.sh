@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=./.slurm/%j_output.log
 #SBATCH --error=./.slurm/%j_error.log
 #SBATCH --mem=64G
@@ -13,7 +13,7 @@ augment_train=1
 augment_val=0
 augment_test=0
 
-augment_k_train=(
+augment_k_train=(1
     1
     5
     # 10
@@ -55,14 +55,14 @@ seed_list=(0 1 2 3 4)
 procedural=1
 
 for seed in "${seed_list[@]}"; do
-    python ./tools/train.py --opts \
-        --training $training \
-        --training_steps $training_steps \
-        --eval_steps $eval_steps \
-        --freeze_encoder $freeze_encoder \
-        --learning_rate $learning_rate \
-        --seed $seed \
-        --procedural $procedural
+    # python ./tools/train.py --opts \
+    #     --training $training \
+    #     --training_steps $training_steps \
+    #     --eval_steps $eval_steps \
+    #     --freeze_encoder $freeze_encoder \
+    #     --learning_rate $learning_rate \
+    #     --seed $seed \
+    #     --procedural $procedural
     for k in "${augment_k_train[@]}"; do
         # for augment_type in "${augment_type_toggle[@]}"; do
         python ./tools/train.py --opts \

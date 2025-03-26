@@ -833,7 +833,16 @@ class BiaffineDependencyParser(nn.Module):
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return self._attachment_scores.get_metric(reset)
 
+class MHABMA(nn.Module):
+    def __init__(self, input_dim = 768, num_heads = 1):
+        super().__init__()
+        layers = [BilinearMatrixAttention(input_dim, input_dim, use_input_biases=True) for _ in range(num_heads)]
+    
+    def forward(input: torch.Tensor):
+        ...
+        
 
+        
 class BilinearMatrixAttention(nn.Module):
     """
     Computes attention between two matrices using a bilinear attention function. This function has

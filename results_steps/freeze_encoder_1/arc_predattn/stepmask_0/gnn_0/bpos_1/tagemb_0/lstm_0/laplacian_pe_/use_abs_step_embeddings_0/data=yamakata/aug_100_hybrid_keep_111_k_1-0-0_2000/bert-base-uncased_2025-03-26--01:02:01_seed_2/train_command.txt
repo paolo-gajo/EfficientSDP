@@ -1,0 +1,1 @@
+python3 ./tools/train.py --opts --augment_train "1" --augment_val "0" --augment_test "0" --augment_k_train "1" --augment_k_val "0" --augment_k_test "0" --keep_og_train "1" --keep_og_val "1" --keep_og_test "1" --augment_type "hybrid" --training "steps" --training_steps "2000" --eval_steps "100" --seed "2" --freeze_encoder "1" --learning_rate "1e-3" --procedural "1"
