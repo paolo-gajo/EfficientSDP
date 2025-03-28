@@ -13,7 +13,7 @@ custom_config = {
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'tagger_lambda': 0.1,
     'parser_lambda': 1,
-    'batch_size': 32,
+    'batch_size': 4,
     'plot': 0,
 
     # data options
@@ -44,6 +44,8 @@ custom_config = {
     'use_parser_lstm': 0,
     'use_tag_embeddings_in_parser': 1,
     'mhabma': 0,
+    'parser_type': 'mtrfg', # 'mtrfg' or 'gnn'
+    'gnn_enc_layers': 1,
 
     # model options
     'seed': 27,
@@ -55,7 +57,8 @@ custom_config = {
     'use_gnn': '0',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
-    'one_hot_tags': 1, # TODO: maybe 0 needs lstm
+    # 'one_hot_tags': 0, # TODO: maybe 0 needs lstm
+    
 
     # training options
     'training': 'steps',

@@ -4,9 +4,10 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
 from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import BiaffineDependencyParser
+from model.parser import BiaffineDependencyParser, GNNEncoder
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
+from model.decoder import GraphDecoder
 import numpy as np
 import warnings
 from typing import Set, Tuple, List
@@ -18,11 +19,7 @@ class StepParser(torch.nn.Module):
         super().__init__()
         self.config = config
         self.encoder = Encoder(config)
-        self.config["encoder_output_dim"] = (
-            self.encoder.encoder.embeddings.word_embeddings.weight.shape[-1]
-        )
-        # self.encoder = BERTWordEmbeddings(self.config['model_name'])
-        # self.config['encoder_output_dim'] = self.encoder.word_embeddings.weight.shape[-1]
+        self.config["encoder_output_dim"] = (self.encoder.encoder.embeddings.word_embeddings.weight.shape[-1])
 
         if self.config["use_gnn"] == "gat":
             self.gnn = GATNet(
@@ -40,7 +37,13 @@ class StepParser(torch.nn.Module):
                 aggr="mean",  # mean aggregation as specified
             )
         self.tagger = Tagger(self.config)
-        self.parser = BiaffineDependencyParser.get_model(self.config)
+        if self.config['parser_type'] == 'mtrfg':
+            self.parser = BiaffineDependencyParser.get_model(self.config)
+        elif self.config['parser_type'] == 'gnn':
+            self.parser = GNNEncoder.get_model(self.config)
+        self.decoder = GraphDecoder(config=config,
+                                    tag_representation_dim=self.parser.tag_representation_dim,
+                                    n_edge_labels = self.parser.n_edge_labels)
         self.tokenizer = AutoTokenizer.from_pretrained(self.config["model_name"])
         self.mode = "train"
 
@@ -64,10 +67,6 @@ class StepParser(torch.nn.Module):
             encoder_input['step_indices'] = model_input["step_indices_tokens"]
             encoder_input['graph_laplacian'] = model_input["graph_laplacian"]
 
-        # Original masks
-        og_mask_tokens = encoder_input["attention_mask"]
-        og_mask_words = encoder_input["words_mask_custom"]
-
         if self.config["use_step_mask"]:
             # Create step mask for attention
             encoder_input["attention_mask"] = self.make_step_mask(
@@ -86,7 +85,6 @@ class StepParser(torch.nn.Module):
         if self.config["rep_mode"] == "words":
             tagger_labels = model_input["pos_tags"]
             downstream_mask = encoder_input["words_mask_custom"]
-            og_mask = og_mask_words
             head_indices = model_input["head_indices"]
             head_tags = model_input["head_tags"]
             step_indices = model_input["step_indices"] if self.config['procedural'] else None
@@ -96,7 +94,6 @@ class StepParser(torch.nn.Module):
             head_indices = model_input["head_indices_tokens"]
             head_tags = model_input["head_tags_tokens"]
             step_indices = model_input["step_indices_tokens"]
-            og_mask = og_mask_tokens
 
         # Use appropriate tags based on mode
         if self.mode in ["train", "validation"]:
@@ -107,7 +104,8 @@ class StepParser(torch.nn.Module):
         elif self.mode == "test":
             head_tags, head_indices = None, None
             step_graphs = None
-            graph_laplacian = model_input['graph_laplacian'] if self.config['procedural'] else None # TODO: THIS NEEDS TO BE NONE AFTER I'M DONE TESTING!
+            graph_laplacian = model_input['graph_laplacian'] if self.config['procedural'] else None
+            # TODO: THIS NEEDS TO BE NONE AFTER I'M DONE TESTING!
             # IT NEEDS TO BE INFERRED DURING EVAL/TEST!
             # OR PUT A FLAG TO LET ME CONTROL WHETHER TO USE ORACLE/NOT ORACLE FOR LAPLACIAN
             edge_index=None
@@ -125,9 +123,7 @@ class StepParser(torch.nn.Module):
         tagger_output = self.tagger(
             encoder_output, mask=downstream_mask, labels=tagger_labels
         )
-        pos_tags_pred = self.tagger.get_predicted_classes_as_one_hot(
-            tagger_output.logits
-        )
+        pos_tags_pred = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
 
         # Ground-truth tags
         try:
@@ -146,35 +142,38 @@ class StepParser(torch.nn.Module):
         # Parsing
         parser_output = self.parser(
             encoder_output,
-            pos_tags_parser.float() if self.config['one_hot_tags'] else tagger_output.logits,
+            pos_tags_parser.float(), # if self.config['one_hot_tags'] else tagger_output.logits,
             downstream_mask,
-            og_mask=og_mask,
             head_tags=head_tags,
             head_indices=head_indices,
-            gnn_pooled_vector=None, # this would be `gnn_out_pooled` if we wanted to concat the gnn pooled output to the sentinel used in the parser
             step_indices=step_indices,
-            step_graphs=step_graphs,
             graph_laplacian=graph_laplacian,
+        )
+
+        decoder_output = self.decoder(
+            head_tag = parser_output['head_tag'],
+            dept_tag = parser_output['dept_tag'],
+            head_indices = parser_output['head_indices'],
+            head_tags = parser_output['head_tags'],
+            attended_arcs = parser_output['attended_arcs'],
+            mask = parser_output['mask'],
+            metadata = parser_output['metadata'],
         )
 
         # Calculate loss or return predictions
         if self.mode in ["train", "validation"]:
-            loss = tagger_output.loss * self.config["tagger_lambda"] + parser_output["loss"] * self.config["parser_lambda"]
+            loss = tagger_output.loss * self.config["tagger_lambda"] + decoder_output["loss"] * self.config["parser_lambda"]
             return loss
         elif self.mode == "test":
-            tagger_human_readable = self.tagger.make_output_human_readable(
-                tagger_output, og_mask
-            )
-            parser_human_readable = self.parser.make_output_human_readable(
-                parser_output
-            )
+            tagger_human_readable = self.tagger.make_output_human_readable(tagger_output)
+            parser_human_readable = self.decoder.make_output_human_readable(decoder_output)
             if self.config["rep_mode"] == "words":
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(
                     tagger_human_readable, parser_human_readable, model_input
                 )
             elif self.config["rep_mode"] == "tokens":
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
-                    tagger_human_readable, parser_human_readable, model_input, og_mask
+                    tagger_human_readable, parser_human_readable, model_input
                 )
             return output_as_list_of_dicts
 
@@ -488,30 +487,3 @@ class StepParser(torch.nn.Module):
         ], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
         self.tagger.set_mode(mode)
         self.mode = mode
-
-def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
-    """
-    Saves a heatmap of a square matrix as a PDF.
-
-    Parameters:
-    - matrix (torch.Tensor or np.ndarray): Square matrix to visualize.
-    - filename (str): Output filename (default: "heatmap.pdf").
-    - cmap (str): Matplotlib colormap (default: "viridis").
-    """
-    if matrix.dim() < 2:
-        matrix = matrix.expand(matrix.shape[0], -1)
-    if isinstance(matrix, torch.Tensor):
-        matrix = (
-            matrix.clone().detach().cpu().numpy()
-        )  # Convert PyTorch tensor to NumPy
-
-    # if matrix.shape[0] != matrix.shape[1]:
-    #     raise ValueError("Input matrix must be square.")
-
-    plt.figure(figsize=(8, 8))
-    plt.imshow(matrix, cmap=cmap, aspect="auto")
-    plt.colorbar()
-    plt.title("Heatmap")
-
-    plt.savefig(filename, format="pdf", bbox_inches="tight")
-    plt.close()

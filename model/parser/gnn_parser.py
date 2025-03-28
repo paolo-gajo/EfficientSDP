@@ -1,0 +1,187 @@
+from typing import Dict, Optional, Tuple, Any, List, Set
+import logging
+import copy
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import numpy
+import matplotlib.pyplot as plt
+from model.gnn import DGM_c, GATNet, get_step_reps, pad_square_matrix, LaplacePE
+from model.decoder import GraphDecoder
+import sys
+from debug.viz import save_heatmap
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
+
+class GNNEncoder(nn.Module):
+    def __init__(
+        self,
+        config: Dict,
+        embedding_dim: int,
+        n_edge_labels: int,
+        tag_embedder: nn.Linear,
+        tag_representation_dim: int,
+        arc_representation_dim: int,
+        input_dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.config = config
+
+        if self.config["use_tag_embeddings_in_parser"]:
+            self.tag_embedder = tag_embedder
+
+        self.tag_dropout = nn.Dropout(0.2)
+        self.head_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
+        self.dept_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
+
+        self.arc_pred = torch.nn.modules.Bilinear(arc_representation_dim, arc_representation_dim, 1)
+        self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
+        self.dept_tag_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
+
+        self._dropout = nn.Dropout(input_dropout)
+        self._head_sentinel = torch.nn.Parameter(torch.randn(embedding_dim))
+        
+        self.apply(self._init_weights)
+
+        self.tag_representation_dim = tag_representation_dim
+        self.n_edge_labels = n_edge_labels
+
+    def forward(
+        self,
+        input: torch.FloatTensor,
+        pos_tags: torch.LongTensor,
+        mask: torch.LongTensor,
+        metadata: List[Dict[str, Any]] = [],
+        head_tags: torch.LongTensor = None,
+        head_indices: torch.LongTensor = None,
+        step_indices: torch.LongTensor = None,
+        graph_laplacian: torch.LongTensor = None,
+    ) -> Dict[str, torch.Tensor]:
+
+        # input, mask, head_tags, head_indices = self.remove_extra_padding(input, mask, head_tags, head_indices)
+        if self.config["use_tag_embeddings_in_parser"]:
+            tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
+            input = torch.cat([input, tag_embeddings], dim=-1)
+        
+        batch_size, _, encoding_dim = input.size()
+        head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
+        
+        # Concatenate the head sentinel onto the sentence representation.
+        input = torch.cat([head_sentinel, input], dim=1)
+        
+        if self.config['procedural']:
+            sentinel_step_index = torch.zeros(step_indices.shape[0], dtype=torch.long).unsqueeze(1)
+            step_indices = torch.cat([sentinel_step_index.to(self.config['device']), step_indices], dim = 1)
+        
+        # ones_indices = torch.where(mask[0, -1] == 1)[0]
+        # ones_limit = max(ones_indices)
+        # mask_ones = mask.new_ones(batch_size, mask.shape[1], 1)
+        # mask = torch.cat([mask_ones, mask], dim=2)
+        # mask_ones = mask.new_ones(batch_size, 1, mask.shape[2])
+        # mask_ones[:, :, ones_limit + 2 :] = 0
+        # mask = torch.cat([mask_ones, mask], dim=1)
+        # mask[:, ones_limit + 2 :, :] = 0
+
+        if head_indices is not None:
+            head_indices = torch.cat(
+                [head_indices.new_zeros(batch_size, 1), head_indices], dim=1
+            )
+        if head_tags is not None:
+            head_tags = torch.cat(
+                [head_tags.new_zeros(batch_size, 1), head_tags], dim=1
+            )
+        
+        input = self._dropout(input)
+        
+        if self.config['laplacian_pe'] == 'parser':
+            encoded_text = self.lap_pe(input=encoded_text,
+                                       graph_laplacian=graph_laplacian,
+                                       step_indices=step_indices if self.config['procedural'] else None,
+                                       )
+            
+        # shape (batch_size, sequence_length, arc_representation_dim)
+        head_arc = self._dropout(F.elu(self.head_arc_feedforward(input)))
+        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(input)))
+        # shape (batch_size, sequence_length, tag_representation_dim)
+        head_tag = self._dropout(F.elu(self.head_tag_feedforward(input)))
+        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(input)))
+
+        # gnn_losses = []
+        # for k in range(self.config['gnn_enc_layers']):
+        #     edge_s = self.arc_pred(head_arc, dept_arc)
+        #     edge_p = torch.nn.Softmax(edge_s)
+        #     # TODO: calculate losses for each layer during training and then use them in the final loss
+
+        #     hx = edge_s * edge_p
+        #     dx = dept_arc * edge_p # why is this transposed in the original?
+
+        # mask scores before decoding
+        float_mask = mask.float()
+        minus_inf = -1e8
+        minus_mask = (1 - float_mask) * minus_inf
+
+        attended_arcs = (attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1))
+
+        output = {
+            'head_tag': head_tag,
+            'dept_tag': dept_tag,
+            'head_indices': head_indices,
+            'head_tags': head_tags,
+            'attended_arcs': attended_arcs,
+            'mask': mask,
+            'metadata': metadata,
+        }
+
+        return output
+    
+    def _init_weights(self, module):
+        """
+        Initialize module parameters using Xavier Uniform initialization.
+        Applies nn.init.xavier_uniform_ to weight and bias tensors.
+        For 1D tensors (e.g., biases), temporarily unsqueeze to make them 2D.
+        """
+        # Initialize weights if they exist and are tensors.
+        if hasattr(module, "weight") and isinstance(module.weight, torch.Tensor):
+            if module.weight.dim() < 2:
+                # For 1D tensors, unsqueeze to apply Xavier uniform.
+                weight_unsqueezed = module.weight.unsqueeze(0)
+                nn.init.xavier_uniform_(weight_unsqueezed)
+                module.weight.data = weight_unsqueezed.squeeze(0)
+            else:
+                nn.init.xavier_uniform_(module.weight)
+
+        # Initialize biases if they exist and are tensors.
+        if hasattr(module, "bias") and isinstance(module.bias, torch.Tensor):
+            if module.bias.dim() < 2:
+                bias_unsqueezed = module.bias.unsqueeze(0)
+                nn.init.xavier_uniform_(bias_unsqueezed)
+                module.bias.data = bias_unsqueezed.squeeze(0)
+            else:
+                nn.init.xavier_uniform_(module.bias)
+
+    @classmethod
+    def get_model(cls, config):
+        if config["use_tag_embeddings_in_parser"]:
+            embedding_dim = (
+                config["encoder_output_dim"] + config["tag_embedding_dimension"]
+            )
+            tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+        else:
+            embedding_dim = config["encoder_output_dim"]
+        
+        n_edge_labels = config["n_edge_labels"]
+        
+        model_obj = cls(
+            config=config,
+            embedding_dim=embedding_dim,
+            n_edge_labels=n_edge_labels,
+            tag_embedder=tag_embedder,
+            arc_representation_dim=500,
+            tag_representation_dim=100,
+            input_dropout=0.3,
+        )
+        model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
+        return model_obj
