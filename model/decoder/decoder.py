@@ -26,6 +26,19 @@ class GraphDecoder(nn.Module):
                 mask: torch.Tensor,
                 metadata: List[Dict[str, Any]] = [],
                 ):
+        
+        # mask scores before decoding
+        float_mask = mask.float()
+        minus_inf = -1e8
+        minus_mask = (1 - float_mask) * minus_inf
+
+        if not self.config["use_step_mask"]:
+            attended_arcs = (
+                attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
+            )
+        else:
+            attended_arcs = attended_arcs + minus_mask
+
         if self.training or not self.use_mst_decoding_for_validation:
             predicted_heads, predicted_head_tags = self._greedy_decode(
                 head_tag,
@@ -117,45 +130,21 @@ class GraphDecoder(nn.Module):
             The negative log likelihood from the arc tag loss.
         """
         float_mask = mask.float()
-
-        # mask scores before decoding
-        minus_inf = -1e8
-        minus_mask = (1 - float_mask) * minus_inf
-
-        if not self.config["use_step_mask"]:
-            attended_arcs = (
-                attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
-            )
-        else:
-            attended_arcs = attended_arcs + minus_mask
-
         batch_size, sequence_length, _ = attended_arcs.size()
+
         # shape (batch_size, 1)
-        range_vector = get_range_vector(
-            batch_size, get_device_of(attended_arcs)
-        ).unsqueeze(1)
+        range_vector = get_range_vector(batch_size, get_device_of(attended_arcs)).unsqueeze(1)
         # shape (batch_size, sequence_length, sequence_length)
         if not self.config["use_step_mask"]:
             normalised_arc_logits = masked_log_softmax(attended_arcs, mask)
-            normalised_arc_logits = (
-                normalised_arc_logits
-                * float_mask.unsqueeze(2)
-                * float_mask.unsqueeze(1)
-            )
+            normalised_arc_logits = (normalised_arc_logits * float_mask.unsqueeze(2) * float_mask.unsqueeze(1))
         else:
             normalised_arc_logits = masked_log_softmax(attended_arcs, mask)
             normalised_arc_logits = normalised_arc_logits * float_mask
 
-
         # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self._get_head_tags(
-            head_tag, dept_tag, head_indices
-        )
-
-        normalised_head_tag_logits = masked_log_softmax(
-            head_tag_logits, mask.unsqueeze(-1)
-        )
-
+        head_tag_logits = self._get_head_tags(head_tag, dept_tag, head_indices)
+        normalised_head_tag_logits = masked_log_softmax(head_tag_logits, mask.unsqueeze(-1))
         normalised_head_tag_logits = normalised_head_tag_logits * float_mask.unsqueeze(-1)
 
         timestep_index = get_range_vector(sequence_length, get_device_of(attended_arcs))
@@ -301,9 +290,7 @@ class GraphDecoder(nn.Module):
             A tensor of shape (batch_size, sequence_length) representing the
             dependency tags of the optimally decoded heads of each word.
         """
-        batch_size, sequence_length, tag_representation_dim = (
-            head_tag.size()
-        )
+        batch_size, sequence_length, tag_representation_dim = head_tag.size()
 
         lengths = mask.data.sum(dim=1).long().cpu().numpy()
 
@@ -314,17 +301,11 @@ class GraphDecoder(nn.Module):
             tag_representation_dim,
         ]
         head_tag = head_tag.unsqueeze(2)
-        head_tag = head_tag.expand(
-            *expanded_shape
-        ).contiguous()
+        head_tag = head_tag.expand(*expanded_shape).contiguous()
         dept_tag = dept_tag.unsqueeze(1)
-        dept_tag = dept_tag.expand(
-            *expanded_shape
-        ).contiguous()
+        dept_tag = dept_tag.expand(*expanded_shape).contiguous()
         # Shape (batch_size, sequence_length, sequence_length, num_head_tags)
-        pairwise_head_logits = self.tag_bilinear(
-            head_tag, dept_tag
-        )
+        pairwise_head_logits = self.tag_bilinear(head_tag, dept_tag)
 
         # Note that this log_softmax is over the tag dimension, and we don't consider pairs
         # of tags which are invalid (e.g are a pair which includes a padded element) anyway below.
@@ -341,9 +322,7 @@ class GraphDecoder(nn.Module):
             pairwise_head_logits
             - torch.max(pairwise_head_logits, dim=3)[0].unsqueeze(dim=3)
         )
-        normalized_pairwise_head_logits = F.log_softmax(
-            pairwise_head_logits, dim=3
-        ).permute(0, 3, 1, 2)
+        normalized_pairwise_head_logits = F.log_softmax(pairwise_head_logits, dim=3).permute(0, 3, 1, 2)
 
         # Shape (batch_size, sequence_length, sequence_length)
         attended_arcs = self.softmax_multiplier * (

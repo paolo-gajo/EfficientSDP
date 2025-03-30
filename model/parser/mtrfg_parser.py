@@ -208,13 +208,11 @@ class BiaffineDependencyParser(nn.Module):
             )
             packed_output, _ = self.seq_encoder(packed_input)
             # Unpack the sequence, ensuring the output has the original sequence length.
-            encoded_text, _ = pad_packed_sequence(
+            encoded_text_input, _ = pad_packed_sequence(
                 packed_output, batch_first=True, total_length=encoded_text_input.size(1)
             )
-        else:
-            encoded_text = encoded_text_input
 
-        encoded_text = self._input_dropout(encoded_text)
+        encoded_text = self._input_dropout(encoded_text_input)
         batch_size, _, encoding_dim = encoded_text.size()
         head_sentinel = self._head_sentinel
         if gnn_pooled_vector is not None:
@@ -248,7 +246,7 @@ class BiaffineDependencyParser(nn.Module):
             head_tags = torch.cat(
                 [head_tags.new_zeros(batch_size, 1), head_tags], dim=1
             )
-        float_mask = mask.float()
+
         encoded_text = self._dropout(encoded_text)
 
         if self.config['laplacian_pe'] == 'parser':
@@ -258,28 +256,18 @@ class BiaffineDependencyParser(nn.Module):
                                        )
 
         # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc = self._dropout(
-            F.elu(self.head_arc_feedforward(encoded_text))
-        )
-
+        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text)))
         # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag = self._dropout(
-            F.elu(self.head_tag_feedforward(encoded_text))
-        )
-        dept_tag = self._dropout(
-            F.elu(self.dept_tag_feedforward(encoded_text))
-        )
+        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text)))
+        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text)))
 
         if self.config["arc_pred"] == "attn":
             # shape (batch_size, sequence_length, arc_representation_dim)
-            dept_arc = self._dropout(
-                F.elu(self.dept_arc_feedforward(encoded_text))
-            )   
+            dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text)))   
 
             # shape (batch_size, sequence_length, sequence_length)
-            attended_arcs = self.arc_pred(
-                head_arc, dept_arc
-            )
+            attended_arcs = self.arc_pred(head_arc, dept_arc)
+            
             if self.config['use_parser_gnn']:
                 arc_edge_index = []
                 head_arc_reps = []

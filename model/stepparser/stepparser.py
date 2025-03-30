@@ -84,13 +84,13 @@ class StepParser(torch.nn.Module):
         # Determine which representation mode to use
         if self.config["rep_mode"] == "words":
             tagger_labels = model_input["pos_tags"]
-            downstream_mask = encoder_input["words_mask_custom"]
+            mask = encoder_input["words_mask_custom"]
             head_indices = model_input["head_indices"]
             head_tags = model_input["head_tags"]
             step_indices = model_input["step_indices"] if self.config['procedural'] else None
         elif self.config["rep_mode"] == "tokens":
             tagger_labels = model_input["pos_tags_tokens"]
-            downstream_mask = encoder_input["attention_mask"]
+            mask = encoder_input["attention_mask"]
             head_indices = model_input["head_indices_tokens"]
             head_tags = model_input["head_tags_tokens"]
             step_indices = model_input["step_indices_tokens"]
@@ -121,7 +121,7 @@ class StepParser(torch.nn.Module):
 
         # Tagging
         tagger_output = self.tagger(
-            encoder_output, mask=downstream_mask, labels=tagger_labels
+            encoder_output, mask=mask, labels=tagger_labels
         )
         pos_tags_pred = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
 
@@ -141,9 +141,9 @@ class StepParser(torch.nn.Module):
 
         # Parsing
         parser_output = self.parser(
-            encoder_output,
-            pos_tags_parser.float(), # if self.config['one_hot_tags'] else tagger_output.logits,
-            downstream_mask,
+            encoded_text_input=encoder_output,
+            pos_tags=pos_tags_parser.float(), # if self.config['one_hot_tags'] else tagger_output.logits,
+            mask=mask,
             head_tags=head_tags,
             head_indices=head_indices,
             step_indices=step_indices,
@@ -169,7 +169,7 @@ class StepParser(torch.nn.Module):
                 loss += sum(parser_output["gnn_losses"])/len(parser_output["gnn_losses"]) * self.config["parser_lambda"]
             return loss
         elif self.mode == "test":
-            tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, downstream_mask)
+            tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, mask)
             parser_human_readable = self.decoder.make_output_human_readable(decoder_output)
             if self.config["rep_mode"] == "words":
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(
@@ -177,7 +177,7 @@ class StepParser(torch.nn.Module):
                 )
             elif self.config["rep_mode"] == "tokens":
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
-                    tagger_human_readable, parser_human_readable, model_input, downstream_mask
+                    tagger_human_readable, parser_human_readable, model_input, mask
                 )
             return output_as_list_of_dicts
 

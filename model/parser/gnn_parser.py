@@ -80,7 +80,7 @@ class GNNParser(nn.Module):
 
     def forward(
         self,
-        input: torch.FloatTensor,
+        encoded_text_input: torch.FloatTensor,
         pos_tags: torch.LongTensor,
         mask: torch.LongTensor,
         metadata: List[Dict[str, Any]] = [],
@@ -90,17 +90,17 @@ class GNNParser(nn.Module):
         graph_laplacian: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
 
-        # input, mask, head_tags, head_indices = self.remove_extra_padding(input, mask, head_tags, head_indices)
+        # encoded_text_input, mask, head_tags, head_indices = self.remove_extra_padding(encoded_text_input, mask, head_tags, head_indices)
         if self.config["use_tag_embeddings_in_parser"]:
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
-            input = torch.cat([input, tag_embeddings], dim=-1)
+            encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
         
-        batch_size, _, encoding_dim = input.size()
+        batch_size, _, encoding_dim = encoded_text_input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         mask = torch.cat([torch.ones(batch_size, 1, dtype=torch.long).to(self.config['device']), mask], dim = 1)
         
         # Concatenate the head sentinel onto the sentence representation.
-        input = torch.cat([head_sentinel, input], dim=1)
+        encoded_text_input = torch.cat([head_sentinel, encoded_text_input], dim=1)
         
         if self.config['procedural']:
             sentinel_step_index = torch.zeros(step_indices.shape[0], dtype=torch.long).unsqueeze(1)
@@ -115,25 +115,25 @@ class GNNParser(nn.Module):
                 [head_tags.new_zeros(batch_size, 1), head_tags], dim=1
             )
         
-        input = self._dropout(input)
+        encoded_text_input = self._dropout(encoded_text_input)
         
         if self.config['laplacian_pe'] == 'parser':
-            encoded_text = self.lap_pe(input=encoded_text,
+            encoded_text = self.lap_pe(encoded_text_input=encoded_text,
                                        graph_laplacian=graph_laplacian,
                                        step_indices=step_indices if self.config['procedural'] else None,
                                        )
             
         # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc = self._dropout(F.elu(self.head_arc_feedforward(input)))
-        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(input)))
+        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
+        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
         # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag = self._dropout(F.elu(self.head_tag_feedforward(input)))
-        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(input)))
+        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
+        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
 
         # the following is based on 'Graph-based Dependency Parsing with Graph Neural Networks'
         # https://aclanthology.org/P19-1237/
 
-        _, seq_len, _ = input.size()
+        _, seq_len, _ = encoded_text_input.size()
         gnn_losses = []
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
