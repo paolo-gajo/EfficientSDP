@@ -55,11 +55,16 @@ class GNNParser(nn.Module):
         self.tag_dropout = nn.Dropout(0.2)
         self.head_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
-        self.arc_pred = nn.ModuleList([
-            BilinearMatrixAttention(arc_representation_dim,
-                                    arc_representation_dim,
-                                    use_input_biases=True)
-            for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+        if self.config['gnn_enc_layers'] > 0:
+            self.arc_pred = nn.ModuleList([
+                BilinearMatrixAttention(arc_representation_dim,
+                                        arc_representation_dim,
+                                        use_input_biases=True)
+                for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+        else:
+            self.arc_pred = nn.ModuleList([BilinearMatrixAttention(arc_representation_dim,
+                                        arc_representation_dim,
+                                        use_input_biases=True)]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
@@ -137,48 +142,91 @@ class GNNParser(nn.Module):
         gnn_losses = []
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
-        for k in range(self.config['gnn_enc_layers']):
-            arc_s = self.arc_pred[k](head_arc, dept_arc)
-            # save_heatmap(arc_s, 'arc_s.pdf')
-            arc_p = torch.nn.functional.softmax(arc_s, dim = -1)
-            # save_heatmap(arc_p, 'arc_p.pdf')
-            arc_p_masked = masked_log_softmax(arc_s, mask) * float_mask.unsqueeze(1)
-            # save_heatmap(arc_p_masked, 'arc_p_masked.pdf')
+        # for k in range(self.config['gnn_enc_layers']):
+        #     arc_s = self.arc_pred[k](head_arc, dept_arc)
+        #     # save_heatmap(arc_s, 'arc_s.pdf')
+        #     arc_p = torch.nn.functional.softmax(arc_s, dim = -1)
+        #     # save_heatmap(arc_p, 'arc_p.pdf')
+        #     arc_p_masked = masked_log_softmax(arc_s, mask) * float_mask.unsqueeze(1)
+        #     # save_heatmap(arc_p_masked, 'arc_p_masked.pdf')
             
-            range_tensor = torch.arange(batch_size).unsqueeze(1)
-            length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
-            arc_loss = arc_p_masked[range_tensor, length_tensor, head_indices]
-            arc_loss = arc_loss[:, 1:]
-            arc_nll = -arc_loss.sum() / valid_positions.float()
-            gnn_losses.append(arc_nll)
+        #     range_tensor = torch.arange(batch_size).unsqueeze(1)
+        #     length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
+        #     arc_loss = arc_p_masked[range_tensor, length_tensor, head_indices]
+        #     arc_loss = arc_loss[:, 1:]
+        #     arc_nll = -arc_loss.sum() / valid_positions.float()
+        #     gnn_losses.append(arc_nll)
 
-            # this is just a way of getting both H and D into the same feature matrix
-            # and have them automatically multiplied by the weights of the soft adjacency matrix
-            hx = torch.matmul(arc_p, head_arc)
-            # save_heatmap(hx, 'hx.pdf')
-            # this is transposed because the indices in equation 9 of the paper
-            # are switched for h and arc_representation_dim
-            dx = torch.matmul(arc_p.transpose(1, 2), dept_arc)
-            # save_heatmap(dx, 'dx.pdf')
-            fx = hx + dx
-            # save_heatmap(fx, 'fx.pdf')
-            # TODO: calculate losses for each layer during training and then use them in the final loss
+        #     # this is just a way of getting both H and D into the same feature matrix
+        #     # and have them automatically multiplied by the weights of the soft adjacency matrix
+        #     hx = torch.matmul(arc_p, head_arc)
+        #     # save_heatmap(hx, 'hx.pdf')
+        #     # this is transposed because the indices in equation 9 of the paper
+        #     # are switched for h and arc_representation_dim
+        #     dx = torch.matmul(arc_p.transpose(1, 2), dept_arc)
+        #     # save_heatmap(dx, 'dx.pdf')
+        #     fx = hx + dx
+        #     # save_heatmap(fx, 'fx.pdf')
+        #     # TODO: calculate losses for each layer during training and then use them in the final loss
 
-            # adj_m = edge_index_to_adj(batch_arc.edge_index)
-            # save_heatmap(adj_m, 'adj_m.pdf')
-            head_arc = self.head_gnn(fx, head_arc)
-            fx_intermediate = torch.matmul(arc_p, head_arc) + dx
-            dept_arc = self.dept_gnn(fx_intermediate, dept_arc)
+        #     # adj_m = edge_index_to_adj(batch_arc.edge_index)
+        #     # save_heatmap(adj_m, 'adj_m.pdf')
+        #     head_arc = self.head_gnn(fx, head_arc)
+        #     fx_intermediate = torch.matmul(arc_p, head_arc) + dx
+        #     dept_arc = self.dept_gnn(fx_intermediate, dept_arc)
 
-            hr = torch.matmul(arc_p, head_tag)
-            dr = torch.matmul(arc_p.transpose(1, 2), dept_tag)
-            fr = hr + dr
+        #     hr = torch.matmul(arc_p, head_tag)
+        #     dr = torch.matmul(arc_p.transpose(1, 2), dept_tag)
+        #     fr = hr + dr
             
-            head_tag = self.head_rel_gnn(fr, head_tag)
-            fr_intermediate = torch.matmul(arc_p, head_tag) + dr
-            dept_tag = self.dept_rel_gnn(fr_intermediate, dept_tag)
+        #     head_tag = self.head_rel_gnn(fr, head_tag)
+        #     fr_intermediate = torch.matmul(arc_p, head_tag) + dr
+        #     dept_tag = self.dept_rel_gnn(fr_intermediate, dept_tag)
 
-        attended_arcs = self.arc_pred[-1](head_arc, dept_arc)
+        # attended_arcs = self.arc_pred[-1](head_arc, dept_arc)
+
+        arc_s = self.arc_pred[0](head_arc, dept_arc)
+        # save_heatmap(arc_s, 'arc_s.pdf')
+        # arc_p = torch.nn.functional.softmax(arc_s, dim = -1)
+        # save_heatmap(arc_p, 'arc_p.pdf')
+        arc_p_masked = masked_log_softmax(arc_s, mask) * float_mask.unsqueeze(1)
+        # save_heatmap(arc_p_masked, 'arc_p_masked.pdf')
+        
+        range_tensor = torch.arange(batch_size).unsqueeze(1)
+        length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
+        arc_loss = arc_p_masked[range_tensor, length_tensor, head_indices]
+        arc_loss = arc_loss[:, 1:]
+        arc_nll = -arc_loss.sum() / valid_positions.float()
+        gnn_losses.append(arc_nll)
+
+        # this is just a way of getting both H and D into the same feature matrix
+        # and have them automatically multiplied by the weights of the soft adjacency matrix
+        hx = torch.matmul(arc_p_masked, head_arc)
+        # save_heatmap(hx, 'hx.pdf')
+        # this is transposed because the indices in equation 9 of the paper
+        # are switched for h and arc_representation_dim
+        dx = torch.matmul(arc_p_masked.transpose(1, 2), dept_arc)
+        # save_heatmap(dx, 'dx.pdf')
+        fx = hx + dx
+        # save_heatmap(fx, 'fx.pdf')
+        # TODO: calculate losses for each layer during training and then use them in the final loss
+
+        # adj_m = edge_index_to_adj(batch_arc.edge_index)
+        # save_heatmap(adj_m, 'adj_m.pdf')
+        head_arc = self.head_gnn(fx, head_arc)
+        fx_intermediate = torch.matmul(arc_p_masked, head_arc) + dx
+        dept_arc = self.dept_gnn(fx_intermediate, dept_arc)
+
+        hr = torch.matmul(arc_p_masked, head_tag)
+        dr = torch.matmul(arc_p_masked.transpose(1, 2), dept_tag)
+        fr = hr + dr
+        
+        head_tag = self.head_rel_gnn(fr, head_tag)
+        fr_intermediate = torch.matmul(arc_p_masked, head_tag) + dr
+        dept_tag = self.dept_rel_gnn(fr_intermediate, dept_tag)
+
+        attended_arcs = self.arc_pred[0](head_arc, dept_arc)
+
 
         output = {
             'head_tag': head_tag,

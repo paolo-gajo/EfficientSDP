@@ -43,7 +43,7 @@ custom_config = {
     'use_tag_embeddings_in_parser': 0,
     'mhabma': 0,
     'parser_type': 'gnn', # 'mtrfg' or 'gnn'
-    'gnn_enc_layers': 1,
+    'gnn_enc_layers': 0,
 
     # model options
     'seed': 27,
@@ -52,13 +52,11 @@ custom_config = {
     'rep_mode': 'words', # either 'words' or 'tokens'
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
-    'freeze_encoder': 0,
-    'learning_rate': 1e-4,
+    'freeze_encoder': 1,
+    'learning_rate': 1e-3,
     'use_gnn': '0',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
-    # 'one_hot_tags': 0, # TODO: maybe 0 needs lstm
-    
 
     # training options
     'training': 'steps',

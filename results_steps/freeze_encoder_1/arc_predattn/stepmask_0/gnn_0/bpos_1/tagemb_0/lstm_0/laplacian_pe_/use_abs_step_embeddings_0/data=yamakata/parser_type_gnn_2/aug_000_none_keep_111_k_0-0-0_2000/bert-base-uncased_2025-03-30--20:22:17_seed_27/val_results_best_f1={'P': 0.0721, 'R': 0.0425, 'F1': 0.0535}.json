@@ -1,0 +1,19 @@
+{
+    "tagger_results": {
+        "P": 0.697,
+        "R": 0.6847,
+        "F1": 0.6908
+    },
+    "parser_labeled_results": {
+        "P": 0.0721,
+        "R": 0.0425,
+        "F1": 0.0535
+    },
+    "parser_unlabeled_results": {
+        "P": 0.0817,
+        "R": 0.0482,
+        "F1": 0.0606
+    },
+    "epoch": null,
+    "steps": null
+}

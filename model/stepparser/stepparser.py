@@ -165,7 +165,7 @@ class StepParser(torch.nn.Module):
             loss = (tagger_output.loss * self.config["tagger_lambda"]
                     + decoder_output["loss"] * self.config["parser_lambda"]
                     )
-            if self.config["parser_type"] == 'gnn':
+            if self.config["parser_type"] == 'gnn' and self.config["gnn_enc_layers"] > 0:
                 loss += sum(parser_output["gnn_losses"])/len(parser_output["gnn_losses"]) * self.config["parser_lambda"]
             return loss
         elif self.mode == "test":

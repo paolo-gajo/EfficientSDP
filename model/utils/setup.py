@@ -32,6 +32,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     augment_type = 'none' if '1' not in aug_string else config['augment_type']
     training_amount = config['training_steps'] if config['training'] == 'steps' else config['epochs']
     model_name = model_name if not config['use_abs_step_embeddings'] else 'step-bert'
+    parser_type = 'mtrfg' if config['parser_type'] == 'mtrfg' else f"{config['parser_type']}_{config['gnn_enc_layers']}"
     dir_path = os.path.join(f"{save_dir}{config['results_suffix']}",
                             f"freeze_encoder_{config['freeze_encoder']}",
                             f"arc_pred{config['arc_pred']}",
@@ -43,6 +44,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"laplacian_pe_{config['laplacian_pe']}",
                             f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
                             f"data={config['dataset_name']}",
+                            f'parser_type_{parser_type}',
                             f"aug_{aug_string}_{augment_type}_{keep_k_string}_{training_amount}",
                             f"{model_name}_{get_current_time_string()}_seed_{config['seed']}")
 
