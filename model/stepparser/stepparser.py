@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
 from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import BiaffineDependencyParser, GNNEncoder
+from model.parser import BiaffineDependencyParser, GNNParser
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
 from model.decoder import GraphDecoder
@@ -40,7 +40,7 @@ class StepParser(torch.nn.Module):
         if self.config['parser_type'] == 'mtrfg':
             self.parser = BiaffineDependencyParser.get_model(self.config)
         elif self.config['parser_type'] == 'gnn':
-            self.parser = GNNEncoder.get_model(self.config)
+            self.parser = GNNParser.get_model(self.config)
         self.decoder = GraphDecoder(config=config,
                                     tag_representation_dim=self.parser.tag_representation_dim,
                                     n_edge_labels = self.parser.n_edge_labels)
@@ -162,10 +162,14 @@ class StepParser(torch.nn.Module):
 
         # Calculate loss or return predictions
         if self.mode in ["train", "validation"]:
-            loss = tagger_output.loss * self.config["tagger_lambda"] + decoder_output["loss"] * self.config["parser_lambda"]
+            loss = (tagger_output.loss * self.config["tagger_lambda"]
+                    + decoder_output["loss"] * self.config["parser_lambda"]
+                    )
+            if self.config["parser_type"] == 'gnn':
+                loss += sum(parser_output["gnn_losses"])/len(parser_output["gnn_losses"]) * self.config["parser_lambda"]
             return loss
         elif self.mode == "test":
-            tagger_human_readable = self.tagger.make_output_human_readable(tagger_output)
+            tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, downstream_mask)
             parser_human_readable = self.decoder.make_output_human_readable(decoder_output)
             if self.config["rep_mode"] == "words":
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(
@@ -173,7 +177,7 @@ class StepParser(torch.nn.Module):
                 )
             elif self.config["rep_mode"] == "tokens":
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
-                    tagger_human_readable, parser_human_readable, model_input
+                    tagger_human_readable, parser_human_readable, model_input, downstream_mask
                 )
             return output_as_list_of_dicts
 

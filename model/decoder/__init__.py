@@ -1,1 +1,1 @@
-from .decoder import GraphDecoder
+from .decoder import GraphDecoder, masked_log_softmax

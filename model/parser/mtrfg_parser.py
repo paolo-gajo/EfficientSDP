@@ -64,8 +64,8 @@ class BiaffineDependencyParser(nn.Module):
         embedding_dim: int,
         n_edge_labels: int,
         tag_embedder: nn.Linear,
-        tag_representation_dim: int,
         arc_representation_dim: int,
+        tag_representation_dim: int,
         use_mst_decoding_for_validation: bool = True,
         dropout: float = 0.0,
         input_dropout: float = 0.0,
@@ -298,17 +298,6 @@ class BiaffineDependencyParser(nn.Module):
             attended_arcs = self.arc_pred(x=head_arc, A=None)["adj"]
         else:
             raise ValueError("arc_pred can either be `attn` or `dgmc`")
-
-        # mask scores before decoding
-        minus_inf = -1e8
-        minus_mask = (1 - float_mask) * minus_inf
-
-        if not self.config["use_step_mask"]:
-            attended_arcs = (
-                attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
-            )
-        else:
-            attended_arcs = attended_arcs + minus_mask
 
         if self.config['step_bilinear_attn']:
             step_reps = get_step_reps(encoded_text, step_indices)

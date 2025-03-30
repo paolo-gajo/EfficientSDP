@@ -22,7 +22,7 @@ from tqdm.auto import tqdm
 
 def main():
 
-    # torch.set_printoptions(linewidth=100, threshold=100)
+    # torch.set_printoptions(linewidth=10000, threshold=10000)
 
     # Get the arguments and set up configuration
     args = get_args()

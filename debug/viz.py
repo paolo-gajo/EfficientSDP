@@ -11,11 +11,17 @@ def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
     - filename (str): Output filename (default: "heatmap.pdf").
     - cmap (str): Matplotlib colormap (default: "viridis").
     """
+
     if isinstance(matrix, torch.Tensor):
+        if hasattr(matrix, 'layout'):
+            if matrix.layout == torch.sparse_coo:
+                matrix = matrix.to_dense()
         matrix = matrix.clone().detach().cpu().numpy()  # Convert PyTorch tensor to NumPy
 
     # if matrix.shape[0] != matrix.shape[1]:
     #     raise ValueError("Input matrix must be square.")
+    if len(matrix.shape) > 2:
+        matrix = matrix[0]
 
     plt.figure(figsize=(8, 8))
     plt.imshow(matrix, cmap=cmap, aspect="auto")

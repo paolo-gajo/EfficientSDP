@@ -15,6 +15,7 @@ class GraphDecoder(nn.Module):
         self.config = config
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
         self.tag_bilinear = torch.nn.modules.Bilinear(tag_representation_dim, tag_representation_dim, n_edge_labels)
+        self.softmax_multiplier = config["softmax_scaling_coeff"]
 
     def forward(self,
                 head_tag: torch.Tensor,
@@ -37,6 +38,7 @@ class GraphDecoder(nn.Module):
                 head_tag,
                 dept_tag,
                 attended_arcs,
+                mask,
             )
 
         predicted_heads = predicted_heads.to(head_tag.device)
@@ -115,6 +117,18 @@ class GraphDecoder(nn.Module):
             The negative log likelihood from the arc tag loss.
         """
         float_mask = mask.float()
+
+        # mask scores before decoding
+        minus_inf = -1e8
+        minus_mask = (1 - float_mask) * minus_inf
+
+        if not self.config["use_step_mask"]:
+            attended_arcs = (
+                attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
+            )
+        else:
+            attended_arcs = attended_arcs + minus_mask
+
         batch_size, sequence_length, _ = attended_arcs.size()
         # shape (batch_size, 1)
         range_vector = get_range_vector(
@@ -142,16 +156,11 @@ class GraphDecoder(nn.Module):
             head_tag_logits, mask.unsqueeze(-1)
         )
 
-        normalised_head_tag_logits = (
-            normalised_head_tag_logits * float_mask.unsqueeze(-1)
-        )
+        normalised_head_tag_logits = normalised_head_tag_logits * float_mask.unsqueeze(-1)
 
         timestep_index = get_range_vector(sequence_length, get_device_of(attended_arcs))
-        dept_index = (
-            timestep_index.view(1, sequence_length)
-            .expand(batch_size, sequence_length)
-            .long()
-        )
+        dept_index = timestep_index.view(1, sequence_length).expand(batch_size, sequence_length).long()
+
         # shape (batch_size, sequence_length)
         arc_loss = normalised_arc_logits[range_vector, dept_index, head_indices]
         tag_loss = normalised_head_tag_logits[range_vector, dept_index, head_tags]
