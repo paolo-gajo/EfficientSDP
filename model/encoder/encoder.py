@@ -1,7 +1,7 @@
 import torch 
 import torch.nn as nn
-from transformers import AutoModel, BertModel, BertConfig
-from model.encoder.bert_custom import BertModelNoPos, BertModelSteps, BertModelLaplacian
+from transformers import AutoModel, BertConfig#, BertModel
+from model.encoder.bert_custom import BertModelNoPos, BertModelSteps, BertModelLaplacian, BertModel
 from transformers import BatchEncoding
 from typing import List, Dict, Optional
 import inspect

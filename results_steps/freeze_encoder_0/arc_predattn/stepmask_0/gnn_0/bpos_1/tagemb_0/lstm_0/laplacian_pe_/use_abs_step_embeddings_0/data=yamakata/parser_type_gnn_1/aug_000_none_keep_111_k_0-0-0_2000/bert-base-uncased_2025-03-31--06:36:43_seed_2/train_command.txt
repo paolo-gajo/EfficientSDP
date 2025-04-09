@@ -1,1 +1,0 @@
-python3 ./tools/train.py --opts --use_tag_embeddings_in_parser "0" --use_tagger_lstm "0" --use_parser_lstm "0" --training "steps" --training_steps "2000" --eval_steps "100" --freeze_encoder "0" --learning_rate "1e-4" --seed "2" --parser_type "gnn" --gnn_enc_layers "1"

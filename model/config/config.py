@@ -32,20 +32,21 @@ custom_config = {
     'procedural': 1,
 
     # vanilla options
-    'use_tagger_lstm': 1,
-    'use_parser_lstm': 1,
-    'use_tag_embeddings_in_parser': 1,
+    'use_tagger_lstm': 0,
+    'use_parser_lstm': 0,
+    'use_tag_embeddings_in_parser': 0,
 
     # parser options
-    'parser_type': 'mtrfg', # 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm'
-    'gnn_enc_layers': 1,
+    'parser_type': 'gnn',
+    # 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
+    'gnn_enc_layers': 0,
     'top_k': 16,
     'num_attn_heads': 1,
     'step_bilinear_attn': 0,
     'arc_pred': 'attn',
     'use_parser_gnn': 0,
     'mhabma': 0,
-    'arc_norm': 1,
+    'arc_norm': 0,
     'arc_representation_dim': 500,
     'tag_representation_dim': 100,
     

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
 from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import BiaffineDependencyParser, GNNParser, GCNParser, GATParser
+from model.parser import BiaffineDependencyParser, GNNParser, GCNParser, GATParser, GNNParserDoubleLSTM
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
 from model.decoder import GraphDecoder
@@ -41,6 +41,8 @@ class StepParser(torch.nn.Module):
             self.parser = BiaffineDependencyParser.get_model(self.config)
         elif self.config['parser_type'] == 'gnn':
             self.parser = GNNParser.get_model(self.config)
+        elif self.config['parser_type'] == 'gnn2':
+            self.parser = GNNParserDoubleLSTM.get_model(self.config)
         elif self.config['parser_type'] == 'gcn':
             self.parser = GCNParser.get_model(self.config)
         elif self.config['parser_type'] == 'gat':
