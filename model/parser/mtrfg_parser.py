@@ -11,10 +11,19 @@ import matplotlib.pyplot as plt
 from model.gnn import DGM_c, GATNet, get_step_reps, pad_square_matrix, LaplacePE
 from model.parser.parser_utils import *
 import sys
+import math
 from debug.viz import save_heatmap
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
+
+class SQRTNorm(nn.Module):
+    def __init__(self, dim: int):
+        super().__init__()
+        self.norm = math.sqrt(dim)
+    
+    def forward(self, input: torch.Tensor):
+        return input / self.norm
 
 class BiaffineDependencyParser(nn.Module):
     """
@@ -125,6 +134,11 @@ class BiaffineDependencyParser(nn.Module):
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
+        
+        if self.config['arc_norm']:
+            self.arc_norm =  SQRTNorm(arc_representation_dim)
+            # self.arc_norm_1 =  nn.LayerNorm(arc_representation_dim)
+            # self.arc_norm_2 =  nn.LayerNorm(arc_representation_dim)
 
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = nn.Dropout(input_dropout)
@@ -196,7 +210,7 @@ class BiaffineDependencyParser(nn.Module):
         """
 
         if self.config["use_tag_embeddings_in_parser"]:
-            tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
+            tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_one_hot'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
         if self.config["use_parser_lstm"]:
@@ -260,14 +274,16 @@ class BiaffineDependencyParser(nn.Module):
         # shape (batch_size, sequence_length, tag_representation_dim)
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text)))
         dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text)))
-
+        
         if self.config["arc_pred"] == "attn":
             # shape (batch_size, sequence_length, arc_representation_dim)
             dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text)))   
 
             # shape (batch_size, sequence_length, sequence_length)
             attended_arcs = self.arc_pred(head_arc, dept_arc)
-            
+            if self.config['arc_norm']:
+                attended_arcs = self.arc_norm(attended_arcs)
+
             if self.config['use_parser_gnn']:
                 arc_edge_index = []
                 head_arc_reps = []
@@ -356,8 +372,8 @@ class BiaffineDependencyParser(nn.Module):
             embedding_dim=embedding_dim,
             n_edge_labels=n_edge_labels,
             tag_embedder=tag_embedder,
-            arc_representation_dim=500,
-            tag_representation_dim=100,
+            arc_representation_dim=config['arc_representation_dim'],
+            tag_representation_dim=config['tag_representation_dim'],
             dropout=0.3,
             input_dropout=0.3,
             use_mst_decoding_for_validation = config['use_mst_decoding_for_validation']

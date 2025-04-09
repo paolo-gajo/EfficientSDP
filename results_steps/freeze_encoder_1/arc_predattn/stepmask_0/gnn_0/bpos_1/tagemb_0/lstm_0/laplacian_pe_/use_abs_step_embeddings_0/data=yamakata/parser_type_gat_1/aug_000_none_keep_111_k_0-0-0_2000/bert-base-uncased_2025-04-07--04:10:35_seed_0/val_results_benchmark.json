@@ -1,0 +1,11 @@
+{
+    "memory in (MB)": 448.486,
+    "total learnable params": 112119545,
+    "total encoder params": 109482240,
+    "total tagger params": 16918,
+    "total parser params": 2470372,
+    "inference time": "0.037 +/- 0.012",
+    "labeled precision": 0.571,
+    "unlabeled precision": 0.671,
+    "model_name": "bert-base-uncased"
+}

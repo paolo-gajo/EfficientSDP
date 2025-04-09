@@ -8,7 +8,7 @@
 #SBATCH --output=./.slurm/%j_output.log
 #SBATCH --error=./.slurm/%j_error.log
 
-parser_opts=('mtrfg' 'gnn')
+# parser_opts=('mtrfg' 'gnn')
 
 source ./.env/bin/activate
 

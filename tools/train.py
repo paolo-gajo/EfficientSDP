@@ -27,6 +27,8 @@ def main():
     # Get the arguments and set up configuration
     args = get_args()
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
+    # config = json.load(open('./results_steps/freeze_encoder_1/arc_predattn/stepmask_0/gnn_0/bpos_1/tagemb_0/lstm_0/laplacian_pe_/use_abs_step_embeddings_0/data=yamakata/parser_type_gnn_1/aug_000_none_keep_111_k_0-0-0_2000/bert-base-uncased_2025-03-31--08:05:16_seed_0/config.json', 'r'))['config']
+    # config['model_path'] = 'bert-base-uncased'
     print('Current args:\n\n', json.dumps(config, indent=4))
     
     # Set seeds and show save directory
@@ -43,7 +45,9 @@ def main():
                     load_json(config['val_file_graphs']) + \
                     load_json(config['test_file_graphs'])
     label_index_map = get_mappings(all_splits_data)
-
+    config['max_steps'] = max(train_loader.dataset.max_steps,
+                              val_loader.dataset.max_steps,
+                              test_loader.dataset.max_steps,)
     config['n_tags'] = len(label_index_map['tag2class'])
     config['n_edge_labels'] = len(label_index_map['edgelabel2class'])
 
@@ -68,7 +72,7 @@ def main():
 
     # Choose training mode
     training_mode = config.get('training', 'epochs')  # 'epochs' or 'steps'
-
+    torch.autograd.set_detect_anomaly(True)
     if training_mode == 'steps':
         training_steps = config.get('training_steps', 10000)
         patience = config.get('patience', 0.3)

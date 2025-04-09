@@ -1,0 +1,344 @@
+[
+    {
+        "tagger_results": {
+            "P": 0.6672,
+            "R": 0.6125,
+            "F1": 0.6387
+        },
+        "parser_labeled_results": {
+            "P": 0.1352,
+            "R": 0.0971,
+            "F1": 0.113
+        },
+        "parser_unlabeled_results": {
+            "P": 0.1619,
+            "R": 0.1162,
+            "F1": 0.1353
+        },
+        "epoch": null,
+        "steps": 100
+    },
+    {
+        "tagger_results": {
+            "P": 0.6803,
+            "R": 0.6478,
+            "F1": 0.6637
+        },
+        "parser_labeled_results": {
+            "P": 0.4127,
+            "R": 0.3416,
+            "F1": 0.3738
+        },
+        "parser_unlabeled_results": {
+            "P": 0.4991,
+            "R": 0.4132,
+            "F1": 0.4521
+        },
+        "epoch": null,
+        "steps": 200
+    },
+    {
+        "tagger_results": {
+            "P": 0.6874,
+            "R": 0.6592,
+            "F1": 0.673
+        },
+        "parser_labeled_results": {
+            "P": 0.4786,
+            "R": 0.4125,
+            "F1": 0.4431
+        },
+        "parser_unlabeled_results": {
+            "P": 0.5765,
+            "R": 0.4968,
+            "F1": 0.5337
+        },
+        "epoch": null,
+        "steps": 300
+    },
+    {
+        "tagger_results": {
+            "P": 0.6916,
+            "R": 0.6686,
+            "F1": 0.6799
+        },
+        "parser_labeled_results": {
+            "P": 0.5259,
+            "R": 0.4465,
+            "F1": 0.4829
+        },
+        "parser_unlabeled_results": {
+            "P": 0.621,
+            "R": 0.5273,
+            "F1": 0.5703
+        },
+        "epoch": null,
+        "steps": 400
+    },
+    {
+        "tagger_results": {
+            "P": 0.6907,
+            "R": 0.6764,
+            "F1": 0.6835
+        },
+        "parser_labeled_results": {
+            "P": 0.514,
+            "R": 0.4826,
+            "F1": 0.4978
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6166,
+            "R": 0.579,
+            "F1": 0.5972
+        },
+        "epoch": null,
+        "steps": 500
+    },
+    {
+        "tagger_results": {
+            "P": 0.6921,
+            "R": 0.6821,
+            "F1": 0.6871
+        },
+        "parser_labeled_results": {
+            "P": 0.5388,
+            "R": 0.5067,
+            "F1": 0.5223
+        },
+        "parser_unlabeled_results": {
+            "P": 0.63,
+            "R": 0.5925,
+            "F1": 0.6107
+        },
+        "epoch": null,
+        "steps": 600
+    },
+    {
+        "tagger_results": {
+            "P": 0.6959,
+            "R": 0.6847,
+            "F1": 0.6902
+        },
+        "parser_labeled_results": {
+            "P": 0.5455,
+            "R": 0.5436,
+            "F1": 0.5446
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6451,
+            "R": 0.6428,
+            "F1": 0.6439
+        },
+        "epoch": null,
+        "steps": 700
+    },
+    {
+        "tagger_results": {
+            "P": 0.6955,
+            "R": 0.6847,
+            "F1": 0.6901
+        },
+        "parser_labeled_results": {
+            "P": 0.5671,
+            "R": 0.5422,
+            "F1": 0.5543
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6635,
+            "R": 0.6343,
+            "F1": 0.6486
+        },
+        "epoch": null,
+        "steps": 800
+    },
+    {
+        "tagger_results": {
+            "P": 0.6963,
+            "R": 0.6873,
+            "F1": 0.6918
+        },
+        "parser_labeled_results": {
+            "P": 0.5472,
+            "R": 0.5344,
+            "F1": 0.5407
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6618,
+            "R": 0.6464,
+            "F1": 0.654
+        },
+        "epoch": null,
+        "steps": 900
+    },
+    {
+        "tagger_results": {
+            "P": 0.6953,
+            "R": 0.6862,
+            "F1": 0.6907
+        },
+        "parser_labeled_results": {
+            "P": 0.5745,
+            "R": 0.5578,
+            "F1": 0.566
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6825,
+            "R": 0.6627,
+            "F1": 0.6724
+        },
+        "epoch": null,
+        "steps": 1000
+    },
+    {
+        "tagger_results": {
+            "P": 0.6983,
+            "R": 0.6878,
+            "F1": 0.693
+        },
+        "parser_labeled_results": {
+            "P": 0.597,
+            "R": 0.567,
+            "F1": 0.5816
+        },
+        "parser_unlabeled_results": {
+            "P": 0.694,
+            "R": 0.6591,
+            "F1": 0.6761
+        },
+        "epoch": null,
+        "steps": 1100
+    },
+    {
+        "tagger_results": {
+            "P": 0.6963,
+            "R": 0.6883,
+            "F1": 0.6923
+        },
+        "parser_labeled_results": {
+            "P": 0.6006,
+            "R": 0.567,
+            "F1": 0.5833
+        },
+        "parser_unlabeled_results": {
+            "P": 0.7027,
+            "R": 0.6634,
+            "F1": 0.6825
+        },
+        "epoch": null,
+        "steps": 1200
+    },
+    {
+        "tagger_results": {
+            "P": 0.6955,
+            "R": 0.6883,
+            "F1": 0.6919
+        },
+        "parser_labeled_results": {
+            "P": 0.5773,
+            "R": 0.5847,
+            "F1": 0.581
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6788,
+            "R": 0.6875,
+            "F1": 0.6831
+        },
+        "epoch": null,
+        "steps": 1300
+    },
+    {
+        "tagger_results": {
+            "P": 0.6985,
+            "R": 0.6909,
+            "F1": 0.6947
+        },
+        "parser_labeled_results": {
+            "P": 0.5922,
+            "R": 0.5599,
+            "F1": 0.5756
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6979,
+            "R": 0.6598,
+            "F1": 0.6783
+        },
+        "epoch": null,
+        "steps": 1400
+    },
+    {
+        "tagger_results": {
+            "P": 0.6979,
+            "R": 0.6888,
+            "F1": 0.6933
+        },
+        "parser_labeled_results": {
+            "P": 0.5724,
+            "R": 0.5741,
+            "F1": 0.5732
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6834,
+            "R": 0.6853,
+            "F1": 0.6844
+        },
+        "epoch": null,
+        "steps": 1500
+    },
+    {
+        "tagger_results": {
+            "P": 0.6949,
+            "R": 0.6852,
+            "F1": 0.69
+        },
+        "parser_labeled_results": {
+            "P": 0.56,
+            "R": 0.5819,
+            "F1": 0.5707
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6658,
+            "R": 0.6917,
+            "F1": 0.6785
+        },
+        "epoch": null,
+        "steps": 1600
+    },
+    {
+        "tagger_results": {
+            "P": 0.6973,
+            "R": 0.6904,
+            "F1": 0.6938
+        },
+        "parser_labeled_results": {
+            "P": 0.5823,
+            "R": 0.5769,
+            "F1": 0.5796
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6867,
+            "R": 0.6804,
+            "F1": 0.6835
+        },
+        "epoch": null,
+        "steps": 1700
+    },
+    {
+        "tagger_results": {
+            "P": 0.6979,
+            "R": 0.6925,
+            "F1": 0.6952
+        },
+        "parser_labeled_results": {
+            "P": 0.5621,
+            "R": 0.5712,
+            "F1": 0.5666
+        },
+        "parser_unlabeled_results": {
+            "P": 0.6827,
+            "R": 0.6938,
+            "F1": 0.6882
+        },
+        "epoch": null,
+        "steps": 1800
+    }
+]

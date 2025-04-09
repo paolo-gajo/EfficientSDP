@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
 from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import BiaffineDependencyParser, GNNParser
+from model.parser import BiaffineDependencyParser, GNNParser, GCNParser, GATParser
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
 from model.decoder import GraphDecoder
@@ -41,6 +41,10 @@ class StepParser(torch.nn.Module):
             self.parser = BiaffineDependencyParser.get_model(self.config)
         elif self.config['parser_type'] == 'gnn':
             self.parser = GNNParser.get_model(self.config)
+        elif self.config['parser_type'] == 'gcn':
+            self.parser = GCNParser.get_model(self.config)
+        elif self.config['parser_type'] == 'gat':
+            self.parser = GATParser.get_model(self.config)
         self.decoder = GraphDecoder(config=config,
                                     tag_representation_dim=self.parser.tag_representation_dim,
                                     n_edge_labels = self.parser.n_edge_labels)
@@ -139,10 +143,15 @@ class StepParser(torch.nn.Module):
         # Use predicted or ground truth tags based on config
         pos_tags_parser = pos_tags_pred if self.config["use_pred_tags"] else pos_tags_gt
 
+        pos_tags_dict = {
+            'pos_tags_one_hot': pos_tags_parser.float(),
+            'pos_tags_labels': tagger_labels,
+        }
+
         # Parsing
         parser_output = self.parser(
             encoded_text_input=encoder_output,
-            pos_tags=pos_tags_parser.float(), # if self.config['one_hot_tags'] else tagger_output.logits,
+            pos_tags=pos_tags_dict, # if self.config['one_hot_tags'] else tagger_output.logits,
             mask=mask,
             head_tags=head_tags,
             head_indices=head_indices,
@@ -165,7 +174,9 @@ class StepParser(torch.nn.Module):
             loss = (tagger_output.loss * self.config["tagger_lambda"]
                     + decoder_output["loss"] * self.config["parser_lambda"]
                     )
-            if self.config["parser_type"] == 'gnn' and self.config["gnn_enc_layers"] > 0:
+            if self.config["parser_type"] == 'gnn' \
+                and self.config["gnn_enc_layers"] > 0 \
+                and len(parser_output["gnn_losses"]) > 0:
                 loss += sum(parser_output["gnn_losses"])/len(parser_output["gnn_losses"]) * self.config["parser_lambda"]
             return loss
         elif self.mode == "test":

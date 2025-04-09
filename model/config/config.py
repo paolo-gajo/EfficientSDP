@@ -11,7 +11,6 @@ custom_config = {
     'gat_conv_heads': 8,
     'test_ignore_edge_dep': ['root', '-'], ## this will be ignored during evaluation
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
-    'batch_size': 8,
     'plot': 0,
 
     # data options
@@ -26,39 +25,45 @@ custom_config = {
     'keep_og_train': 1,
     'keep_og_val': 1,
     'keep_og_test': 1,
-    'augment_type': 'random', # 'permute', 'random', 'hybrid'
+    'augment_type': 'permute', # 'permute', 'random', 'hybrid'
     'adjacency_direction': 'directed', # 'directed', 'mirrored', 'undirected'
     'results_suffix': '_steps',
     'padding': 1,
-    'procedural': 0,
+    'procedural': 1,
 
-    # tagger options
-    'use_tagger_lstm': 0,
+    # vanilla options
+    'use_tagger_lstm': 1,
+    'use_parser_lstm': 1,
+    'use_tag_embeddings_in_parser': 1,
 
     # parser options
+    'parser_type': 'mtrfg', # 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm'
+    'gnn_enc_layers': 1,
+    'top_k': 16,
+    'num_attn_heads': 1,
     'step_bilinear_attn': 0,
     'arc_pred': 'attn',
     'use_parser_gnn': 0,
-    'use_parser_lstm': 0,
-    'use_tag_embeddings_in_parser': 0,
     'mhabma': 0,
-    'parser_type': 'gnn', # 'mtrfg' or 'gnn'
-    'gnn_enc_layers': 0,
-
+    'arc_norm': 1,
+    'arc_representation_dim': 500,
+    'tag_representation_dim': 100,
+    
     # model options
-    'seed': 27,
+    'seed': 0,
     'tagger_lambda': 0.1,
     'parser_lambda': 1,
     'rep_mode': 'words', # either 'words' or 'tokens'
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
-    'freeze_encoder': 1,
+    'freeze_encoder': 0,
     'learning_rate': 1e-3,
     'use_gnn': '0',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
 
     # training options
+    'batch_size': 8,
     'training': 'steps',
     'training_steps': 2000,
     'eval_steps': 100,

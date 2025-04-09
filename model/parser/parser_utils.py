@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import List
 
 class MHABMA(nn.Module):
     def __init__(
@@ -128,6 +129,84 @@ class BilinearMatrixAttention(nn.Module):
         intermediate = torch.matmul(matrix_1.unsqueeze(1), weight)
         final = torch.matmul(intermediate, matrix_2.unsqueeze(1).transpose(2, 3))
         final_biased = final.squeeze(1) + self._bias
+        return self.activation(final_biased)
+
+class BilinearMatrixAttentionGNN(nn.Module):
+    """
+    Computes attention between two matrices using a bilinear attention function. This function has
+    a matrix of weights `W` and a bias `b`, and the similarity between the two matrices `X`
+    and `Y` is computed as `X W Y^T + b`.
+
+    # Parameters
+
+    matrix_1_dim : `int`, required
+        The dimension of the matrix `X`, described above.  This is `X.size()[-1]` - the length
+        of the vector that will go into the similarity computation.  We need this so we can build
+        the weight matrix correctly.
+    matrix_2_dim : `int`, required
+        The dimension of the matrix `Y`, described above.  This is `Y.size()[-1]` - the length
+        of the vector that will go into the similarity computation.  We need this so we can build
+        the weight matrix correctly.
+    activation : `Activation`, optional (default=`linear`)
+        An activation function applied after the `X W Y^T + b` calculation.  Default is
+        linear, i.e. no activation.
+    use_input_biases : `bool`, optional (default = `False`)
+        If True, we add biases to the inputs such that the final computation
+        is equivalent to the original bilinear matrix multiplication plus a
+        projection of both inputs.
+    out_features : `int`, optional (default = `1`)
+        The number of output classes. Typically in an attention setting this will be one,
+        but this parameter allows this class to function as an equivalent to `torch.nn.Bilinear`
+        for matrices, rather than vectors.
+    """
+
+    def __init__(
+        self,
+        matrix_1_dim: int,
+        matrix_2_dim: int,
+        activation=None,
+        use_input_biases: bool = False,
+        out_features: int = 1,
+    ) -> None:
+        super().__init__()
+        if use_input_biases:
+            matrix_1_dim += 1
+            matrix_2_dim += 1
+
+        if out_features == 1:
+            self._weight_matrix = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim))
+        else:
+            self._weight_matrix = nn.Parameter(
+                torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
+            )
+
+        self._bias_1 = nn.Parameter(torch.Tensor(matrix_1_dim))
+        self._bias_2 = nn.Parameter(torch.Tensor(matrix_2_dim))
+        self.activation = activation or Passthrough()
+        self.use_input_biases = use_input_biases
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.xavier_uniform_(self._weight_matrix)
+        self._bias_1.data.fill_(0)
+        self._bias_2.data.fill_(0)
+
+    def forward(self, matrix_1: torch.Tensor, matrix_2: torch.Tensor) -> torch.Tensor:
+        if self.use_input_biases:
+            bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
+            bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
+
+            matrix_1 = torch.cat([matrix_1, bias1], dim=-1)
+            matrix_2 = torch.cat([matrix_2, bias2], dim=-1)
+
+        weight = self._weight_matrix
+        if weight.dim() == 2:
+            weight = weight.unsqueeze(0)
+        intermediate = torch.matmul(matrix_1.unsqueeze(1), weight)
+        final = torch.matmul(intermediate, matrix_2.unsqueeze(1).transpose(2, 3))
+        bias_1 = torch.matmul(matrix_1, self._bias_1.unsqueeze(1))
+        bias_2 = torch.matmul(matrix_2, self._bias_2.unsqueeze(1))
+        final_biased = final.squeeze(1) + bias_1 + bias_2
         return self.activation(final_biased)
 
 class BilinearMatrixAttentionDozatManning(nn.Module):
@@ -356,3 +435,49 @@ def get_lengths_from_binary_sequence_mask(mask: torch.BoolTensor) -> torch.LongT
         of the sequences in the batch.
     """
     return mask.sum(-1)
+
+def batch_top_k(adj_matrices: List[torch.Tensor], k: int):
+    """
+    Returns the top k edges and their corresponding values from batched adjacency matrices.
+    
+    Args:
+        adj_matrices: Batched adjacency matrices of shape [batch_size, seq_len, seq_len]
+        k: Number of top edges to select for each node
+        
+    Returns:
+        edge_index: Tensor of shape [2, num_edges] containing the indices of the edges
+        edge_attr: Tensor of shape [num_edges] containing the soft values of the edges
+    """
+    # Get top k values and indices
+    if k < 1 or k is None:
+        k = adj_matrices.shape[-1]
+    top_k_values, top_k_indices = torch.topk(adj_matrices, k, dim=2)
+    
+    edge_index_list = []
+    edge_attr_list = []
+    
+    for i, (indices, values) in enumerate(zip(top_k_indices, top_k_values)):
+        m_index_list = []
+        m_value_list = []
+        len_m = indices.shape[-1]
+        shift_m = i * len_m
+        
+        for j, (row_indices, row_values) in enumerate(zip(indices, values)):
+            len_r = row_indices.shape[-1]
+            # Create edge indices
+            row = torch.stack([torch.full((len_r,), j).to(adj_matrices.device), row_indices], dim=0)
+            m_index_list.append(row)
+            # Collect corresponding values
+            m_value_list.append(row_values)
+        
+        m_index = torch.cat(m_index_list, dim=1)
+        m_index = m_index + shift_m  # Shift indices for batching
+        edge_index_list.append(m_index)
+        
+        m_values = torch.cat(m_value_list, dim=0)
+        edge_attr_list.append(m_values)
+    
+    edge_index = torch.cat(edge_index_list, dim=1)
+    edge_attr = torch.cat(edge_attr_list, dim=0)
+    
+    return edge_index, edge_attr
