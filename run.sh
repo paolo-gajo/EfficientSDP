@@ -2,7 +2,7 @@
 #SBATCH -J train
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:h100:1
 #SBATCH --mem=64G
 #SBATCH --time=00:30:00
 #SBATCH --output=./.slurm/%j_output.log
@@ -10,7 +10,7 @@
 
 # parser_opts=('mtrfg' 'gnn')
 
-source ./.env/bin/activate
+source .env/bin/activate
 
 python ./tools/train.py
 
