@@ -58,7 +58,8 @@ custom_config = {
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
     'freeze_encoder': 1,
-    'learning_rate': 1e-3,
+    'learning_rate_encoder': 1e-4,
+    'learning_rate_freeze': 1e-3,
     'use_gnn': '0',  # 'gat' or 'mpnn'
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
@@ -80,7 +81,7 @@ default_cfg = {
     'early_stopping': True,
     'patience': 30,  ## patience period for early stopping
     'epochs': 100,
-    'learning_rate': 0.001,
+    # 'learning_rate': 0.001,
     'shuffle' : True, 
     'save_dir': './results',
     'model_name': 'bert-base-uncased', ## model name, should be key in hugging face pretrained model zoo

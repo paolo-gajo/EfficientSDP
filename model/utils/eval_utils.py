@@ -100,13 +100,15 @@ def get_model_summary_in_dict(model):
 
     ## number of learnable params
     total_model_params = sum(p.numel() for p in model.parameters())
+    learnable_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
     encoder_params = sum(p.numel() for p in model.encoder.parameters())
     tagger_params = sum(p.numel() for p in model.tagger.parameters())
     parser_params = sum(p.numel() for p in model.parser.parameters())
 
     mem_dict = {
                 'memory in (MB)' : mem,
-                'total learnable params' : total_model_params,
+                'total params' : total_model_params,
+                'learnable params' : learnable_params,
                 'total encoder params' : encoder_params,
                 'total tagger params' : tagger_params,
                 'total parser params' : parser_params

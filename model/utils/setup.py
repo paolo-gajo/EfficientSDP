@@ -45,6 +45,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
                             f"data={config['dataset_name']}",
                             f'parser_type_{parser_type}',
+                            f"arc_norm_{config['arc_norm']}",
                             f"aug_{aug_string}_{augment_type}_{keep_k_string}_{training_amount}",
                             f"{model_name}_{get_current_time_string()}_seed_{config['seed']}")
 
@@ -63,6 +64,11 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
 
     ## get encoder output dimension (aka hidden size)
     config['encoder_output_dim'] = AutoConfig.from_pretrained(config['model_name']).hidden_size
+
+    if config['freeze_encoder']:
+        config['learning_rate'] = config['learning_rate_freeze']
+    else:
+        config['learning_rate'] = config['learning_rate_encoder']
 
     return config
 
