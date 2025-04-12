@@ -2,6 +2,184 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import List
+import math
+
+EPS = 1e-10
+
+class BilinearMatrixAttention(nn.Module):
+    """
+    Computes attention between two matrices using a bilinear attention function.
+    This unified class supports multiple bias types for flexibility.
+
+    # Parameters
+
+    matrix_1_dim : `int`, required
+        The dimension of the matrix `X`. This is `X.size()[-1]` - the length
+        of the vector that will go into the similarity computation.
+    matrix_2_dim : `int`, required
+        The dimension of the matrix `Y`. This is `Y.size()[-1]` - the length
+        of the vector that will go into the similarity computation.
+    activation : `Activation`, optional (default=`linear`)
+        An activation function applied after the similarity calculation.
+    use_input_biases : `bool`, optional (default = `False`)
+        If True, we add biases to the inputs such that the final computation
+        is equivalent to the original bilinear matrix multiplication plus a
+        projection of both inputs.
+    out_features : `int`, optional (default = `1`)
+        The number of output classes.
+    bias_type : `str`, optional (default = "simple")
+        Type of bias to use:
+        - "simple": A single scalar bias (original BilinearMatrixAttention)
+        - "gnn": Separate biases for both matrices (BilinearMatrixAttentionGNN)
+        - "dozat": Bias only for matrix_1 (BilinearMatrixAttentionDozatManning)
+        - "none": No bias
+    """
+
+    def __init__(
+        self,
+        matrix_1_dim: int,
+        matrix_2_dim: int,
+        activation=None,
+        use_input_biases: bool = False,
+        out_features: int = 1,
+        bias_type: str = 'simple',
+        norm_type: str = 'scale' # 'sym', 'row', 'scale'
+    ) -> None:
+        super().__init__()
+        if use_input_biases:
+            matrix_1_dim += 1
+            matrix_2_dim += 1
+        
+        if out_features == 1:
+            self._weight_matrix = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim))
+        else:
+            self._weight_matrix = nn.Parameter(
+                torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
+            )
+        
+        self.norm = math.sqrt((matrix_1_dim + matrix_2_dim) / 2)
+        self.norm_type = norm_type
+        
+        # Set up bias parameters based on the bias_type
+        self.bias_type = bias_type.lower()
+        if self.bias_type == "simple":
+            self._bias = nn.Parameter(torch.Tensor(1))
+            self._bias_1 = None
+            self._bias_2 = None
+        elif self.bias_type == "gnn":
+            self._bias = None
+            self._bias_1 = nn.Parameter(torch.Tensor(matrix_1_dim))
+            self._bias_2 = nn.Parameter(torch.Tensor(matrix_2_dim))
+        elif self.bias_type == "dozat":
+            self._bias = None
+            self._bias_1 = nn.Parameter(torch.Tensor(matrix_1_dim))
+            self._bias_2 = None
+        elif self.bias_type == "none":
+            self._bias = None
+            self._bias_1 = None
+            self._bias_2 = None
+        else:
+            raise ValueError(f"Unsupported bias_type: {bias_type}. "
+                           "Choose from 'simple', 'gnn', 'dozat', or 'none'.")
+
+        self.activation = activation or Passthrough()
+        self.use_input_biases = use_input_biases
+        self.out_features = out_features
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.xavier_uniform_(self._weight_matrix)
+        
+        if self._bias is not None:
+            self._bias.data.fill_(0)
+        if self._bias_1 is not None:
+            self._bias_1.data.fill_(0)
+        if self._bias_2 is not None:
+            self._bias_2.data.fill_(0)
+
+    def forward(self, matrix_1: torch.Tensor, matrix_2: torch.Tensor) -> torch.Tensor:
+        if self.use_input_biases:
+            bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
+            bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
+
+            matrix_1 = torch.cat([matrix_1, bias1], dim=-1)
+            matrix_2 = torch.cat([matrix_2, bias2], dim=-1)
+
+        # Handle weight dimensionality
+        weight = self._weight_matrix
+        if weight.dim() == 2:
+            weight = weight.unsqueeze(0)
+            
+        # Compute the core bilinear attention
+        intermediate = torch.matmul(matrix_1.unsqueeze(1), weight)
+        final = torch.matmul(intermediate, matrix_2.unsqueeze(1).transpose(2, 3))
+        final = final.squeeze(1)
+        
+        # Apply bias based on the selected bias type
+        if self.bias_type == "simple":
+            result = final + self._bias
+        elif self.bias_type == "gnn":
+            bias_1 = torch.matmul(matrix_1, self._bias_1.unsqueeze(1))
+            bias_2 = torch.matmul(matrix_2, self._bias_2.unsqueeze(1))
+            result = final + bias_1 + bias_2
+        elif self.bias_type == "dozat":
+            bias = torch.matmul(matrix_1, self._bias_1.unsqueeze(1))
+            result = final + bias
+        else:  # "none"
+            result = final
+        
+        return self.normalize(self.activation(result))
+
+    def normalize(self, adj):
+        if self.norm_type == "scale":
+                return adj / self.norm
+        else:
+            return adj
+        
+class GraphNNUnit(nn.Module):
+    def __init__(self,
+                h_dim,
+                d_dim,
+                use_residual=True,
+                use_layer_norm=False,
+                *args,
+                **kwargs):
+        super().__init__(*args, **kwargs)
+        self.W = nn.Parameter(torch.Tensor(h_dim, d_dim))
+        self.B = nn.Parameter(torch.Tensor(h_dim, h_dim))
+        self.use_residual = use_residual
+        self.use_layer_norm = use_layer_norm
+
+        if self.use_residual:
+            self.res = nn.Linear(h_dim, h_dim)
+        
+        if self.use_layer_norm:
+            self.layer_norm = nn.LayerNorm(h_dim)
+            
+        nn.init.xavier_uniform_(self.W)
+        nn.init.xavier_uniform_(self.B)
+
+    def forward(self, H, D):
+        H_new = torch.matmul(H, self.W)
+        D_new = torch.matmul(D, self.B)
+        transformed = F.tanh(H_new + D_new)
+        
+        if self.use_residual:
+            combined = transformed + D
+            if self.use_layer_norm:
+                return self.layer_norm(combined)
+            else:
+                return combined
+        else:
+            return transformed
+
+class SQRTNorm(nn.Module):
+    def __init__(self, dim: int):
+        super().__init__()
+        self.norm = math.sqrt(dim)
+    
+    def forward(self, input: torch.Tensor):
+        return input / self.norm
 
 class MHABMA(nn.Module):
     def __init__(
@@ -56,233 +234,11 @@ class MHABMA(nn.Module):
         out = final_biased.reshape(B_m, N_m, L_m, L_m)
         out = out.mean(dim = 1)
         return self.activation(out)
-       
-class BilinearMatrixAttention(nn.Module):
-    """
-    Computes attention between two matrices using a bilinear attention function. This function has
-    a matrix of weights `W` and a bias `b`, and the similarity between the two matrices `X`
-    and `Y` is computed as `X W Y^T + b`.
 
-    # Parameters
-
-    matrix_1_dim : `int`, required
-        The dimension of the matrix `X`, described above.  This is `X.size()[-1]` - the length
-        of the vector that will go into the similarity computation.  We need this so we can build
-        the weight matrix correctly.
-    matrix_2_dim : `int`, required
-        The dimension of the matrix `Y`, described above.  This is `Y.size()[-1]` - the length
-        of the vector that will go into the similarity computation.  We need this so we can build
-        the weight matrix correctly.
-    activation : `Activation`, optional (default=`linear`)
-        An activation function applied after the `X W Y^T + b` calculation.  Default is
-        linear, i.e. no activation.
-    use_input_biases : `bool`, optional (default = `False`)
-        If True, we add biases to the inputs such that the final computation
-        is equivalent to the original bilinear matrix multiplication plus a
-        projection of both inputs.
-    out_features : `int`, optional (default = `1`)
-        The number of output classes. Typically in an attention setting this will be one,
-        but this parameter allows this class to function as an equivalent to `torch.nn.Bilinear`
-        for matrices, rather than vectors.
-    """
-
-    def __init__(
-        self,
-        matrix_1_dim: int,
-        matrix_2_dim: int,
-        activation=None,
-        use_input_biases: bool = False,
-        out_features: int = 1,
-    ) -> None:
-        super().__init__()
-        if use_input_biases:
-            matrix_1_dim += 1
-            matrix_2_dim += 1
-
-        if out_features == 1:
-            self._weight_matrix = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim))
-        else:
-            self._weight_matrix = nn.Parameter(
-                torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
-            )
-
-        self._bias = nn.Parameter(torch.Tensor(1))
-        self.activation = activation or Passthrough()
-        self.use_input_biases = use_input_biases
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        torch.nn.init.xavier_uniform_(self._weight_matrix)
-        self._bias.data.fill_(0)
-
-    def forward(self, matrix_1: torch.Tensor, matrix_2: torch.Tensor) -> torch.Tensor:
-        if self.use_input_biases:
-            bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
-            bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
-
-            matrix_1 = torch.cat([matrix_1, bias1], dim=-1)
-            matrix_2 = torch.cat([matrix_2, bias2], dim=-1)
-
-        weight = self._weight_matrix
-        if weight.dim() == 2:
-            weight = weight.unsqueeze(0)
-        intermediate = torch.matmul(matrix_1.unsqueeze(1), weight)
-        final = torch.matmul(intermediate, matrix_2.unsqueeze(1).transpose(2, 3))
-        final_biased = final.squeeze(1) + self._bias
-        return self.activation(final_biased)
-
-class BilinearMatrixAttentionGNN(nn.Module):
-    """
-    Computes attention between two matrices using a bilinear attention function. This function has
-    a matrix of weights `W` and a bias `b`, and the similarity between the two matrices `X`
-    and `Y` is computed as `X W Y^T + b`.
-
-    # Parameters
-
-    matrix_1_dim : `int`, required
-        The dimension of the matrix `X`, described above.  This is `X.size()[-1]` - the length
-        of the vector that will go into the similarity computation.  We need this so we can build
-        the weight matrix correctly.
-    matrix_2_dim : `int`, required
-        The dimension of the matrix `Y`, described above.  This is `Y.size()[-1]` - the length
-        of the vector that will go into the similarity computation.  We need this so we can build
-        the weight matrix correctly.
-    activation : `Activation`, optional (default=`linear`)
-        An activation function applied after the `X W Y^T + b` calculation.  Default is
-        linear, i.e. no activation.
-    use_input_biases : `bool`, optional (default = `False`)
-        If True, we add biases to the inputs such that the final computation
-        is equivalent to the original bilinear matrix multiplication plus a
-        projection of both inputs.
-    out_features : `int`, optional (default = `1`)
-        The number of output classes. Typically in an attention setting this will be one,
-        but this parameter allows this class to function as an equivalent to `torch.nn.Bilinear`
-        for matrices, rather than vectors.
-    """
-
-    def __init__(
-        self,
-        matrix_1_dim: int,
-        matrix_2_dim: int,
-        activation=None,
-        use_input_biases: bool = False,
-        out_features: int = 1,
-    ) -> None:
-        super().__init__()
-        if use_input_biases:
-            matrix_1_dim += 1
-            matrix_2_dim += 1
-
-        if out_features == 1:
-            self._weight_matrix = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim))
-        else:
-            self._weight_matrix = nn.Parameter(
-                torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
-            )
-
-        self._bias_1 = nn.Parameter(torch.Tensor(matrix_1_dim))
-        self._bias_2 = nn.Parameter(torch.Tensor(matrix_2_dim))
-        self.activation = activation or Passthrough()
-        self.use_input_biases = use_input_biases
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        torch.nn.init.xavier_uniform_(self._weight_matrix)
-        self._bias_1.data.fill_(0)
-        self._bias_2.data.fill_(0)
-
-    def forward(self, matrix_1: torch.Tensor, matrix_2: torch.Tensor) -> torch.Tensor:
-        if self.use_input_biases:
-            bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
-            bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
-
-            matrix_1 = torch.cat([matrix_1, bias1], dim=-1)
-            matrix_2 = torch.cat([matrix_2, bias2], dim=-1)
-
-        weight = self._weight_matrix
-        if weight.dim() == 2:
-            weight = weight.unsqueeze(0)
-        intermediate = torch.matmul(matrix_1.unsqueeze(1), weight)
-        final = torch.matmul(intermediate, matrix_2.unsqueeze(1).transpose(2, 3))
-        bias_1 = torch.matmul(matrix_1, self._bias_1.unsqueeze(1))
-        bias_2 = torch.matmul(matrix_2, self._bias_2.unsqueeze(1))
-        final_biased = final.squeeze(1) + bias_1 + bias_2
-        return self.activation(final_biased)
-
-class BilinearMatrixAttentionDozatManning(nn.Module):
-    """
-    Computes attention between two matrices using a bilinear attention function. This function has
-    a matrix of weights `W` and a bias `b`, and the similarity between the two matrices `X`
-    and `Y` is computed as `X W Y^T + b`.
-
-    # Parameters
-
-    matrix_1_dim : `int`, required
-        The dimension of the matrix `X`, described above.  This is `X.size()[-1]` - the length
-        of the vector that will go into the similarity computation.  We need this so we can build
-        the weight matrix correctly.
-    matrix_2_dim : `int`, required
-        The dimension of the matrix `Y`, described above.  This is `Y.size()[-1]` - the length
-        of the vector that will go into the similarity computation.  We need this so we can build
-        the weight matrix correctly.
-    activation : `Activation`, optional (default=`linear`)
-        An activation function applied after the `X W Y^T + b` calculation.  Default is
-        linear, i.e. no activation.
-    use_input_biases : `bool`, optional (default = `False`)
-        If True, we add biases to the inputs such that the final computation
-        is equivalent to the original bilinear matrix multiplication plus a
-        projection of both inputs.
-    out_features : `int`, optional (default = `1`)
-        The number of output classes. Typically in an attention setting this will be one,
-        but this parameter allows this class to function as an equivalent to `torch.nn.Bilinear`
-        for matrices, rather than vectors.
-    """
-
-    def __init__(
-        self,
-        matrix_1_dim: int,
-        matrix_2_dim: int,
-        activation=None,
-        use_input_biases: bool = False,
-        out_features: int = 1,
-    ) -> None:
-        super().__init__()
-        if use_input_biases:
-            matrix_1_dim += 1
-            matrix_2_dim += 1
-
-        if out_features == 1:
-            self._weight_matrix = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim))
-        else:
-            self._weight_matrix = nn.Parameter(
-                torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
-            )
-
-        self._bias = nn.Parameter(torch.Tensor(matrix_1_dim))
-        self.activation = activation or Passthrough()
-        self.use_input_biases = use_input_biases
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        torch.nn.init.xavier_uniform_(self._weight_matrix)
-        self._bias.data.fill_(0)
-
-    def forward(self, matrix_1: torch.Tensor, matrix_2: torch.Tensor) -> torch.Tensor:
-        if self.use_input_biases:
-            bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
-            bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
-
-            matrix_1 = torch.cat([matrix_1, bias1], dim=-1)
-            matrix_2 = torch.cat([matrix_2, bias2], dim=-1)
-
-        weight = self._weight_matrix
-        if weight.dim() == 2:
-            weight = weight.unsqueeze(0)
-        intermediate = torch.matmul(matrix_1.unsqueeze(1), weight)
-        final = torch.matmul(intermediate, matrix_2.unsqueeze(1).transpose(2, 3))
-        bias = torch.matmul(matrix_1, self._bias.unsqueeze(1))
-        final_biased = final.squeeze(1) + bias
-        return self.activation(final_biased)
+class Passthrough:
+    """Simple pass-through activation that returns input unchanged."""
+    def __call__(self, x):
+        return x
 
 class InputVariationalDropout(torch.nn.Dropout):
     """

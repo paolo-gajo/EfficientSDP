@@ -10,11 +10,12 @@ from model.parser.parser_nn import *
 from model.decoder import masked_log_softmax
 import math
 from debug import save_heatmap
+import copy
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
 
-class GNNParser(nn.Module):
+class GNNParserDualLSTM(nn.Module):
     def __init__(
         self,
         config: Dict,
@@ -31,6 +32,7 @@ class GNNParser(nn.Module):
         self.config = config
         if self.config["use_parser_lstm"]:
             self.encoder_h = encoder
+            self.encoder_d = copy.deepcopy(encoder)
             encoder_dim = self.config["parser_lstm_hidden_size"] * 2
         else:
             encoder_dim = embedding_dim
@@ -38,14 +40,13 @@ class GNNParser(nn.Module):
         if self.config["use_tag_embeddings_in_parser"]:
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(0.2)
-        
+
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
 
         self.arc_bilinear = nn.ModuleList([
             BilinearMatrixAttention(arc_representation_dim,
                                     arc_representation_dim,
-                                    activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
                                     norm_type=self.config['arc_norm'])
@@ -66,6 +67,7 @@ class GNNParser(nn.Module):
         self.apply(self._init_weights)
         self.tag_representation_dim = tag_representation_dim
         self.n_edge_labels = n_edge_labels
+        ...
 
     def forward(
         self,
@@ -90,17 +92,22 @@ class GNNParser(nn.Module):
             packed_input = pack_padded_sequence(
                 encoded_text_input, lengths, batch_first=True, enforce_sorted=False
             )
-            packed_output, _ = self.encoder_h(packed_input)
+            packed_output_h, _ = self.encoder_h(packed_input)
+            packed_output_d, _ = self.encoder_d(packed_input)
             # Unpack the sequence, ensuring the output has the original sequence length.
-            encoded_text_input, _ = pad_packed_sequence(packed_output,
+            encoded_text_input_h, _ = pad_packed_sequence(packed_output_h,
+                                                        batch_first=True,
+                                                        total_length=encoded_text_input.size(1))
+            encoded_text_input_d, _ = pad_packed_sequence(packed_output_d,
                                                         batch_first=True,
                                                         total_length=encoded_text_input.size(1))
 
-        batch_size, _, encoding_dim = encoded_text_input.size()
+        batch_size, _, encoding_dim = encoded_text_input_h.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
-        
+
         # Concatenate the head sentinel onto the sentence representation.
-        encoded_text_input = torch.cat([head_sentinel, encoded_text_input], dim=1)
+        encoded_text_input_h = torch.cat([head_sentinel, encoded_text_input_h], dim=1)
+        encoded_text_input_d = torch.cat([head_sentinel, encoded_text_input_d], dim=1)
 
         mask_ones = mask.new_ones(batch_size, 1)
         mask = torch.cat([mask_ones, mask], dim = 1)
@@ -118,11 +125,11 @@ class GNNParser(nn.Module):
         
             
         # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
-        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
+        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input_h)))
+        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input_d)))
         # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
+        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input_h)))
+        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input_d)))
 
         # the following is based on 'Graph-based Dependency Parsing with Graph Neural Networks'
         # https://aclanthology.org/P19-1237/
@@ -133,12 +140,14 @@ class GNNParser(nn.Module):
         # valid_positions = mask.sum() - batch_size
         # float_mask = mask.float()
         for k in range(self.config['gnn_enc_layers']):
-            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) # / self.arc_bilinear[k].norm
+            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
             # attended_arcs_t = self.arc_bilinear_t[k](head_arc, dept_arc)
             arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
             # arc_probs_t = torch.nn.functional.softmax(attended_arcs_t, dim = -1)
+            # save_heatmap(arc_probs, 'arc_probs.pdf')
             
             # arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+            # save_heatmap(arc_probs_masked, 'arc_probs_masked.pdf')
             
             # range_tensor = torch.arange(batch_size).unsqueeze(1)
             # length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
@@ -149,30 +158,29 @@ class GNNParser(nn.Module):
 
             # this is just a way of getting both H and D into the same feature matrix
             # and have them automatically multiplied by the weights of the soft adjacency matrix
-            
+            hx = torch.matmul(arc_probs, head_arc)
+            # save_heatmap(hx, 'hx.pdf')
             # this is transposed because the indices in equation 9 of the paper
             # are switched for h and arc_representation_dim
-            hx = torch.matmul(arc_probs, head_arc)
             dx = torch.matmul(arc_probs.transpose(1, 2), dept_arc)
-            fx = (hx + dx) / 2
-
-            head_arc_new = self.head_gnn(fx, head_arc)
-            head_arc = (head_arc + head_arc_new) / 2
+            # save_heatmap(dx, 'dx.pdf')
+            fx = hx + dx
+            # save_heatmap(fx, 'fx.pdf')
+            # adj_m = edge_index_to_adj(batch_arc.edge_index)
+            # save_heatmap(adj_m, 'adj_m.pdf')
+            head_arc = self.head_gnn(fx, head_arc)
             fx_intermediate = torch.matmul(arc_probs, head_arc) + dx
-            dept_arc_new = self.dept_gnn(fx_intermediate, dept_arc)
-            dept_arc = (dept_arc + dept_arc_new) / 2
+            dept_arc = self.dept_gnn(fx_intermediate, dept_arc)
 
             hr = torch.matmul(arc_probs, head_tag)
             dr = torch.matmul(arc_probs.transpose(1, 2), dept_tag)
-            fr = (hr + dr) / 2
+            fr = hr + dr
             
-            head_tag_new = self.head_rel_gnn(fr, head_tag)
-            head_tag = (head_tag + head_tag_new) / 2
+            head_tag = self.head_rel_gnn(fr, head_tag)
             fr_intermediate = torch.matmul(arc_probs, head_tag) + dr
-            dept_tag_new = self.dept_rel_gnn(fr_intermediate, dept_tag)
-            dept_tag = (dept_tag + dept_tag_new) / 2
+            dept_tag = self.dept_rel_gnn(fr_intermediate, dept_tag)
 
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc) # / self.arc_bilinear[-1].norm
+        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,

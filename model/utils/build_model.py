@@ -38,6 +38,10 @@ def build_model(config, model_start_path = None):
     ## freeze parser if asked for
     if config['freeze_parser']:
         model.freeze_parser()
-
+    
+    if len(config['unfreeze_layers']):
+        for l in config['unfreeze_layers']:
+            for param in model.encoder.encoder.encoder.layer[l].parameters():
+                param.requires_grad = True
 
     return model

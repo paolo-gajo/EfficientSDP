@@ -29,7 +29,8 @@ def main():
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     # config = json.load(open('./results_steps/freeze_encoder_1/arc_predattn/stepmask_0/gnn_0/bpos_1/tagemb_0/lstm_0/laplacian_pe_/use_abs_step_embeddings_0/data=yamakata/parser_type_gnn_1/aug_000_none_keep_111_k_0-0-0_2000/bert-base-uncased_2025-03-31--08:05:16_seed_0/config.json', 'r'))['config']
     # config['model_path'] = 'bert-base-uncased'
-    print('Current args:\n\n', json.dumps(config, indent=4))
+    print('Custom config:\n\n', json.dumps(custom_config, indent=4))
+    print('Args:\n\n', json.dumps(args, indent=4))
     
     # Set seeds and show save directory
     set_seeds(config['seed'])
@@ -45,7 +46,8 @@ def main():
                     load_json(config['val_file_graphs']) + \
                     load_json(config['test_file_graphs'])
     label_index_map = get_mappings(all_splits_data)
-    config['max_steps'] = max(train_loader.dataset.max_steps,
+    if config['procedural']:
+        config['max_steps'] = max(train_loader.dataset.max_steps,
                               val_loader.dataset.max_steps,
                               test_loader.dataset.max_steps,)
     config['n_tags'] = len(label_index_map['tag2class'])

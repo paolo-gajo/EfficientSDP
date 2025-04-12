@@ -1,35 +1,22 @@
 from typing import Dict, Optional, Tuple, Any, List, Set
 import logging
-import copy
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-import numpy
 import matplotlib.pyplot as plt
 from model.gnn import DGM_c, GATNet, get_step_reps, pad_square_matrix, LaplacePE
-from model.parser.parser_utils import *
-import sys
-import math
+from model.parser.parser_nn import *
 from debug.viz import save_heatmap
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
 
-class SQRTNorm(nn.Module):
-    def __init__(self, dim: int):
-        super().__init__()
-        self.norm = math.sqrt(dim)
-    
-    def forward(self, input: torch.Tensor):
-        return input / self.norm
-
 class BiaffineDependencyParser(nn.Module):
     """
     This dependency parser follows the model of
     ` Deep Biaffine Attention for Neural Dependency Parsing (Dozat and Manning, 2016)
-    <https://arxiv.org/abs/1611.01734>`_ .
+    <https://arxiv.org/abs/1611.01734>`.
 
     Word representations are generated using a bidirectional LSTM,
     followed by separate biaffine classifiers for pairs of words,
@@ -57,8 +44,6 @@ class BiaffineDependencyParser(nn.Module):
         Whether to use Edmond's algorithm to find the optimal minimum spanning tree during validation.
         If false, decoding is greedy.
     dropout : ``float``, optional, (default = 0.0)
-        The variational dropout applied to the output of the encoder and MLP layers.
-    input_dropout : ``float``, optional, (default = 0.0)
         The dropout applied to the embedded text input.
     initializer : ``InitializerApplicator``, optional (default=``InitializerApplicator()``)
         Used to initialize the model parameters.
@@ -77,11 +62,9 @@ class BiaffineDependencyParser(nn.Module):
         tag_representation_dim: int,
         use_mst_decoding_for_validation: bool = True,
         dropout: float = 0.0,
-        input_dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.config = config
-
         if self.config["use_parser_lstm"]:
             self.seq_encoder = encoder
             encoder_dim = self.config["parser_lstm_hidden_size"] * 2
@@ -90,70 +73,27 @@ class BiaffineDependencyParser(nn.Module):
 
         if self.config["use_tag_embeddings_in_parser"]:
             self.tag_embedder = tag_embedder
-        self.tag_dropout = nn.Dropout(0.2)
+            self.tag_dropout = nn.Dropout(0.2)
+        
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
-
-        if self.config["arc_pred"] == "attn":
-            self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
-            if self.config["mhabma"]:
-                self.arc_pred = MHABMA(
+        self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
+        self.arc_bilinear = BilinearMatrixAttention(
                     arc_representation_dim,
                     arc_representation_dim,
                     use_input_biases=True,
-                    num_heads=16,
+                    bias_type='simple',
+                    norm_type=self.config['arc_norm'],
                 )
-            else:
-                self.arc_pred = BilinearMatrixAttention(
-                    arc_representation_dim,
-                    arc_representation_dim,
-                    use_input_biases=True,
-                )
-            if self.config['use_parser_gnn']:
-                self.gnn = GATNet(arc_representation_dim, arc_representation_dim, num_layers = 1, heads = 1, dropout=0.2)
-        elif self.config["arc_pred"] == "dgm":
-            self.arc_pred = DGM_c(self.config,
-                                  input_dim=arc_representation_dim,
-                                  hidden_dims=arc_representation_dim,
-                                  num_layers=2,
-                                  num_gnn_layers=1,
-                                  conv_type='gat',
-                                  heads=4,
-                                  apply_diffusion=False,
-                                  )
-
-        if self.config['step_bilinear_attn']:
-            self.step_mlp_1 = nn.Linear(encoder_dim, arc_representation_dim)
-            self.step_mlp_2 = nn.Linear(encoder_dim, arc_representation_dim)
-            self.step_bilinear_attn = BilinearMatrixAttention(
-                arc_representation_dim, arc_representation_dim, use_input_biases=True
-            )
-
-        if self.config['laplacian_pe'] == 'parser':
-            self.lap_pe = LaplacePE(embedding_dim=embedding_dim,
-                                    max_steps=self.config['max_steps'])
-
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
-        
-        if self.config['arc_norm']:
-            self.arc_norm =  SQRTNorm(arc_representation_dim)
-            # self.arc_norm_1 =  nn.LayerNorm(arc_representation_dim)
-            # self.arc_norm_2 =  nn.LayerNorm(arc_representation_dim)
 
-        self._dropout = InputVariationalDropout(dropout)
-        self._input_dropout = nn.Dropout(input_dropout)
+        self._dropout = nn.Dropout(dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
-        if self.config["use_gnn"]:
-            self.sentinel_fusion = HeadSentinelFusion(
-                encoder_dim + self.config["encoder_output_dim"], encoder_dim
-            )
-
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
-
         self.apply(self._init_weights)
-
         self.tag_representation_dim = tag_representation_dim
         self.n_edge_labels = n_edge_labels
+        ...
 
     def forward(
         self,
@@ -226,19 +166,20 @@ class BiaffineDependencyParser(nn.Module):
                 packed_output, batch_first=True, total_length=encoded_text_input.size(1)
             )
 
-        encoded_text = self._input_dropout(encoded_text_input)
-        batch_size, _, encoding_dim = encoded_text.size()
-        head_sentinel = self._head_sentinel
-        if gnn_pooled_vector is not None:
-            head_sentinel = self.sentinel_fusion(head_sentinel, gnn_pooled_vector)
-        head_sentinel = head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
+        batch_size, _, encoding_dim = encoded_text_input.size()
+        # encoded_text_input = self._input_dropout(encoded_text_input)
+        
+        # head_sentinel = self._head_sentinel
+        # if gnn_pooled_vector is not None:
+        #     head_sentinel = self.sentinel_fusion(head_sentinel, gnn_pooled_vector)
+        head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         
         # Concatenate the head sentinel onto the sentence representation.
-        encoded_text = torch.cat([head_sentinel, encoded_text], dim=1)
+        encoded_text_input = torch.cat([head_sentinel, encoded_text_input], dim=1)
         
-        if self.config['procedural']:
-            sentinel_step_index = torch.zeros(step_indices.shape[0], dtype=torch.long).unsqueeze(1)
-            step_indices = torch.cat([sentinel_step_index.to(self.config['device']), step_indices], dim = 1)
+        # if self.config['procedural']:
+        #     sentinel_step_index = torch.zeros(step_indices.shape[0], dtype=torch.long).unsqueeze(1)
+        #     step_indices = torch.cat([sentinel_step_index.to(self.config['device']), step_indices], dim = 1)
 
         if not self.config["use_step_mask"]:
             mask_ones = mask.new_ones(batch_size, 1)
@@ -261,54 +202,55 @@ class BiaffineDependencyParser(nn.Module):
                 [head_tags.new_zeros(batch_size, 1), head_tags], dim=1
             )
 
-        encoded_text = self._dropout(encoded_text)
+        encoded_text_input = self._dropout(encoded_text_input)
 
-        if self.config['laplacian_pe'] == 'parser':
-            encoded_text = self.lap_pe(input=encoded_text,
-                                       graph_laplacian=graph_laplacian,
-                                       step_indices=step_indices if self.config['procedural'] else None,
-                                       )
+        # if self.config['laplacian_pe'] == 'parser':
+        #     encoded_text_input = self.lap_pe(input=encoded_text_input,
+        #                                graph_laplacian=graph_laplacian,
+        #                                step_indices=step_indices if self.config['procedural'] else None,
+        #                                )
 
         # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text)))
+        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
+        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))   
         # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text)))
-        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text)))
+        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
+        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
         
-        if self.config["arc_pred"] == "attn":
+        
+        attended_arcs = self.arc_bilinear(head_arc, dept_arc)
+        # if self.config["arc_pred"] == "attn":
             # shape (batch_size, sequence_length, arc_representation_dim)
-            dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text)))   
+            
 
             # shape (batch_size, sequence_length, sequence_length)
-            attended_arcs = self.arc_pred(head_arc, dept_arc)
-            if self.config['arc_norm']:
-                attended_arcs = self.arc_norm(attended_arcs)
+            
 
-            if self.config['use_parser_gnn']:
-                arc_edge_index = []
-                head_arc_reps = []
-                dept_arc_reps = []
-                for i, b in enumerate(attended_arcs):
-                    arc_edge_index = b.nonzero(as_tuple=False).t()
-                    head_arc_reps.append(self.gnn(head_arc[i], arc_edge_index))
-                    dept_arc_reps.append(self.gnn(dept_arc[i], arc_edge_index))
-                head_arc = torch.stack(head_arc_reps, dim = 0)
-                dept_arc = torch.stack(dept_arc_reps, dim = 0)
+        #     if self.config['use_parser_gnn']:
+        #         arc_edge_index = []
+        #         head_arc_reps = []
+        #         dept_arc_reps = []
+        #         for i, b in enumerate(attended_arcs):
+        #             arc_edge_index = b.nonzero(as_tuple=False).t()
+        #             head_arc_reps.append(self.gnn(head_arc[i], arc_edge_index))
+        #             dept_arc_reps.append(self.gnn(dept_arc[i], arc_edge_index))
+        #         head_arc = torch.stack(head_arc_reps, dim = 0)
+        #         dept_arc = torch.stack(dept_arc_reps, dim = 0)
 
-                attended_arcs = self.arc_pred(
-                    head_arc, dept_arc
-                )
-        elif self.config["arc_pred"] == "dgm":
-            attended_arcs = self.arc_pred(x=head_arc, A=None)["adj"]
-        else:
-            raise ValueError("arc_pred can either be `attn` or `dgmc`")
+        #         attended_arcs = self.arc_bilinear(
+        #             head_arc, dept_arc
+        #         )
+        # elif self.config["arc_pred"] == "dgm":
+        #     attended_arcs = self.arc_bilinear(x=head_arc, A=None)["adj"]
+        # else:
+        #     raise ValueError("arc_pred can either be `attn` or `dgmc`")
 
-        if self.config['step_bilinear_attn']:
-            step_reps = get_step_reps(encoded_text, step_indices)
-            step_matrix_1 = F.elu(self.step_mlp_1(step_reps))
-            step_matrix_2 = F.elu(self.step_mlp_2(step_reps))
-            self.step_bilinear_attn(step_matrix_1, step_matrix_2)
-            pass
+        # if self.config['step_bilinear_attn']:
+        #     step_reps = get_step_reps(encoded_text, step_indices)
+        #     step_matrix_1 = F.elu(self.step_mlp_1(step_reps))
+        #     step_matrix_2 = F.elu(self.step_mlp_2(step_reps))
+        #     self.step_bilinear_attn(step_matrix_1, step_matrix_2)
+        #     pass
 
         output = {
             'head_tag': head_tag,
@@ -356,14 +298,17 @@ class BiaffineDependencyParser(nn.Module):
         else:
             embedding_dim = config["encoder_output_dim"]
         n_edge_labels = config["n_edge_labels"]
-        encoder = nn.LSTM(
-            input_size=embedding_dim,
-            hidden_size=config["parser_lstm_hidden_size"],
-            num_layers=3,
-            batch_first=True,
-            bidirectional=True,
-            dropout=0.3,
-        )
+        if config['use_parser_lstm']:
+            encoder = nn.LSTM(
+                input_size=embedding_dim,
+                hidden_size=config["parser_lstm_hidden_size"],
+                num_layers=config['parser_lstm_layers'],
+                batch_first=True,
+                bidirectional=True,
+                dropout=0.3,
+            )
+        else:
+            encoder = None
 
         tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
         model_obj = cls(
@@ -375,7 +320,6 @@ class BiaffineDependencyParser(nn.Module):
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],
             dropout=0.3,
-            input_dropout=0.3,
             use_mst_decoding_for_validation = config['use_mst_decoding_for_validation']
             
         )

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.data import Data, Batch
-from model.parser.parser_utils import *
+from model.parser.parser_nn import *
 from typing import Dict, List, Any
 import math
 
@@ -82,7 +82,6 @@ class GCNParser(nn.Module):
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
         dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
 
-        arc_norm = math.sqrt(head_arc.shape[-1])
         _, seq_len, _ = encoded_text_input.size()
         gnn_losses = []
         valid_positions = mask.sum() - batch_size
@@ -91,17 +90,17 @@ class GCNParser(nn.Module):
         # Loop over the number of GNN encoder layers.
         for k in range(self.config['gnn_enc_layers']):
             # Compute a soft adjacency (attention) matrix.
-            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) / arc_norm
+            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
             arc_probs = F.softmax(attended_arcs, dim=-1)
-            arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
             
-            # Compute loss as in the original implementation.
-            range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
-            length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
-            arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
-            arc_loss = arc_loss[:, 1:]
-            arc_nll = -arc_loss.sum() / valid_positions.float()
-            gnn_losses.append(arc_nll)
+            # # Compute loss as in the original implementation.
+            # arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+            # range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
+            # length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
+            # arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
+            # arc_loss = arc_loss[:, 1:]
+            # arc_nll = -arc_loss.sum() / valid_positions.float()
+            # gnn_losses.append(arc_nll)
             
             # Convert the dense soft adjacency matrix to a sparse representation.
             # dense_to_sparse can handle batched inputs and will adjust node indices.
@@ -146,7 +145,7 @@ class GCNParser(nn.Module):
             dept_tag = dept_tag_updated.reshape(batch_size, seq_len, -1)
             
         # Compute final attended arcs.
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc) / arc_norm
+        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
 from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import BiaffineDependencyParser, GNNParser, GCNParser, GATParser, GNNParserDoubleLSTM
+from model.parser import BiaffineDependencyParser, GNNParser, GCNParser, GATParser, GNNParserDualLSTM
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
 from model.decoder import GraphDecoder
@@ -42,7 +42,7 @@ class StepParser(torch.nn.Module):
         elif self.config['parser_type'] == 'gnn':
             self.parser = GNNParser.get_model(self.config)
         elif self.config['parser_type'] == 'gnn2':
-            self.parser = GNNParserDoubleLSTM.get_model(self.config)
+            self.parser = GNNParserDualLSTM.get_model(self.config)
         elif self.config['parser_type'] == 'gcn':
             self.parser = GCNParser.get_model(self.config)
         elif self.config['parser_type'] == 'gat':
@@ -170,16 +170,15 @@ class StepParser(torch.nn.Module):
             mask = parser_output['mask'],
             metadata = parser_output['metadata'],
         )
+        gnn_losses = parser_output.get('gnn_losses', [])
 
         # Calculate loss or return predictions
         if self.mode in ["train", "validation"]:
             loss = (tagger_output.loss * self.config["tagger_lambda"]
                     + decoder_output["loss"] * self.config["parser_lambda"]
                     )
-            if self.config["parser_type"] == 'gnn' \
-                and self.config["gnn_enc_layers"] > 0 \
-                and len(parser_output["gnn_losses"]) > 0:
-                loss += sum(parser_output["gnn_losses"])/len(parser_output["gnn_losses"]) * self.config["parser_lambda"]
+            if len(gnn_losses) > 0:
+                loss += sum(gnn_losses)/len(gnn_losses) * self.config["parser_lambda"]
             return loss
         elif self.mode == "test":
             tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, mask)

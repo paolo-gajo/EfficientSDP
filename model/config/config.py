@@ -7,7 +7,6 @@ custom_config = {
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
     'dataset_max_steps': {'train': 0, 'val': 0, 'test': 0,},
-    'parser_lstm_hidden_size': 400,
     'gat_conv_heads': 8,
     'test_ignore_edge_dep': ['root', '-'], ## this will be ignored during evaluation
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
@@ -29,24 +28,27 @@ custom_config = {
     'adjacency_direction': 'directed', # 'directed', 'mirrored', 'undirected'
     'results_suffix': '_steps',
     'padding': 1,
-    'procedural': 1,
+    'procedural': 0,
 
     # vanilla options
     'use_tagger_lstm': 0,
     'use_parser_lstm': 0,
+    'parser_lstm_hidden_size': 400,
+    'parser_lstm_layers': 1,
     'use_tag_embeddings_in_parser': 0,
 
     # parser options
     'parser_type': 'gnn',
     # 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
-    'gnn_enc_layers': 0,
-    'top_k': 16,
+    'gnn_enc_layers': 1,
+    'arc_norm': 'scale', # 'sym', 'row', 'scale'
+    'activation': '',
+    'top_k': 1,
     'num_attn_heads': 1,
     'step_bilinear_attn': 0,
     'arc_pred': 'attn',
     'use_parser_gnn': 0,
     'mhabma': 0,
-    'arc_norm': 0,
     'arc_representation_dim': 500,
     'tag_representation_dim': 100,
     
@@ -58,11 +60,17 @@ custom_config = {
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
     'freeze_encoder': 1,
+<<<<<<< HEAD
     'learning_rate_encoder': 1e-4,
     'learning_rate_freeze': 1e-3,
     'use_gnn': '0',  # 'gat' or 'mpnn'
+=======
+    'learning_rate': 1e-3,
+    'use_gnn': 0,  # 'gat' or 'mpnn'
+>>>>>>> 6fd49da (update parsers)
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
+    'unfreeze_layers': [],
 
     # training options
     'batch_size': 8,

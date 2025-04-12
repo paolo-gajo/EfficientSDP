@@ -1,7 +1,7 @@
 import torch 
 import torch.nn as nn
-from transformers import AutoModel, BertConfig#, BertModel
-from model.encoder.bert_custom import BertModelNoPos, BertModelSteps, BertModelLaplacian, BertModel
+from transformers import AutoModel, BertConfig, BertModel
+from model.encoder.bert_custom import BertModelNoPos, BertModelSteps, BertModelLaplacian#, BertModel
 from transformers import BatchEncoding
 from typing import List, Dict, Optional
 import inspect
@@ -27,10 +27,15 @@ class Encoder(nn.Module):
                 self.encoder = BertModel.from_pretrained(self.config['model_name'])
         else:
             self.encoder = BertModelNoPos.from_pretrained(self.config['model_name'])
+        
         self.encoder_input_keys = [key for key in inspect.signature(self.encoder.forward).parameters.keys()]
-        if self.config['use_multihead_attention']:
-            self.mha = nn.MultiheadAttention(self.config['encoder_output_dim'], self.config['self_attention_heads'], batch_first = True, dropout = 0.2)
 
+        if self.config['use_multihead_attention']:
+            self.mha = nn.MultiheadAttention(self.config['encoder_output_dim'],
+                                             self.config['self_attention_heads'],
+                                             batch_first = True,
+                                             dropout = 0.2,
+                                             )
 
     def forward(
         self, 
@@ -58,16 +63,10 @@ class Encoder(nn.Module):
         return encoded_output
 
     def freeze_encoder(self):
-        """
-            freeze model parameters
-        """
         for param in self.encoder.parameters():
             param.requires_grad = False
 
     def unfreeze_encoder(self):
-        """
-            unfreeze model parameters
-        """
         for param in self.encoder.parameters():
             param.requires_grad = True
 

@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch_geometric.nn import GCNConv
 from torch_geometric.data import Batch, Data
-from model.parser.parser_utils import *
+from model.parser.parser_nn import *
 from model.decoder import masked_log_softmax
 import math
 from debug import save_heatmap
@@ -168,8 +168,6 @@ class DGMParser(nn.Module):
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
         dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
         
-        arc_norm = math.sqrt(head_arc.shape[-1])
-
         # the following is based on 'Graph-based Dependency Parsing with Graph Neural Networks'
         # https://aclanthology.org/P19-1237/
 
@@ -179,8 +177,8 @@ class DGMParser(nn.Module):
         float_mask = mask.float()
 
         for k in range(self.config['gnn_enc_layers']):
-            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) / arc_norm
-            # attended_arcs_t = self.arc_bilinear_t[k](head_arc, dept_arc) / arc_norm
+            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
+            # attended_arcs_t = self.arc_bilinear_t[k](head_arc, dept_arc)
             arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
             # arc_probs_t = torch.nn.functional.softmax(attended_arcs_t, dim = -1)
             # save_heatmap(arc_probs, 'arc_probs.pdf')
@@ -220,7 +218,7 @@ class DGMParser(nn.Module):
             fr_intermediate = torch.matmul(arc_probs, head_tag) + dr
             dept_tag = self.dept_rel_gnn(fr_intermediate, dept_tag)
 
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc) / arc_norm
+        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,

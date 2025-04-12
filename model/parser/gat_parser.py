@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.data import Data, Batch
-from model.parser.parser_utils import *
+from model.parser.parser_nn import *
 import math
 
 class GATParser(nn.Module):
@@ -24,7 +24,6 @@ class GATParser(nn.Module):
 
         self.head_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
-        assert self.config['gnn_enc_layers'] > 0, 'If using GCNParser, must have `gnn_enc_layers` > 0.'
         self.arc_bilinear = nn.ModuleList([
             BilinearMatrixAttention(arc_representation_dim,
                                     arc_representation_dim,
@@ -35,13 +34,33 @@ class GATParser(nn.Module):
         self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
 
         # Two-layer GCNs for updating arc representations.
-        self.conv1_arc = GATv2Conv(arc_representation_dim, arc_representation_dim, heads=self.config['num_attn_heads'], concat=False)
-        self.conv2_arc = GATv2Conv(arc_representation_dim, arc_representation_dim, heads=self.config['num_attn_heads'], concat=False)
+        self.conv1_arc = GATv2Conv(arc_representation_dim,
+                                    arc_representation_dim,
+                                    heads=self.config['num_attn_heads'],
+                                    concat=False,
+                                    edge_dim=1,
+                                    residual=True)
+        self.conv2_arc = GATv2Conv(arc_representation_dim,
+                                    arc_representation_dim,
+                                    heads=self.config['num_attn_heads'],
+                                    concat=False,
+                                    edge_dim=1,
+                                    residual=True)
         self.dropout_arc = nn.Dropout(input_dropout)
 
         # Two-layer GCNs for updating relation (tag) representations.
-        self.conv1_rel = GATv2Conv(tag_representation_dim, tag_representation_dim, heads=self.config['num_attn_heads'], concat=False)
-        self.conv2_rel = GATv2Conv(tag_representation_dim, tag_representation_dim, heads=self.config['num_attn_heads'], concat=False)
+        self.conv1_rel = GATv2Conv(tag_representation_dim,
+                                    tag_representation_dim,
+                                    heads=self.config['num_attn_heads'],
+                                    concat=False,
+                                    edge_dim=1,
+                                    residual=True)
+        self.conv2_rel = GATv2Conv(tag_representation_dim,
+                                    tag_representation_dim,
+                                    heads=self.config['num_attn_heads'],
+                                    concat=False,
+                                    edge_dim=1,
+                                    residual=True)
         self.dropout_rel = nn.Dropout(input_dropout)
 
         self.tag_representation_dim = tag_representation_dim
@@ -81,7 +100,6 @@ class GATParser(nn.Module):
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
         dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
 
-        arc_norm = math.sqrt(head_arc.shape[-1])
         _, seq_len, _ = encoded_text_input.size()
         gnn_losses = []
         valid_positions = mask.sum() - batch_size
@@ -90,17 +108,17 @@ class GATParser(nn.Module):
         # Loop over the number of GNN encoder layers.
         for k in range(self.config['gnn_enc_layers']):
             # Compute a soft adjacency (attention) matrix.
-            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) / arc_norm
+            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
             arc_probs = F.softmax(attended_arcs, dim=-1)
-            arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
             
             # Compute loss as in the original implementation.
-            range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
-            length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
-            arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
-            arc_loss = arc_loss[:, 1:]
-            arc_nll = -arc_loss.sum() / valid_positions.float()
-            gnn_losses.append(arc_nll)
+            # arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+            # range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
+            # length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
+            # arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
+            # arc_loss = arc_loss[:, 1:]
+            # arc_nll = -arc_loss.sum() / valid_positions.float()
+            # gnn_losses.append(arc_nll)
             
             # Convert the dense soft adjacency matrix to a sparse representation.
             # dense_to_sparse can handle batched inputs and will adjust node indices.
@@ -112,16 +130,16 @@ class GATParser(nn.Module):
             dept_arc_flat = dept_arc.reshape(batch_size * seq_len, -1)
             
             # Apply two GCN layers on head_arc.
-            head_arc_updated = self.conv1_arc(head_arc_flat, edge_index, edge_attr)
+            head_arc_updated = self.conv1_arc(head_arc_flat, edge_index)
             head_arc_updated = F.elu(head_arc_updated)
             head_arc_updated = self.dropout_arc(head_arc_updated)
-            head_arc_updated = self.conv2_arc(head_arc_updated, edge_index, edge_attr)
+            head_arc_updated = self.conv2_arc(head_arc_updated, edge_index)
             
             # Apply two GCN layers on dept_arc.
-            dept_arc_updated = self.conv1_arc(dept_arc_flat, edge_index, edge_attr)
+            dept_arc_updated = self.conv1_arc(dept_arc_flat, edge_index)
             dept_arc_updated = F.elu(dept_arc_updated)
             dept_arc_updated = self.dropout_arc(dept_arc_updated)
-            dept_arc_updated = self.conv2_arc(dept_arc_updated, edge_index, edge_attr)
+            dept_arc_updated = self.conv2_arc(dept_arc_updated, edge_index)
             
             # Reshape back to (batch_size, sequence_length, F)
             head_arc = head_arc_updated.reshape(batch_size, seq_len, -1)
@@ -131,21 +149,21 @@ class GATParser(nn.Module):
             head_tag_flat = head_tag.reshape(batch_size * seq_len, -1)
             dept_tag_flat = dept_tag.reshape(batch_size * seq_len, -1)
             
-            head_tag_updated = self.conv1_rel(head_tag_flat, edge_index, edge_attr)
+            head_tag_updated = self.conv1_rel(head_tag_flat, edge_index)
             head_tag_updated = F.elu(head_tag_updated)
             head_tag_updated = self.dropout_rel(head_tag_updated)
-            head_tag_updated = self.conv2_rel(head_tag_updated, edge_index, edge_attr)
+            head_tag_updated = self.conv2_rel(head_tag_updated, edge_index)
             
-            dept_tag_updated = self.conv1_rel(dept_tag_flat, edge_index, edge_attr)
+            dept_tag_updated = self.conv1_rel(dept_tag_flat, edge_index)
             dept_tag_updated = F.elu(dept_tag_updated)
             dept_tag_updated = self.dropout_rel(dept_tag_updated)
-            dept_tag_updated = self.conv2_rel(dept_tag_updated, edge_index, edge_attr)
+            dept_tag_updated = self.conv2_rel(dept_tag_updated, edge_index)
             
             head_tag = head_tag_updated.reshape(batch_size, seq_len, -1)
             dept_tag = dept_tag_updated.reshape(batch_size, seq_len, -1)
             
         # Compute final attended arcs.
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc) / arc_norm
+        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
