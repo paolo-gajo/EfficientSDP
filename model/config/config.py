@@ -60,14 +60,9 @@ custom_config = {
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
     'freeze_encoder': 1,
-<<<<<<< HEAD
     'learning_rate_encoder': 1e-4,
     'learning_rate_freeze': 1e-3,
     'use_gnn': '0',  # 'gat' or 'mpnn'
-=======
-    'learning_rate': 1e-3,
-    'use_gnn': 0,  # 'gat' or 'mpnn'
->>>>>>> 6fd49da (update parsers)
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
     'unfreeze_layers': [],
