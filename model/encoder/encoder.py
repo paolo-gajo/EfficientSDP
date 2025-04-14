@@ -8,7 +8,7 @@ import inspect
 
 class Encoder(nn.Module):
 
-    def __init__(self, config):
+    def __init__(self, config, use_lora = False):
         super().__init__()
 
         self.config = config
@@ -27,7 +27,7 @@ class Encoder(nn.Module):
                 self.encoder = BertModel.from_pretrained(self.config['model_name'])
         else:
             self.encoder = BertModelNoPos.from_pretrained(self.config['model_name'])
-        
+
         self.encoder_input_keys = [key for key in inspect.signature(self.encoder.forward).parameters.keys()]
 
         if self.config['use_multihead_attention']:

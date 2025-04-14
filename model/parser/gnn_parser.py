@@ -10,9 +10,8 @@ from model.parser.parser_nn import *
 from model.decoder import masked_log_softmax
 import math
 from debug import save_heatmap
+import warnings
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-
-POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
 
 class GNNParser(nn.Module):
     def __init__(
@@ -29,9 +28,9 @@ class GNNParser(nn.Module):
     ) -> None:
         super().__init__()
         self.config = config
-        if self.config["use_parser_lstm"]:
+        if self.config["use_parser_rnn"]:
             self.encoder_h = encoder
-            encoder_dim = self.config["parser_lstm_hidden_size"] * 2
+            encoder_dim = self.config["parser_rnn_hidden_size"] * 2
         else:
             encoder_dim = embedding_dim
 
@@ -48,7 +47,7 @@ class GNNParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    norm_type=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'])
             for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -83,7 +82,7 @@ class GNNParser(nn.Module):
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_labels'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
-        if self.config["use_parser_lstm"]:
+        if self.config["use_parser_rnn"]:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.
@@ -154,23 +153,19 @@ class GNNParser(nn.Module):
             # are switched for h and arc_representation_dim
             hx = torch.matmul(arc_probs, head_arc)
             dx = torch.matmul(arc_probs.transpose(1, 2), dept_arc)
-            fx = (hx + dx) / 2
+            fx = hx + dx
 
-            head_arc_new = self.head_gnn(fx, head_arc)
-            head_arc = (head_arc + head_arc_new) / 2
+            head_arc = self.head_gnn(fx, head_arc)
             fx_intermediate = torch.matmul(arc_probs, head_arc) + dx
-            dept_arc_new = self.dept_gnn(fx_intermediate, dept_arc)
-            dept_arc = (dept_arc + dept_arc_new) / 2
+            dept_arc = self.dept_gnn(fx_intermediate, dept_arc)
 
             hr = torch.matmul(arc_probs, head_tag)
             dr = torch.matmul(arc_probs.transpose(1, 2), dept_tag)
-            fr = (hr + dr) / 2
+            fr = hr + dr
             
-            head_tag_new = self.head_rel_gnn(fr, head_tag)
-            head_tag = (head_tag + head_tag_new) / 2
+            head_tag = self.head_rel_gnn(fr, head_tag)
             fr_intermediate = torch.matmul(arc_probs, head_tag) + dr
-            dept_tag_new = self.dept_rel_gnn(fr_intermediate, dept_tag)
-            dept_tag = (dept_tag + dept_tag_new) / 2
+            dept_tag = self.dept_rel_gnn(fr_intermediate, dept_tag)
 
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc) # / self.arc_bilinear[-1].norm
 
@@ -224,15 +219,29 @@ class GNNParser(nn.Module):
             embedding_dim = config["encoder_output_dim"]
             tag_embedder = None
         n_edge_labels = config["n_edge_labels"]
-        if config['use_parser_lstm']:
-            encoder = nn.LSTM(
-                input_size=embedding_dim,
-                hidden_size=config["parser_lstm_hidden_size"],
-                num_layers=config['parser_lstm_layers'],
-                batch_first=True,
-                bidirectional=True,
-                dropout=0.3,
-            )
+        parser_rnn_type = config['parser_rnn_type']
+        if config['use_parser_rnn']:
+            if parser_rnn_type == 'lstm':
+                encoder = nn.LSTM(
+                    input_size=embedding_dim,
+                    hidden_size=config["parser_rnn_hidden_size"],
+                    num_layers=config['parser_rnn_layers'],
+                    batch_first=True,
+                    bidirectional=True,
+                    dropout=0.3,
+                )
+            elif parser_rnn_type == 'gru':
+                encoder = nn.GRU(
+                    input_size=embedding_dim,
+                    hidden_size=config["parser_rnn_hidden_size"],
+                    num_layers=config['parser_rnn_layers'],
+                    batch_first=True,
+                    bidirectional=True,
+                    dropout=0.3,
+                )
+            else:
+                warnings.warn(f"Parser type `{parser_rnn_type}` is neither `gru` nor `lstm`. Setting it to None.")
+                encoder = None
         else:
             encoder = None
         model_obj = cls(

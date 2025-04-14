@@ -77,6 +77,8 @@ class GraphDataset(Dataset):
         self.split = split
         self.ignore_keys = ['edge_index', 'adj_m', 'deg_m', 'graph_laplacian']
         self.tokenizer = tokenizer
+        if self.tokenizer.model_max_length > 1e6:
+            self.tokenizer.model_max_length = 512
         self.padding = config['padding']
         if not self.padding:
             raise NotImplementedError('Padding must be enabled.')

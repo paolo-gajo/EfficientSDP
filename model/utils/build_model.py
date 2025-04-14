@@ -1,10 +1,7 @@
-"""
-    build model from config
-"""
-
 from model.stepparser import StepParser
 from model.utils import is_file
 import torch
+from peft import LoraConfig, get_peft_model, TaskType
 
 def build_model(config, model_start_path = None):
     """
@@ -43,5 +40,17 @@ def build_model(config, model_start_path = None):
         for l in config['unfreeze_layers']:
             for param in model.encoder.encoder.encoder.layer[l].parameters():
                 param.requires_grad = True
+    
+    if config['use_lora']:
+        print('Applying LoRA...')
+        lora_config = LoraConfig(
+            task_type=TaskType.FEATURE_EXTRACTION,
+            r=16,
+            lora_alpha=16,
+            lora_dropout=0.1,
+            target_modules=["query", "key", "value"],
+            # layers_to_transform=[11],
+        )
+        model.encoder.encoder = get_peft_model(model.encoder.encoder, lora_config)
 
     return model

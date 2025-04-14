@@ -12,8 +12,6 @@ import math
 from debug import save_heatmap
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
-
 class GraphNNUnit(nn.Module):
     def __init__(self, h_dim, d_dim, use_residual=True, use_layer_norm=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -62,9 +60,9 @@ class DGMParser(nn.Module):
         super().__init__()
         self.config = config
 
-        if self.config["use_parser_lstm"]:
+        if self.config["use_parser_rnn"]:
             self.seq_encoder = encoder
-            encoder_dim = self.config["parser_lstm_hidden_size"] * 2
+            encoder_dim = self.config["parser_rnn_hidden_size"] * 2
         else:
             encoder_dim = embedding_dim
 
@@ -120,7 +118,7 @@ class DGMParser(nn.Module):
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_labels'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
-        if self.config["use_parser_lstm"]:
+        if self.config["use_parser_rnn"]:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.
@@ -269,10 +267,10 @@ class DGMParser(nn.Module):
         else:
             embedding_dim = config["encoder_output_dim"]
             tag_embedder = None
-        if config['use_parser_lstm']:
+        if config['use_parser_rnn']:
             encoder = nn.LSTM(
                 input_size=embedding_dim,
-                hidden_size=config["parser_lstm_hidden_size"],
+                hidden_size=config["parser_rnn_hidden_size"],
                 num_layers=3,
                 batch_first=True,
                 bidirectional=True,

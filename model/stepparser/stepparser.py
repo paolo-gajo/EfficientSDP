@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
 from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import BiaffineDependencyParser, GNNParser, GCNParser, GATParser, GNNParserDualLSTM
+from model.parser import MTRFGParser, SimpleParser, MultiParser, DualEncParser, GNNParser, GCNParser, GATParser, GNNParserDualLSTM
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
 from model.decoder import GraphDecoder
@@ -38,7 +38,13 @@ class StepParser(torch.nn.Module):
             )
         self.tagger = Tagger(self.config)
         if self.config['parser_type'] == 'mtrfg':
-            self.parser = BiaffineDependencyParser.get_model(self.config)
+            self.parser = MTRFGParser.get_model(self.config)
+        elif self.config['parser_type'] == 'simple':
+            self.parser = SimpleParser.get_model(self.config)
+        elif self.config['parser_type'] == 'dual':
+            self.parser = DualEncParser.get_model(self.config)            
+        elif self.config['parser_type'] == 'multi':
+            self.parser = MultiParser.get_model(self.config)            
         elif self.config['parser_type'] == 'gnn':
             self.parser = GNNParser.get_model(self.config)
         elif self.config['parser_type'] == 'gnn2':

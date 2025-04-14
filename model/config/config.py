@@ -31,17 +31,20 @@ custom_config = {
     'procedural': 0,
 
     # vanilla options
-    'use_tagger_lstm': 0,
-    'use_parser_lstm': 0,
-    'parser_lstm_hidden_size': 400,
-    'parser_lstm_layers': 1,
-    'use_tag_embeddings_in_parser': 0,
+    'use_tagger_rnn': 1,
+    'use_parser_rnn': 1,
+    'parser_rnn_type': 'gru', # 'gru' or 'lstm'
+    'parser_rnn_hidden_size': 400,
+    'parser_rnn_layers': 3,
+    'use_tag_embeddings_in_parser': 1,
+    'tag_embedding_type': 'linear',
 
     # parser options
-    'parser_type': 'gnn',
+    'parser_type': 'simple',
     # 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
     'gnn_enc_layers': 1,
-    'arc_norm': 'scale', # 'sym', 'row', 'scale'
+    'arc_norm': 1,
+    'parser_residual': 1,
     'activation': '',
     'top_k': 1,
     'num_attn_heads': 1,
@@ -53,16 +56,19 @@ custom_config = {
     'tag_representation_dim': 100,
     
     # model options
+    'freeze_encoder': 1,
+    'use_lora': 0,
+    'model_name': 'bert-base-uncased',
+    # 'model_name': 'google-bert/bert-large-uncased',
     'seed': 0,
     'tagger_lambda': 0.1,
     'parser_lambda': 1,
     'rep_mode': 'words', # either 'words' or 'tokens'
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
-    'freeze_encoder': 1,
     'learning_rate_encoder': 1e-4,
     'learning_rate_freeze': 1e-3,
-    'use_gnn': '0',  # 'gat' or 'mpnn'
+    'use_gnn': 0,  # 'gat' or 'mpnn'
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
     'unfreeze_layers': [],

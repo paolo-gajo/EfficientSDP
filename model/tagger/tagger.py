@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from transformers.modeling_outputs import TokenClassifierOutput
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import warnings
 
 class Tagger(nn.Module):
     """
@@ -14,7 +15,7 @@ class Tagger(nn.Module):
             config: A dictionary with keys:
                 - encoder_output_dim: Dimension of encoder representations.
                 - n_tags: Number of class labels.
-                - use_tagger_lstm: Boolean to use the LSTM tagger.
+                - use_tagger_rnn: Boolean to use the LSTM tagger.
                 - gumbel_softmax: Boolean for using Gumbel softmax.
         """
         super().__init__()
@@ -25,17 +26,29 @@ class Tagger(nn.Module):
         hidden_size_tagger = 128
         encoder_output_size = self.config['encoder_output_dim']
         self.num_tags = self.config['n_tags']
-
-        if self.config['use_tagger_lstm']:
-            # Use PyTorch's built-in bidirectional LSTM.
-            self.seq_encoder = nn.LSTM(
-                input_size=encoder_output_size,
-                hidden_size=hidden_size_tagger,
-                num_layers=1,
-                batch_first=True,
-                bidirectional=True
-            )
-            # Since the LSTM is bidirectional, output dimension is doubled.
+        parser_rnn_type = self.config['parser_rnn_type']
+        if config['use_tagger_rnn']:
+            if parser_rnn_type == 'lstm':
+                self.seq_encoder = nn.LSTM(
+                    input_size=encoder_output_size,
+                    hidden_size=hidden_size_tagger,
+                    num_layers=1,
+                    batch_first=True,
+                    bidirectional=True,
+                    dropout=0.3,
+                )
+            elif parser_rnn_type == 'gru':
+                self.seq_encoder = nn.GRU(
+                    input_size=encoder_output_size,
+                    hidden_size=hidden_size_tagger,
+                    num_layers=1,
+                    batch_first=True,
+                    bidirectional=True,
+                    dropout=0.3,
+                )
+            else:
+                warnings.warn(f"Parser type `{parser_rnn_type}` is neither `gru` nor `lstm`. Setting it to None.")
+                self.seq_encoder = None
             classifier_input_size = 2 * hidden_size_tagger
         else:
             classifier_input_size = encoder_output_size
@@ -88,7 +101,7 @@ class Tagger(nn.Module):
         """
         encoder_reps = self.dropout(encoder_reps)
         
-        if self.config['use_tagger_lstm']:
+        if self.config['use_tagger_rnn']:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.

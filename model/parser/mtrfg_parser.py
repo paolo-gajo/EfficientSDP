@@ -10,47 +10,7 @@ from model.parser.parser_nn import *
 from debug.viz import save_heatmap
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
-
-class BiaffineDependencyParser(nn.Module):
-    """
-    This dependency parser follows the model of
-    ` Deep Biaffine Attention for Neural Dependency Parsing (Dozat and Manning, 2016)
-    <https://arxiv.org/abs/1611.01734>`.
-
-    Word representations are generated using a bidirectional LSTM,
-    followed by separate biaffine classifiers for pairs of words,
-    predicting whether a directed arc exists between the two words
-    and the dependency label the arc should have. Decoding can either
-    be done greedily, or the optimal Minimum Spanning Tree can be
-    decoded using Edmond's algorithm by viewing the dependency tree as
-    a MST on a fully connected graph, where nodes are words and edges
-    are scored dependency arcs.
-
-    Parameters
-    encoder_output_dim : ``int``, required
-        The output dimension of the text encoder
-    tag_representation_dim : ``int``, required.
-        The dimension of the MLPs used for dependency tag prediction.
-    arc_representation_dim : ``int``, required.
-        The dimension of the MLPs used for head arc prediction.
-    tag_feedforward : ``FeedForward``, optional, (default = None).
-        The feedforward network used to produce tag representations.
-        By default, a 1 layer feedforward network with an elu activation is used.
-    arc_feedforward : ``FeedForward``, optional, (default = None).
-        The feedforward network used to produce arc representations.
-        By default, a 1 layer feedforward network with an elu activation is used.
-    use_mst_decoding_for_validation : ``bool``, optional (default = True).
-        Whether to use Edmond's algorithm to find the optimal minimum spanning tree during validation.
-        If false, decoding is greedy.
-    dropout : ``float``, optional, (default = 0.0)
-        The dropout applied to the embedded text input.
-    initializer : ``InitializerApplicator``, optional (default=``InitializerApplicator()``)
-        Used to initialize the model parameters.
-    regularizer : ``RegularizerApplicator``, optional (default=``None``)
-        If provided, will be used to calculate the regularization penalty during training.
-    """
-
+class MTRFGParser(nn.Module):
     def __init__(
         self,
         config: Dict,
@@ -65,9 +25,9 @@ class BiaffineDependencyParser(nn.Module):
     ) -> None:
         super().__init__()
         self.config = config
-        if self.config["use_parser_lstm"]:
+        if self.config["use_parser_rnn"]:
             self.seq_encoder = encoder
-            encoder_dim = self.config["parser_lstm_hidden_size"] * 2
+            encoder_dim = self.config["parser_rnn_hidden_size"] * 2
         else:
             encoder_dim = embedding_dim
 
@@ -82,7 +42,7 @@ class BiaffineDependencyParser(nn.Module):
                     arc_representation_dim,
                     use_input_biases=True,
                     bias_type='simple',
-                    norm_type=self.config['arc_norm'],
+                    arc_norm=self.config['arc_norm'],
                 )
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -107,53 +67,12 @@ class BiaffineDependencyParser(nn.Module):
         step_indices: torch.Tensor = None,
         graph_laplacian: torch.Tensor = None,
     ) -> Dict[str, torch.Tensor]:
-        """
-        Parameters
-        ----------
-        encoded_text_input: torch.FloatTensor
-            A tensor of shape [batch_size, sequence_length, embedding_dim] that contains the token embeddings
-            for each token in the sequence. `embedding_dim` is the size of the embedding.
-        pos_tags: torch.LongTensor
-            A tensor of shape [batch_size, sequence_length] that contains the tags ( predicted or groundtruth )
-        mask: torch.LongTensor
-            A tensor of shape [batch_size, sequence_length] denoting the padded elements in the batch.
-            (0 if padding, 1 if non-padding)
-        metadata : List[Dict[str, Any]], optional (default=None)
-            A list of dictionaries of metadata for each batch element which has keys:
-                words : ``List[str]``, required.
-                    The tokens in the original sentence.
-        head_tags : torch.LongTensor, optional (default = None)
-            A torch tensor representing the sequence of integer gold class labels for the arcs
-            in the dependency parse. Has shape ``(batch_size, sequence_length)``.
-        head_indices : torch.LongTensor, optional (default = None)
-            A torch tensor representing the sequence of integer indices denoting the parent of every
-            word in the dependency parse. Has shape ``(batch_size, sequence_length)``.
-
-        Returns
-        -------
-        An output dictionary consisting of:
-        loss : ``torch.FloatTensor``, optional
-            A scalar loss to be optimised.
-        arc_loss : ``torch.FloatTensor``
-            The loss contribution from the unlabeled arcs.
-        loss : ``torch.FloatTensor``, optional
-            The loss contribution from predicting the dependency
-            tags for the gold arcs.
-        heads : ``torch.FloatTensor``
-            The predicted head indices for each word. A tensor
-            of shape (batch_size, sequence_length).
-        head_types : ``torch.FloatTensor``
-            The predicted head types for each arc. A tensor
-            of shape (batch_size, sequence_length).
-        mask : ``torch.LongTensor``
-            A mask denoting the padded elements in the batch.
-        """
 
         if self.config["use_tag_embeddings_in_parser"]:
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_one_hot'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
-        if self.config["use_parser_lstm"]:
+        if self.config["use_parser_rnn"]:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.
@@ -298,11 +217,11 @@ class BiaffineDependencyParser(nn.Module):
         else:
             embedding_dim = config["encoder_output_dim"]
         n_edge_labels = config["n_edge_labels"]
-        if config['use_parser_lstm']:
+        if config['use_parser_rnn']:
             encoder = nn.LSTM(
                 input_size=embedding_dim,
-                hidden_size=config["parser_lstm_hidden_size"],
-                num_layers=config['parser_lstm_layers'],
+                hidden_size=config["parser_rnn_hidden_size"],
+                num_layers=config['parser_rnn_layers'],
                 batch_first=True,
                 bidirectional=True,
                 dropout=0.3,

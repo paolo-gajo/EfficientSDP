@@ -5,12 +5,12 @@ from allennlp.nn.initializers import InitializerApplicator, Initializer
 from allennlp.common.params import Params
 from allennlp.data.vocabulary import Vocabulary
 
-from model.parser.biaffine_dependency_parser_simple import BiaffineDependencyParserSimple
+from model.parser.biaffine_dependency_parser_simple import MTRFGParserSimple
 
 class TestDependencyParserSimple(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.parser = BiaffineDependencyParserSimple.from_donatelli_config()
+        cls.parser = MTRFGParserSimple.from_donatelli_config()
         cls.parser.eval()
         cls.embedding_dim = cls.parser.encoder.get_input_dim()
 
@@ -44,8 +44,8 @@ class TestDependencyParserSimple(unittest.TestCase):
         # embedding_dim = 768
         # encoder = Seq2SeqEncoder.by_name('stacked_bidirectional_lstm')(input_size=embedding_dim, hidden_size=400,
         #     num_layers=3, recurrent_dropout_probability=0.3, use_highway=True)
-        # old_parser = BiaffineDependencyParser(vocab, None, encoder, 10, 10)
-        # parser = BiaffineDependencyParserSimple(encoder)
+        # old_parser = MTRFGParser(vocab, None, encoder, 10, 10)
+        # parser = MTRFGParserSimple(encoder)
         pass
 
 

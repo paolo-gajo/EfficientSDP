@@ -35,8 +35,7 @@ keep_og_test=1
 
 use_bert_positional_embeddings=1
 use_abs_step_embeddings=0
-use_tag_embeddings_in_parser=0
-use_tagger_lstm=0
+use_tagger_rnn=0
 use_gnn=0
 use_step_mask=0
 laplacian_pe=0
@@ -58,49 +57,90 @@ seed_list=(
 parser_type_toggle=(
     # 'mtrfg'
     # 'gnn'
-    'gnn2'
+    # 'gnn2'
+    'simple'
     )
-use_parser_lstm_toggle=(
-    0
-    # 1
-    )
-freeze_encoder_toggle=(
+use_parser_rnn_toggle=(
     0
     # 1
     )
 arc_norm_toggle=(0 1)
 gnn_enc_layers_toggle=(0 1)
+use_tag_embeddings_in_parser_toggle=(
+    0
+    1
+    )
+freeze_encoder_toggle=(
+    # 0
+    1
+    )
+parser_residual_toggle=(
+    # 0
+    1
+    )
+use_lora_toggle=(
+    0
+    1
+    )
+parser_rnn_type_toggle=(
+    # 'lstm'
+    'gru'
+    )
+model_name_toggle=(
+    'bert-base-uncased'
+    # 'bert-large-uncased'
+    # 'google/bert_uncased_L-2_H-128_A-2'
+)
 
 for seed in "${seed_list[@]}"; do
     for parser_type in "${parser_type_toggle[@]}"; do
         for freeze_encoder in "${freeze_encoder_toggle[@]}"; do
             for gnn_enc_layers in "${gnn_enc_layers_toggle[@]}"; do
                 for arc_norm in "${arc_norm_toggle[@]}"; do
-                    for use_parser_lstm in "${use_parser_lstm_toggle[@]}"; do
-                        if [ "$parser_type" == "mtrfg" ] && [ "$gnn_enc_layers" == 1 ]; then
-                            echo 'Skipping mtrfg with gnn_enc_layers = 1'
-                            continue
-                        fi
-                        if [ "$parser_type" == "gnn2" ] && [ "$use_parser_lstm" == 0 ]; then
-                            echo 'Skipping gnn2 parser with use_parser_lstm = 0'
-                            continue
-                        fi
-                        
-                        cmd="python ./tools/train.py --opt \
+                    for use_parser_rnn in "${use_parser_rnn_toggle[@]}"; do
+                        for use_tag_embeddings_in_parser in "${use_tag_embeddings_in_parser_toggle[@]}"; do
+                            for parser_rnn_type in "${parser_rnn_type_toggle[@]}"; do
+                                for model_name in "${model_name_toggle[@]}"; do
+                                    for parser_residual in "${parser_residual_toggle[@]}"; do
+                                        for use_lora in "${use_lora_toggle[@]}"; do
+                                            if [ "$parser_type" == "mtrfg" ] && [ "$gnn_enc_layers" == 1 ]; then
+                                                echo 'Skipping mtrfg with gnn_enc_layers = 1'
+                                                continue
+                                            fi
+                                            if [ "$parser_type" == "gnn2" ] && [ "$use_parser_rnn" == 0 ]; then
+                                                echo 'Skipping gnn2 parser with use_parser_rnn = 0'
+                                                continue
+                                            fi
+                                            if [ "$use_lora" == 1 ] && [ "$freeze_encoder" == 0 ]; then
+                                                echo 'Skipping combo with LoRA/unfrozen encoder.'
+                                                continue
+                                            fi
+                                            cmd="python ./tools/train.py --opt \
 --use_tag_embeddings_in_parser $use_tag_embeddings_in_parser \
---use_tagger_lstm $use_tagger_lstm \
---use_parser_lstm $use_parser_lstm \
+--use_tagger_rnn $use_tagger_rnn \
+--use_parser_rnn $use_parser_rnn \
 --training $training \
 --training_steps $training_steps \
 --eval_steps $eval_steps \
 --freeze_encoder $freeze_encoder \
 --seed $seed \
---parser_type $parser_type --gnn_enc_layers $gnn_enc_layers --arc_norm $arc_norm"
-                        echo "Running command: $cmd"
-                        $cmd
+--parser_type $parser_type \
+--gnn_enc_layers $gnn_enc_layers \
+--arc_norm $arc_norm \
+--parser_rnn_type $parser_rnn_type \
+--model_name $model_name \
+--use_lora $use_lora"
+                                            echo "Running command: $cmd"
+                                            $cmd
+                                        done
+                                    done
+                                done
+                            done
+                        done
                     done
                 done
             done
         done
     done
 done
+

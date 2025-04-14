@@ -13,8 +13,6 @@ from debug import save_heatmap
 import copy
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-POS_TO_IGNORE = {"``", "''", ":", ",", ".", "PU", "PUNCT", "SYM"}
-
 class GNNParserDualLSTM(nn.Module):
     def __init__(
         self,
@@ -30,10 +28,10 @@ class GNNParserDualLSTM(nn.Module):
     ) -> None:
         super().__init__()
         self.config = config
-        if self.config["use_parser_lstm"]:
+        if self.config["use_parser_rnn"]:
             self.encoder_h = encoder
             self.encoder_d = copy.deepcopy(encoder)
-            encoder_dim = self.config["parser_lstm_hidden_size"] * 2
+            encoder_dim = self.config["parser_rnn_hidden_size"] * 2
         else:
             encoder_dim = embedding_dim
 
@@ -49,7 +47,7 @@ class GNNParserDualLSTM(nn.Module):
                                     arc_representation_dim,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    norm_type=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'])
             for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -85,7 +83,7 @@ class GNNParserDualLSTM(nn.Module):
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_labels'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
-        if self.config["use_parser_lstm"]:
+        if self.config["use_parser_rnn"]:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.
@@ -232,11 +230,11 @@ class GNNParserDualLSTM(nn.Module):
             embedding_dim = config["encoder_output_dim"]
             tag_embedder = None
         n_edge_labels = config["n_edge_labels"]
-        if config['use_parser_lstm']:
+        if config['use_parser_rnn']:
             encoder = nn.LSTM(
                 input_size=embedding_dim,
-                hidden_size=config["parser_lstm_hidden_size"],
-                num_layers=config['parser_lstm_layers'],
+                hidden_size=config["parser_rnn_hidden_size"],
+                num_layers=config['parser_rnn_layers'],
                 batch_first=True,
                 bidirectional=True,
                 dropout=0.3,

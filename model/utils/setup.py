@@ -27,7 +27,8 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     k_string = '-'.join([str(el) for el in [config[f'augment_k_{split}'] for split in splits]])
     keep_og_string = ''.join([str(el) for el in [config[f'keep_og_{split}'] for split in splits]])
     keep_k_string = f"keep_{keep_og_string}_k_{k_string}"
-    lstm_string = 1 if (config['use_tagger_lstm'] or config['use_parser_lstm']) else 0
+    tagger_rnn_string = 1 if config['use_tagger_rnn'] else 0
+    parser_rnn_string = 1 if config['use_parser_rnn'] else 0
     save_dir, model_name = config['save_dir'], config['model_name'].replace('/', '-').replace(' ', '')
     augment_type = 'none' if '1' not in aug_string else config['augment_type']
     training_amount = config['training_steps'] if config['training'] == 'steps' else config['epochs']
@@ -39,13 +40,16 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"stepmask_{config['use_step_mask']}",
                             f"gnn_{config['use_gnn']}",
                             f"bpos_{config['use_bert_positional_embeddings']}",
-                            f"tagemb_{config['use_tag_embeddings_in_parser']}",
-                            f'lstm_{lstm_string}',
+                            f"tagemb_{config['use_tag_embeddings_in_parser']}",'' \
+                            f'tagger_rnn_{tagger_rnn_string}',
+                            f"parser_rnn_{parser_rnn_string}_{config['parser_rnn_type']}_l{config['parser_rnn_layers']}_h{config['parser_rnn_hidden_size']}",
                             f"laplacian_pe_{config['laplacian_pe']}",
                             f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
                             f"data={config['dataset_name']}",
                             f'parser_type_{parser_type}',
                             f"arc_norm_{config['arc_norm']}",
+                            f"parser_residual_{config['parser_residual']}",
+                            f"use_lora_{config['use_lora']}",
                             f"aug_{aug_string}_{augment_type}_{keep_k_string}_{training_amount}",
                             f"{model_name}_{get_current_time_string()}_seed_{config['seed']}")
 
@@ -66,6 +70,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     config['encoder_output_dim'] = AutoConfig.from_pretrained(config['model_name']).hidden_size
 
     if config['freeze_encoder']:
+    # if not config['use_lora']:
         config['learning_rate'] = config['learning_rate_freeze']
     else:
         config['learning_rate'] = config['learning_rate_encoder']

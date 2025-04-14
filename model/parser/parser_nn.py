@@ -43,7 +43,7 @@ class BilinearMatrixAttention(nn.Module):
         use_input_biases: bool = False,
         out_features: int = 1,
         bias_type: str = 'simple',
-        norm_type: str = 'scale' # 'sym', 'row', 'scale'
+        arc_norm: bool = True,
     ) -> None:
         super().__init__()
         if use_input_biases:
@@ -57,8 +57,8 @@ class BilinearMatrixAttention(nn.Module):
                 torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
             )
         
-        self.norm = math.sqrt((matrix_1_dim + matrix_2_dim) / 2)
-        self.norm_type = norm_type
+        self.arc_norm = arc_norm
+        self.scale_norm = math.sqrt((matrix_1_dim + matrix_2_dim) / 2) if arc_norm else 1
         
         # Set up bias parameters based on the bias_type
         self.bias_type = bias_type.lower()
@@ -79,7 +79,7 @@ class BilinearMatrixAttention(nn.Module):
             self._bias_1 = None
             self._bias_2 = None
         else:
-            raise ValueError(f"Unsupported bias_type: {bias_type}. "
+            raise ValueError(f"Unsupported bias_type: {bias_type}."
                            "Choose from 'simple', 'gnn', 'dozat', or 'none'.")
 
         self.activation = activation or Passthrough()
@@ -131,8 +131,8 @@ class BilinearMatrixAttention(nn.Module):
         return self.normalize(self.activation(result))
 
     def normalize(self, adj):
-        if self.norm_type == "scale":
-                return adj / self.norm
+        if self.arc_norm:
+                return adj / self.scale_norm
         else:
             return adj
         
@@ -162,24 +162,22 @@ class GraphNNUnit(nn.Module):
     def forward(self, H, D):
         H_new = torch.matmul(H, self.W)
         D_new = torch.matmul(D, self.B)
-        transformed = F.tanh(H_new + D_new)
-        
+        out = F.tanh((H_new + D_new) / 2)
         if self.use_residual:
-            combined = transformed + D
-            if self.use_layer_norm:
-                return self.layer_norm(combined)
-            else:
-                return combined
+            out = out + (H + D) / 2
+            # out = out + H
+        if self.use_layer_norm:
+            return self.layer_norm(out)
         else:
-            return transformed
+            return out
 
 class SQRTNorm(nn.Module):
     def __init__(self, dim: int):
         super().__init__()
-        self.norm = math.sqrt(dim)
+        self.sqrt_norm = math.sqrt(dim)
     
     def forward(self, input: torch.Tensor):
-        return input / self.norm
+        return input / self.sqrt_norm
 
 class MHABMA(nn.Module):
     def __init__(
