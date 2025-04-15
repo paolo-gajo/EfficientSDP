@@ -1,7 +1,3 @@
-"""
-    A very simple training script!
-"""
-
 import torch
 import os
 from model.utils import save_json, build_dataloader, get_label_index_mapping, setup_config, build_model, get_index_label_mapping, build_optimizer

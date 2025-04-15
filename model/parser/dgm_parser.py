@@ -12,40 +12,6 @@ import math
 from debug import save_heatmap
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-class GraphNNUnit(nn.Module):
-    def __init__(self, h_dim, d_dim, use_residual=True, use_layer_norm=False, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.W = nn.Parameter(torch.Tensor(h_dim, d_dim))
-        self.B = nn.Parameter(torch.Tensor(h_dim, h_dim))
-        self.use_residual = use_residual
-        self.use_layer_norm = use_layer_norm
-
-        if self.use_residual:
-            self.res = nn.Linear(h_dim, h_dim)
-        
-        if self.use_layer_norm:
-            self.layer_norm = nn.LayerNorm(h_dim)
-            
-        nn.init.xavier_uniform_(self.W)
-        nn.init.xavier_uniform_(self.B)
-
-    def forward(self, H, D):
-        H_new = torch.matmul(H, self.W)
-        D_new = torch.matmul(D, self.B)
-        transformed = F.tanh(H_new + D_new)
-        
-        if self.use_residual:
-            # Add the residual connection
-            combined = transformed + D
-            
-            # Apply layer normalization after the residual connection
-            if self.use_layer_norm:
-                return self.layer_norm(combined)
-            else:
-                return combined
-        else:
-            return transformed
-
 class DGMParser(nn.Module):
     def __init__(
         self,

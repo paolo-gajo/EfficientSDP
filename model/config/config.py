@@ -31,17 +31,17 @@ custom_config = {
     'procedural': 0,
 
     # vanilla options
-    'use_tagger_rnn': 1,
+    'use_tagger_rnn': 0,
     'use_parser_rnn': 1,
     'parser_rnn_type': 'gru', # 'gru' or 'lstm'
     'parser_rnn_hidden_size': 400,
-    'parser_rnn_layers': 3,
-    'use_tag_embeddings_in_parser': 1,
+    'parser_rnn_layers': 1,
+    'use_tag_embeddings_in_parser': 0,
     'tag_embedding_type': 'linear',
 
     # parser options
     'parser_type': 'simple',
-    # 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
+    # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
     'gnn_enc_layers': 1,
     'arc_norm': 1,
     'parser_residual': 1,
@@ -72,6 +72,7 @@ custom_config = {
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
     'unfreeze_layers': [],
+    'use_encoder_attn': 0,
 
     # training options
     'batch_size': 8,

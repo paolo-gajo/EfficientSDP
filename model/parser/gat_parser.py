@@ -27,7 +27,10 @@ class GATParser(nn.Module):
         self.arc_bilinear = nn.ModuleList([
             BilinearMatrixAttention(arc_representation_dim,
                                     arc_representation_dim,
-                                    use_input_biases=True)
+                                    activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
+                                    use_input_biases=True,
+                                    bias_type='simple',
+                                    arc_norm=self.config['arc_norm'])
             for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
@@ -131,15 +134,15 @@ class GATParser(nn.Module):
             
             # Apply two GCN layers on head_arc.
             head_arc_updated = self.conv1_arc(head_arc_flat, edge_index)
-            head_arc_updated = F.elu(head_arc_updated)
-            head_arc_updated = self.dropout_arc(head_arc_updated)
-            head_arc_updated = self.conv2_arc(head_arc_updated, edge_index)
+            # head_arc_updated = F.elu(head_arc_updated)
+            # head_arc_updated = self.dropout_arc(head_arc_updated)
+            # head_arc_updated = self.conv2_arc(head_arc_updated, edge_index)
             
             # Apply two GCN layers on dept_arc.
-            dept_arc_updated = self.conv1_arc(dept_arc_flat, edge_index)
-            dept_arc_updated = F.elu(dept_arc_updated)
-            dept_arc_updated = self.dropout_arc(dept_arc_updated)
-            dept_arc_updated = self.conv2_arc(dept_arc_updated, edge_index)
+            dept_arc_updated = self.conv2_arc(dept_arc_flat, edge_index)
+            # dept_arc_updated = F.elu(dept_arc_updated)
+            # dept_arc_updated = self.dropout_arc(dept_arc_updated)
+            # dept_arc_updated = self.conv2_arc(dept_arc_updated, edge_index)
             
             # Reshape back to (batch_size, sequence_length, F)
             head_arc = head_arc_updated.reshape(batch_size, seq_len, -1)
@@ -150,14 +153,14 @@ class GATParser(nn.Module):
             dept_tag_flat = dept_tag.reshape(batch_size * seq_len, -1)
             
             head_tag_updated = self.conv1_rel(head_tag_flat, edge_index)
-            head_tag_updated = F.elu(head_tag_updated)
-            head_tag_updated = self.dropout_rel(head_tag_updated)
-            head_tag_updated = self.conv2_rel(head_tag_updated, edge_index)
+            # head_tag_updated = F.elu(head_tag_updated)
+            # head_tag_updated = self.dropout_rel(head_tag_updated)
+            # head_tag_updated = self.conv2_rel(head_tag_updated, edge_index)
             
-            dept_tag_updated = self.conv1_rel(dept_tag_flat, edge_index)
-            dept_tag_updated = F.elu(dept_tag_updated)
-            dept_tag_updated = self.dropout_rel(dept_tag_updated)
-            dept_tag_updated = self.conv2_rel(dept_tag_updated, edge_index)
+            dept_tag_updated = self.conv2_rel(dept_tag_flat, edge_index)
+            # dept_tag_updated = F.elu(dept_tag_updated)
+            # dept_tag_updated = self.dropout_rel(dept_tag_updated)
+            # dept_tag_updated = self.conv2_rel(dept_tag_updated, edge_index)
             
             head_tag = head_tag_updated.reshape(batch_size, seq_len, -1)
             dept_tag = dept_tag_updated.reshape(batch_size, seq_len, -1)

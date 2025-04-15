@@ -135,7 +135,7 @@ class BilinearMatrixAttention(nn.Module):
                 return adj / self.scale_norm
         else:
             return adj
-        
+
 class GraphNNUnit(nn.Module):
     def __init__(self,
                 h_dim,
