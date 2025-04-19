@@ -11,3 +11,4 @@ notebooks/
 *.tex
 *.pth
 results*
+inference_outputs/

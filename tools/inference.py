@@ -24,14 +24,18 @@ import argparse
 import time
 
 def main(args):
-    
-    config = json.load(open(args.config_path, 'r'))['config']
-    # config['model_path'] = 'bert-base-uncased'
-    print('Custom config:\n\n', json.dumps(custom_config, indent=4))
-    print('Args:\n\n', json.dumps(args, indent=4))
-    
+    cfg_path = os.path.join(args.model_dir, 'config.json')
+    config = json.load(open(cfg_path, 'r'))['config']
+    print('Config:\n\n', json.dumps(config, indent=4))
+    config['output_edge_scores'] = 1
     # Set seeds and show save directory
     set_seeds(config['seed'])
+
+    inference_output_dir = './inference_outputs'
+    model_name = config['save_dir'].split('/')[-1]
+    model_outputs_dir = os.path.join(inference_output_dir, model_name)
+    if not os.path.exists(model_outputs_dir):
+        os.makedirs(model_outputs_dir)
 
     # Build dataloaders for training, validation, and testing
     train_loader = build_dataloader(config, loader_type='train')
@@ -51,7 +55,7 @@ def main(args):
     config['n_edge_labels'] = len(label_index_map['edgelabel2class'])
 
     # Build model and set up optimizer
-    model_start_path = args.get('model_start_path', None)
+    model_start_path = config.get('model_start_path', None)
     model = build_model(config, model_start_path=model_start_path)
 
     model.eval()
@@ -70,11 +74,15 @@ def main(args):
                 tot_time = round((time.time() - st_time) / test_loader.batch_size, 3)
                 pbar.set_description(f"Batch inference time is {tot_time} seconds", refresh = True)
                 times.append(tot_time)
-
-    
+    output_file_path = os.path.join(model_outputs_dir, f"{model_name}_output.json")
+    with open(output_file_path, 'w', encoding='utf8') as f:
+        json.dump(outputs, f, ensure_ascii = False, indent=4)
+    config_output_path = os.path.join(model_outputs_dir, 'config.json')
+    with open(config_output_path, 'w', encoding='utf8') as f:
+        json.dump(config, f, ensure_ascii = False, indent = 4)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run saved model inference.")
-    parser.add_argument("--cfgpath", help="Path of the config file.")
+    parser.add_argument("--model_dir", help="Path of the config file.")
     args = parser.parse_args()
     main(args)

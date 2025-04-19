@@ -7,7 +7,7 @@ from model.encoder import Encoder, BERTWordEmbeddings
 from model.parser import MTRFGParser, SimpleParser, MultiParser, DualEncParser, GNNParser, GCNParser, GATParser, GNNParserDualLSTM
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
-from model.decoder import GraphDecoder
+from model.decoder import GraphDecoder, masked_log_softmax
 import numpy as np
 import warnings
 from typing import Set, Tuple, List
@@ -177,7 +177,7 @@ class StepParser(torch.nn.Module):
             metadata = parser_output['metadata'],
         )
         gnn_losses = parser_output.get('gnn_losses', [])
-
+        decoder_mask = decoder_output['mask']
         # Calculate loss or return predictions
         if self.mode in ["train", "validation"]:
             loss = (tagger_output.loss * self.config["tagger_lambda"]
@@ -188,15 +188,26 @@ class StepParser(torch.nn.Module):
             return loss
         elif self.mode == "test":
             tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, mask)
-            parser_human_readable = self.decoder.make_output_human_readable(decoder_output)
+            decoder_human_readable = self.decoder.make_output_human_readable(decoder_output)
             if self.config["rep_mode"] == "words":
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(
-                    tagger_human_readable, parser_human_readable, model_input
+                    tagger_human_readable, decoder_human_readable, model_input
                 )
             elif self.config["rep_mode"] == "tokens":
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
-                    tagger_human_readable, parser_human_readable, model_input, mask
+                    tagger_human_readable, decoder_human_readable, model_input, mask
                 )
+            if self.config['output_edge_scores']:
+                scores = parser_output['attended_arcs']
+                softmax_scores = F.softmax(scores)
+                masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
+                score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
+                softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)
+                masked_log_softmax_score_var = torch.var(masked_log_softmax_scores.view(masked_log_softmax_scores.shape[0], -1), dim=1, unbiased=False)
+                for i in range(len(output_as_list_of_dicts)):
+                    output_as_list_of_dicts[i]['attn_scores_var'] = score_var.tolist()[i]
+                    output_as_list_of_dicts[i]['attn_scores_softmax_var'] = softmax_score_var.tolist()[i]
+                    output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
             return output_as_list_of_dicts
 
     def make_step_mask(

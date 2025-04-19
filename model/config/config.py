@@ -42,10 +42,10 @@ custom_config = {
     # parser options
     'parser_type': 'simple',
     # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
-    'gnn_enc_layers': 1,
+    'gnn_enc_layers': 0,
     'arc_norm': 1,
-    'parser_residual': 1,
-    'bias_type': 'simple',
+    'parser_residual': 0,
+    'bias_type': 'dozat',
     'activation': '',
     'top_k': 1,
     'num_attn_heads': 1,
@@ -74,6 +74,7 @@ custom_config = {
     'use_bert_positional_embeddings': 1,
     'unfreeze_layers': [],
     'use_encoder_attn': 0,
+    'output_edge_scores': 1,
 
     # training options
     'batch_size': 8,
