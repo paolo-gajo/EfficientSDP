@@ -45,7 +45,7 @@ class SimpleParser(nn.Module):
                                     arc_representation_dim,
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
-                                    bias_type='simple',
+                                    bias_type=self.config['bias_type'],
                                     arc_norm=self.config['arc_norm'])
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -194,8 +194,17 @@ class SimpleParser(nn.Module):
             if parser_rnn_type == 'lstm':
                 encoder = nn.LSTM(
                     input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
+                    hidden_size=int(config["parser_rnn_hidden_size"]),
+                    num_layers=int(config['parser_rnn_layers']),
+                    batch_first=True,
+                    bidirectional=True,
+                    dropout=0.3,
+                )
+            elif parser_rnn_type == 'normlstm':
+                encoder = LayerNormLSTM(
+                    input_size=embedding_dim,
+                    hidden_size=int(config["parser_rnn_hidden_size"]),
+                    num_layers=int(config['parser_rnn_layers']),
                     batch_first=True,
                     bidirectional=True,
                     dropout=0.3,
@@ -203,8 +212,8 @@ class SimpleParser(nn.Module):
             elif parser_rnn_type == 'gru':
                 encoder = nn.GRU(
                     input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
+                    hidden_size=int(config["parser_rnn_hidden_size"]),
+                    num_layers=int(config['parser_rnn_layers']),
                     batch_first=True,
                     bidirectional=True,
                     dropout=0.3,

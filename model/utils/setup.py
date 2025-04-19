@@ -46,7 +46,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"laplacian_pe_{config['laplacian_pe']}",
                             f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
                             f"data={config['dataset_name']}",
-                            f'parser_type_{parser_type}',
+                            f"parser_type_{parser_type}_mlp_{config['arc_representation_dim']}",
                             f"arc_norm_{config['arc_norm']}",
                             f"parser_residual_{config['parser_residual']}",
                             f"use_lora_{config['use_lora']}",

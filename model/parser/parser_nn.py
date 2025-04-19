@@ -1,10 +1,116 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List
+from torch.nn.utils.rnn import PackedSequence, pad_packed_sequence, pack_padded_sequence
+from typing import List, Tuple, Optional
 import math
 
 EPS = 1e-10
+
+class LayerNormLSTM(nn.Module):
+    """
+    A multi-layer LSTM with Layer Normalization applied to the outputs of each layer.
+    This module mimics nn.LSTM's interface but inserts nn.LayerNorm between layers.
+    """
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int = 1,
+        bidirectional: bool = False,
+        dropout: float = 0.0,
+        batch_first: bool = True
+    ):
+        super().__init__()
+        self.num_layers = num_layers
+        self.hidden_size = hidden_size
+        self.bidirectional = bidirectional
+        self.num_directions = 2 if bidirectional else 1
+        self.batch_first = batch_first
+        self.dropout = nn.Dropout(dropout) if dropout > 0 and num_layers > 1 else None
+
+        # Create per-layer LSTM and LayerNorm modules
+        self.layers = nn.ModuleList()
+        self.layer_norms = nn.ModuleList()
+
+        for layer in range(num_layers):
+            # Input size for this layer
+            layer_in_size = input_size if layer == 0 else hidden_size * self.num_directions
+            # Single-layer LSTM
+            lstm_layer = nn.LSTM(
+                input_size=layer_in_size,
+                hidden_size=hidden_size,
+                num_layers=1,
+                bidirectional=bidirectional,
+                batch_first=batch_first
+            )
+            self.layers.append(lstm_layer)
+            # LayerNorm over the full hidden dimension (including directions)
+            self.layer_norms.append(nn.LayerNorm(hidden_size * self.num_directions))
+
+    def forward(self, x, hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None):
+        """
+        Args:
+            x (Tensor or PackedSequence): Input sequence of shape
+                (batch, seq_len, input_size), or a PackedSequence.
+            hx (tuple): Optional initial states (h0, c0) each of shape
+                (num_layers * num_directions, batch, hidden_size).
+        Returns:
+            out: Output sequence (Tensor or PackedSequence).
+            (h_n, c_n): Final hidden and cell states.
+        """
+        # Handle PackedSequence inputs
+        is_packed = isinstance(x, PackedSequence)
+        if is_packed:
+            x, lengths = pad_packed_sequence(x, batch_first=self.batch_first)
+
+        batch, seq_len, _ = x.size()
+        # Initialize states per layer if not provided
+        if hx is None:
+            h_prev = [None] * self.num_layers
+            c_prev = [None] * self.num_layers
+        else:
+            h0_all, c0_all = hx
+            # Split combined states into per-layer states
+            h_prev = list(h0_all.view(self.num_layers, self.num_directions, batch, self.hidden_size))
+            c_prev = list(c0_all.view(self.num_layers, self.num_directions, batch, self.hidden_size))
+
+        layer_input = x
+        hidden_states = []
+        cell_states = []
+
+        # Forward through each layer
+        for layer_idx, (lstm, ln) in enumerate(zip(self.layers, self.layer_norms)):
+            init_state = None
+            if h_prev[layer_idx] is not None:
+                init_state = (
+                    h_prev[layer_idx].contiguous(),
+                    c_prev[layer_idx].contiguous()
+                )
+            # LSTM forward
+            out, (h_n_layer, c_n_layer) = lstm(layer_input, init_state)
+            # Apply LayerNorm
+            out = ln(out)
+            # Apply dropout (except after last layer)
+            if self.dropout is not None and layer_idx < self.num_layers - 1:
+                out = self.dropout(out)
+            # Save states
+            hidden_states.append(h_n_layer)
+            cell_states.append(c_n_layer)
+            # Input for next layer
+            layer_input = out
+
+        # Stack final states
+        h_n = torch.stack(hidden_states, dim=0).view(self.num_layers * self.num_directions, batch, self.hidden_size)
+        c_n = torch.stack(cell_states, dim=0).view(self.num_layers * self.num_directions, batch, self.hidden_size)
+
+        if is_packed:
+            # Re-pack the sequence
+            out = pack_padded_sequence(layer_input, lengths, batch_first=self.batch_first, enforce_sorted=False)
+        else:
+            out = layer_input
+
+        return out, (h_n, c_n)
 
 class BilinearMatrixAttention(nn.Module):
     """

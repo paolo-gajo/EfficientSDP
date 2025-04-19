@@ -32,8 +32,8 @@ custom_config = {
 
     # vanilla options
     'use_tagger_rnn': 0,
-    'use_parser_rnn': 1,
-    'parser_rnn_type': 'gru', # 'gru' or 'lstm'
+    'use_parser_rnn': 0,
+    'parser_rnn_type': 'lstm', # 'gru' or 'lstm' or 'normlstm'
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 1,
     'use_tag_embeddings_in_parser': 0,
@@ -45,6 +45,7 @@ custom_config = {
     'gnn_enc_layers': 1,
     'arc_norm': 1,
     'parser_residual': 1,
+    'bias_type': 'simple',
     'activation': '',
     'top_k': 1,
     'num_attn_heads': 1,

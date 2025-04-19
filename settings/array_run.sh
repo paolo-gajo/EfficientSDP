@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=3:00:00
+#SBATCH --time=2:00:00
 #SBATCH --output=./.slurm/%A_%a_output.log
 #SBATCH --error=./.slurm/%A_%a_error.log
 #SBATCH --mem=64G
@@ -15,9 +15,15 @@
 declare -a seed_values=(0)
 declare -a parser_type_options=("simple")
 declare -a arc_norm_options=(0 1)
-declare -a gnn_enc_layers_options=(0 1)
+declare -a gnn_enc_layers_options=(
+  0
+  # 1
+  )
 declare -a use_tag_embeddings_in_parser_options=(0 1)
-declare -a parser_residual_options=(0 1)
+declare -a parser_residual_options=(
+  0
+  # 1
+  )
 declare -a freeze_encoder_options=(
     # 0
     1
@@ -31,18 +37,24 @@ declare -a use_tagger_rnn_options=(
     1
     )
 declare -a use_lora_options=(
-    0
-    # 1
+    # 0
+    1
     )
 declare -a parser_rnn_type_options=(
-    # "none"
-    "gru"
-    "lstm"
+    "none"
+    # "gru"
+    # "lstm"
     )
 declare -a model_name_options=(
   "bert-base-uncased"
   # "bert-large-uncased"
   )
+declare -a dataset_name=(
+  "ade"
+  "conll04"
+  "scierc"
+  "yamakata"
+)
 
 # Fixed parameters
 augment_train=0
@@ -63,6 +75,9 @@ laplacian_pe=0
 training='steps'
 training_steps=2000
 eval_steps=100
+
+parser_rnn_layers=1
+parser_rnn_hidden_size=200
 
 # Generate all valid combinations
 valid_combinations=()
@@ -140,7 +155,9 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
 --parser_rnn_type $parser_rnn_type \
 --model_name $model_name \
 --use_lora $use_lora \
---parser_residual $parser_residual"
+--parser_residual $parser_residual \
+--parser_rnn_layers $parser_rnn_layers \
+--parser_rnn_hidden_size $parser_rnn_hidden_size"
     
     echo "Running job $SLURM_ARRAY_TASK_ID: $command_to_run"
     $command_to_run
