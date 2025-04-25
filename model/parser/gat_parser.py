@@ -30,7 +30,8 @@ class GATParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    arc_norm=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'],
+                                    )
             for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)

@@ -45,8 +45,10 @@ class LayerNormLSTM(nn.Module):
                 batch_first=batch_first
             )
             self.layers.append(lstm_layer)
+        for layer in range(num_layers):
             # LayerNorm over the full hidden dimension (including directions)
             self.layer_norms.append(nn.LayerNorm(hidden_size * self.num_directions))
+        # self.layer_norms.append(Passthrough())
 
     def forward(self, x, hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None):
         """
@@ -67,8 +69,8 @@ class LayerNormLSTM(nn.Module):
         batch, seq_len, _ = x.size()
         # Initialize states per layer if not provided
         if hx is None:
-            h_prev = [None] * self.num_layers
-            c_prev = [None] * self.num_layers
+            h_prev = [None] * (self.num_layers + 1)
+            c_prev = [None] * (self.num_layers + 1)
         else:
             h0_all, c0_all = hx
             # Split combined states into per-layer states
@@ -82,10 +84,10 @@ class LayerNormLSTM(nn.Module):
         # Forward through each layer
         for layer_idx, (lstm, ln) in enumerate(zip(self.layers, self.layer_norms)):
             init_state = None
-            if h_prev[layer_idx] is not None:
+            if h_prev[layer_idx - 1] is not None:
                 init_state = (
-                    h_prev[layer_idx].contiguous(),
-                    c_prev[layer_idx].contiguous()
+                    h_prev[layer_idx - 1].contiguous(),
+                    c_prev[layer_idx - 1].contiguous()
                 )
             # LSTM forward
             out, (h_n_layer, c_n_layer) = lstm(layer_input, init_state)
@@ -96,6 +98,8 @@ class LayerNormLSTM(nn.Module):
                 out = self.dropout(out)
             # Save states
             hidden_states.append(h_n_layer)
+            h_prev[layer_idx] = h_n_layer
+            c_prev[layer_idx] = c_n_layer
             cell_states.append(c_n_layer)
             # Input for next layer
             layer_input = out
@@ -339,9 +343,11 @@ class MHABMA(nn.Module):
         out = out.mean(dim = 1)
         return self.activation(out)
 
-class Passthrough:
-    """Simple pass-through activation that returns input unchanged."""
-    def __call__(self, x):
+class Passthrough(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
         return x
 
 class InputVariationalDropout(torch.nn.Dropout):

@@ -26,26 +26,27 @@ custom_config = {
     'keep_og_test': 1,
     'augment_type': 'permute', # 'permute', 'random', 'hybrid'
     'adjacency_direction': 'directed', # 'directed', 'mirrored', 'undirected'
-    'results_suffix': '_steps',
+    'results_suffix': '',
     'padding': 1,
     'procedural': 0,
 
     # vanilla options
     'use_tagger_rnn': 0,
-    'use_parser_rnn': 0,
-    'parser_rnn_type': 'lstm', # 'gru' or 'lstm' or 'normlstm'
+    'use_parser_rnn': 1,
+    'parser_rnn_type': 'normlstm', # 'gru' or 'lstm' or 'normlstm'
     'parser_rnn_hidden_size': 400,
-    'parser_rnn_layers': 1,
+    'parser_rnn_layers': 3,
     'use_tag_embeddings_in_parser': 0,
     'tag_embedding_type': 'linear',
 
     # parser options
-    'parser_type': 'simple',
-    # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
-    'gnn_enc_layers': 0,
+    'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
+    'parser_init': 'xu+norm', # 'xu', 'norm', 'xu+norm'
+    'bma_init': 'norm', # 'xu', 'norm'
     'arc_norm': 1,
+    'gnn_enc_layers': 0,
     'parser_residual': 0,
-    'bias_type': 'dozat',
+    'bias_type': 'simple',
     'activation': '',
     'top_k': 1,
     'num_attn_heads': 1,

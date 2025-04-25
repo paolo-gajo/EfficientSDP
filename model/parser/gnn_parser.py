@@ -47,7 +47,8 @@ class GNNParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    arc_norm=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'],
+                                    )
             for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -128,23 +129,23 @@ class GNNParser(nn.Module):
 
         gnn_losses = []
 
-        # _, seq_len, _ = encoded_text_input.size()
-        # valid_positions = mask.sum() - batch_size
-        # float_mask = mask.float()
+        _, seq_len, _ = encoded_text_input.size()
+        valid_positions = mask.sum() - batch_size
+        float_mask = mask.float()
         for k in range(self.config['gnn_enc_layers']):
             attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) # / self.arc_bilinear[k].norm
             # attended_arcs_t = self.arc_bilinear_t[k](head_arc, dept_arc)
-            arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
+            
             # arc_probs_t = torch.nn.functional.softmax(attended_arcs_t, dim = -1)
-            
-            # arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
-            
-            # range_tensor = torch.arange(batch_size).unsqueeze(1)
-            # length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
-            # arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
-            # arc_loss = arc_loss[:, 1:]
-            # arc_nll = -arc_loss.sum() / valid_positions.float()
-            # gnn_losses.append(arc_nll)
+            # arc_probs = torch.eye(attended_arcs.shape[-1], device=attended_arcs.device).expand(attended_arcs.shape[0])
+            arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
+            arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+            range_tensor = torch.arange(batch_size).unsqueeze(1)
+            length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
+            arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
+            arc_loss = arc_loss[:, 1:]
+            arc_nll = -arc_loss.sum() / valid_positions.float()
+            gnn_losses.append(arc_nll)
 
             # this is just a way of getting both H and D into the same feature matrix
             # and have them automatically multiplied by the weights of the soft adjacency matrix

@@ -48,7 +48,8 @@ class TriParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    arc_norm=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'],
+                                    )
 
 
         self._dropout = nn.Dropout(dropout)
@@ -247,7 +248,8 @@ class DualEncParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    arc_norm=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'],
+                                    )
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -464,7 +466,8 @@ class MultiParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    arc_norm=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'],
+                                    )
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)

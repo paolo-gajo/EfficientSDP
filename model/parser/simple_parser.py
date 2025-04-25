@@ -12,6 +12,7 @@ import math
 from debug import save_heatmap
 import warnings
 import copy
+import numpy as np
 
 class SimpleParser(nn.Module):
     def __init__(
@@ -33,6 +34,8 @@ class SimpleParser(nn.Module):
             encoder_dim = self.config["parser_rnn_hidden_size"] * 2
         else:
             encoder_dim = embedding_dim
+        self.lstm_input_size = embedding_dim
+        self.lstm_hidden_size = encoder_dim
 
         if self.config["use_tag_embeddings_in_parser"]:
             self.tag_embedder = tag_embedder
@@ -46,7 +49,8 @@ class SimpleParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type=self.config['bias_type'],
-                                    arc_norm=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'],
+                                    )
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -60,7 +64,19 @@ class SimpleParser(nn.Module):
         self._dropout = nn.Dropout(dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
-        self.apply(self._init_weights)
+        if self.config['parser_init'] == 'xu':
+            self.apply(self._init_weights_xavier_uniform)
+        elif self.config['parser_init'] == 'norm':
+            self.apply(self._init_norm)
+        elif self.config['parser_init'] == 'xu+norm':
+            self.apply(self._init_weights_xavier_uniform)
+            torch.nn.init.normal_(self.head_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+            torch.nn.init.normal_(self.dept_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+            # torch.nn.init.normal_(self.head_tag_feedforward.weight, std=np.sqrt(2 / (encoder_dim + tag_representation_dim)))
+            # torch.nn.init.normal_(self.dept_tag_feedforward.weight, std=np.sqrt(2 / (encoder_dim + tag_representation_dim)))
+        if self.config['bma_init'] == 'norm':
+            torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+            torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
         self.tag_representation_dim = tag_representation_dim
         self.n_edge_labels = n_edge_labels
 
@@ -150,7 +166,34 @@ class SimpleParser(nn.Module):
 
         return output
 
-    def _init_weights(self, module):
+    def _init_norm(self, module):
+        """
+        Initialize module parameters using a normal distribution.
+        Applies nn.init.normal_ to weight and bias tensors with mean=0.0 and std=np.sqrt(2/(self.lstm_input_size + self.lstm_hidden_size).
+        For 1D tensors (e.g., biases or projection vectors), temporarily unsqueeze to 2D.
+        """
+        # Weights
+        if hasattr(module, "weight") and isinstance(module.weight, torch.Tensor):
+            w = module.weight
+            if w.dim() < 2:
+                # Temporarily make it 2D
+                w_unsq = w.unsqueeze(0)
+                nn.init.normal_(w_unsq, mean=0.0, std=np.sqrt(2/(self.lstm_input_size + self.lstm_hidden_size)))
+                module.weight.data = w_unsq.squeeze(0)
+            else:
+                nn.init.normal_(w, mean=0.0, std=np.sqrt(2/(self.lstm_input_size + self.lstm_hidden_size)))
+
+        # Biases
+        if hasattr(module, "bias") and isinstance(module.bias, torch.Tensor):
+            b = module.bias
+            if b.dim() < 2:
+                b_unsq = b.unsqueeze(0)
+                nn.init.normal_(b_unsq, mean=0.0, std=np.sqrt(2/(self.lstm_input_size + self.lstm_hidden_size)))
+                module.bias.data = b_unsq.squeeze(0)
+            else:
+                nn.init.normal_(b, mean=0.0, std=np.sqrt(2/(self.lstm_input_size + self.lstm_hidden_size)))
+
+    def _init_weights_xavier_uniform(self, module):
         """
         Initialize module parameters using Xavier Uniform initialization.
         Applies nn.init.xavier_uniform_ to weight and bias tensors.
@@ -273,7 +316,8 @@ class DualEncParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    arc_norm=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'],
+                                    )
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -287,7 +331,7 @@ class DualEncParser(nn.Module):
         self._dropout = nn.Dropout(dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
-        self.apply(self._init_weights)
+        self.apply(self._init_weights_xavier_uniform)
         self.tag_representation_dim = tag_representation_dim
         self.n_edge_labels = n_edge_labels
 
@@ -381,7 +425,7 @@ class DualEncParser(nn.Module):
 
         return output
 
-    def _init_weights(self, module):
+    def _init_weights_xavier_uniform(self, module):
         """
         Initialize module parameters using Xavier Uniform initialization.
         Applies nn.init.xavier_uniform_ to weight and bias tensors.
@@ -490,7 +534,8 @@ class MultiParser(nn.Module):
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
-                                    arc_norm=self.config['arc_norm'])
+                                    arc_norm=self.config['arc_norm'],
+                                    )
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
@@ -516,7 +561,7 @@ class MultiParser(nn.Module):
         self._dropout = nn.Dropout(dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
-        self.apply(self._init_weights)
+        self.apply(self._init_weights_xavier_uniform)
         self.tag_representation_dim = tag_representation_dim
         self.n_edge_labels = n_edge_labels
 
@@ -597,7 +642,7 @@ class MultiParser(nn.Module):
 
         return output
 
-    def _init_weights(self, module):
+    def _init_weights_xavier_uniform(self, module):
         """
         Initialize module parameters using Xavier Uniform initialization.
         Applies nn.init.xavier_uniform_ to weight and bias tensors.

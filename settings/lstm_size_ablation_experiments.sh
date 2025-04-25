@@ -3,16 +3,22 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=2:00:00
-#SBATCH --output=./.slurm/%A_%a_output.log
-#SBATCH --error=./.slurm/%A_%a_error.log
+#SBATCH --time=01:00:00
+#SBATCH --output=./.slurm_lstm_no_tagger_rnn/%A_%a_output.log
+#SBATCH --error=./.slurm_lstm_no_tagger_rnn/%A_%a_error.log
 #SBATCH --mem=64G
-#SBATCH --array=0-N%8  # Replace N with (total_jobs-1), %8 means run 8 jobs simultaneously
-
+#SBATCH --array=0-N%8
+nvidia-smi
 source .env/bin/activate
 
 # Define all parameter combinations
-declare -a seed_values=(0 1 2)
+declare -a seed_values=(
+  # 0
+  # 1
+  # 2
+  3
+  4
+  )
 declare -a parser_type_options=("simple")
 declare -a arc_norm_options=(0 1)
 declare -a gnn_enc_layers_options=(
@@ -28,26 +34,26 @@ declare -a parser_residual_options=(
   # 1
   )
 declare -a freeze_encoder_options=(
-    # 0
-    1
-    )
-declare -a use_parser_rnn_options=(
-    # 0
-    1
-    )
-declare -a use_tagger_rnn_options=(
-    # 0
-    1
-    )
+  # 0
+  1
+  )
+declare -a use_parser_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
+  0
+  # 1
+  )
+declare -a use_tagger_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
+  0
+  # 1
+  )
 declare -a use_lora_options=(
-    0
-    # 1
-    )
+  0
+  # 1
+  )
 declare -a parser_rnn_type_options=(
-    # "none"
-    # "gru"
-    "lstm"
-    )
+  "none"
+  # "gru"
+  # "lstm"
+  )
 declare -a model_name_options=(
   "bert-base-uncased"
   # "bert-large-uncased"
@@ -80,21 +86,21 @@ training_steps=2000
 eval_steps=100
 
 parser_rnn_layers_options=(
-  # 0
-  1
-  2
-  3
+  0
+  # 1
+  # 2
+  # 3
   )
 parser_rnn_hidden_size_options=(
-  # 'none'
+  'none'
   # 100
   # 200
   # 300
-  400
+  # 400
   )
 arc_representation_dim_options=(100 300 500)
 
-results_suffix='_lstm_size_ablations_tagger_rnn'
+results_suffix='_lstm_size_ablations'
 # bias_type='dozat'
 bias_type='simple'
 
@@ -118,10 +124,10 @@ for seed in "${seed_values[@]}"; do
                                 if [ "$use_lora" == 1 ] && [ "$freeze_encoder" == 0 ]; then
                                   continue
                                 fi
-                                if [ "$use_parser_rnn_options" == 1 ] && [ "$freeze_encoder" == 0 ]; then
+                                if [ "$use_parser_rnn" == 1 ] && [ "$freeze_encoder" == 0 ]; then
                                   continue
                                 fi
-                                if [ "$use_tagger_rnn_options" == 1 ] && [ "$freeze_encoder" == 0 ]; then
+                                if [ "$use_tagger_rnn" == 1 ] && [ "$freeze_encoder" == 0 ]; then
                                   continue
                                 fi
                                 valid_combinations+=("$seed $parser_type $freeze_encoder $gnn_enc_layers $arc_norm $use_parser_rnn $use_tag_embeddings_in_parser $parser_rnn_type $model_name $parser_residual $use_lora $dataset_name $parser_rnn_layers $parser_rnn_hidden_size $arc_representation_dim")
@@ -194,6 +200,6 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
 else
   # If run manually, print the total number of combinations
   echo "This script should be run as a SLURM array job."
-  echo "Use: sbatch --array=0-$((total_combinations-1))%8 your_script.sh"
-  echo "This will distribute $total_combinations jobs across 8 GPUs."
+  echo "Use: sbatch --array=0-$((total_combinations-1))%N your_script.sh"
+  echo "This will distribute $total_combinations jobs across N GPUs."
 fi
