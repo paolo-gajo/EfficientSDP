@@ -31,7 +31,7 @@ class SimpleParser(nn.Module):
         self.config = config
         if self.config["use_parser_rnn"]:
             self.encoder_h = encoder
-            encoder_dim = self.config["parser_rnn_hidden_size"] * 2
+            encoder_dim = self.config["parser_rnn_hidden_size"] * 2 if self.config['parser_rnn_type'] != 'transformer' else embedding_dim
         else:
             encoder_dim = embedding_dim
         self.lstm_input_size = embedding_dim
@@ -99,17 +99,27 @@ class SimpleParser(nn.Module):
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
         if self.config["use_parser_rnn"]:
-            # Compute lengths from the binary mask.
-            lengths = mask.sum(dim=1).cpu()
-            # Pack the padded sequence using the lengths.
-            packed_input = pack_padded_sequence(
-                encoded_text_input, lengths, batch_first=True, enforce_sorted=False
-            )
-            packed_output, _ = self.encoder_h(packed_input)
-            # Unpack the sequence, ensuring the output has the original sequence length.
-            encoded_text_input, _ = pad_packed_sequence(packed_output,
-                                                        batch_first=True,
-                                                        total_length=encoded_text_input.size(1))
+            if self.config["parser_rnn_type"] != 'transformer':
+                # existing LSTM/RNN handling
+                lengths = mask.sum(dim=1).cpu()
+                packed_input = pack_padded_sequence(
+                    encoded_text_input, lengths, batch_first=True, enforce_sorted=False
+                )
+                packed_output, _ = self.encoder_h(packed_input)
+                encoded_text_input, _ = pad_packed_sequence(packed_output,
+                                                            batch_first=True,
+                                                            total_length=encoded_text_input.size(1))
+            else:
+                # Transformer encoding
+                # Transformer expects (seq_len, batch, embed_dim)
+                # Create padding mask: True for positions that should be masked
+                src = encoded_text_input.permute(1, 0, 2)
+                # mask: (batch, seq) -> src_key_padding_mask: (batch, seq)
+                src_key_padding_mask = mask == 0
+                # Apply transformer encoder
+                encoded = self.encoder_h(src, src_key_padding_mask=src_key_padding_mask)
+                # Back to (batch, seq, embed)
+                encoded_text_input = encoded.permute(1, 0, 2)
 
         batch_size, _, encoding_dim = encoded_text_input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
@@ -220,10 +230,9 @@ class SimpleParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
+        # Determine embedding_dim and tag_embedder
         if config["use_tag_embeddings_in_parser"]:
-            embedding_dim = (
-                config["encoder_output_dim"] + config["tag_embedding_dimension"]
-            )
+            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"]
             if config['tag_embedding_type'] == 'linear':
                 tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
             else:
@@ -232,40 +241,55 @@ class SimpleParser(nn.Module):
             embedding_dim = config["encoder_output_dim"]
             tag_embedder = None
         n_edge_labels = config["n_edge_labels"]
-        parser_rnn_type = config['parser_rnn_type']
+
+        # Build encoder
+        encoder = None
         if config['use_parser_rnn']:
-            if parser_rnn_type == 'lstm':
+            typ = config['parser_rnn_type']
+            if typ in ['lstm', 'normlstm']:
                 encoder = nn.LSTM(
                     input_size=embedding_dim,
-                    hidden_size=int(config["parser_rnn_hidden_size"]),
-                    num_layers=int(config['parser_rnn_layers']),
+                    hidden_size=config["parser_rnn_hidden_size"],
+                    num_layers=config['parser_rnn_layers'],
                     batch_first=True,
                     bidirectional=True,
                     dropout=0.3,
                 )
-            elif parser_rnn_type == 'normlstm':
-                encoder = LayerNormLSTM(
+            elif typ in ['rnn', 'normrnn']:
+                RNNClass = nn.RNN if typ == 'rnn' else LayerNormRNN
+                encoder = RNNClass(
                     input_size=embedding_dim,
-                    hidden_size=int(config["parser_rnn_hidden_size"]),
-                    num_layers=int(config['parser_rnn_layers']),
+                    hidden_size=config["parser_rnn_hidden_size"],
+                    num_layers=config['parser_rnn_layers'],
                     batch_first=True,
                     bidirectional=True,
                     dropout=0.3,
                 )
-            elif parser_rnn_type == 'gru':
+            elif typ == 'gru':
                 encoder = nn.GRU(
                     input_size=embedding_dim,
-                    hidden_size=int(config["parser_rnn_hidden_size"]),
-                    num_layers=int(config['parser_rnn_layers']),
+                    hidden_size=config["parser_rnn_hidden_size"],
+                    num_layers=config['parser_rnn_layers'],
                     batch_first=True,
                     bidirectional=True,
                     dropout=0.3,
                 )
+            elif typ == 'transformer':
+                # TransformerEncoder for sequence encoding
+                layer = nn.TransformerEncoderLayer(
+                    d_model=embedding_dim,
+                    nhead=config.get('transformer_n_heads', 8),
+                    dim_feedforward=config.get('transformer_ff_dim', 4 * embedding_dim),
+                    dropout=0.1,
+                )
+                encoder = nn.TransformerEncoder(
+                    layer,
+                    num_layers=config['parser_rnn_layers'],
+                )
             else:
-                warnings.warn(f"Parser type `{parser_rnn_type}` is neither `gru` nor `lstm`. Setting it to None.")
+                warnings.warn(f"Unknown parser_rnn_type {typ}, setting encoder to None.")
                 encoder = None
-        else:
-            encoder = None
+
         model_obj = cls(
             config=config,
             encoder=encoder,
@@ -275,7 +299,7 @@ class SimpleParser(nn.Module):
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],
             dropout=0.3,
-            use_mst_decoding_for_validation = config['use_mst_decoding_for_validation']
+            use_mst_decoding_for_validation=config['use_mst_decoding_for_validation'],
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj

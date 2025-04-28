@@ -33,7 +33,8 @@ custom_config = {
     # vanilla options
     'use_tagger_rnn': 0,
     'use_parser_rnn': 1,
-    'parser_rnn_type': 'normlstm', # 'gru' or 'lstm' or 'normlstm'
+    'parser_rnn_type': 'lstm',
+    # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 3,
     'use_tag_embeddings_in_parser': 0,

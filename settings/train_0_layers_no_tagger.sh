@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH -J train_array
+#SBATCH -J 0_layers_no_tag
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
-#SBATCH --output=./.slurm_lstm_no_tagger_rnn/%A_%a_output.log
-#SBATCH --error=./.slurm_lstm_no_tagger_rnn/%A_%a_error.log
+#SBATCH --output=./.slurm/%A_%a_output.log
+#SBATCH --error=./.slurm/%A_%a_error.log
 #SBATCH --mem=64G
 #SBATCH --array=0-N%8
 nvidia-smi
@@ -13,29 +13,29 @@ source .env/bin/activate
 
 # Define all parameter combinations
 declare -a seed_values=(
-  # 0
-  # 1
-  # 2
+  0
+  1
+  2
   3
   4
   )
+declare -a dataset_name_options=("ade" "conll04" "scierc" "yamakata")
+declare -a model_name_options=(
+  "bert-base-uncased"
+  # "bert-large-uncased"
+  )
 declare -a parser_type_options=("simple")
 declare -a arc_norm_options=(0 1)
-declare -a gnn_enc_layers_options=(
-  0
-  # 1
-  )
-declare -a use_tag_embeddings_in_parser_options=(
-  0
-  1
-  )
-declare -a parser_residual_options=(
-  0
-  # 1
-  )
+declare -a gnn_enc_layers_options=(0)
+declare -a parser_residual_options=(0)
+declare -a use_tag_embeddings_in_parser_options=(0 1)
 declare -a freeze_encoder_options=(
   # 0
   1
+  )
+declare -a use_lora_options=(
+  0
+  # 1
   )
 declare -a use_parser_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
   0
@@ -45,46 +45,11 @@ declare -a use_tagger_rnn_options=(  # used to skip invalid combinations, cannot
   0
   # 1
   )
-declare -a use_lora_options=(
-  0
-  # 1
-  )
 declare -a parser_rnn_type_options=(
   "none"
   # "gru"
   # "lstm"
   )
-declare -a model_name_options=(
-  "bert-base-uncased"
-  # "bert-large-uncased"
-  )
-declare -a dataset_name_options=(
-  "ade"
-  "conll04"
-  "scierc"
-  "yamakata"
-)
-
-# Fixed parameters
-augment_train=0
-augment_val=0
-augment_test=0
-augment_k_train=0
-augment_k_val=0
-augment_k_test=0
-keep_og_train=1
-keep_og_val=1
-keep_og_test=1
-use_bert_positional_embeddings=1
-use_abs_step_embeddings=0
-# use_tagger_rnn=0
-use_gnn=0
-use_step_mask=0
-laplacian_pe=0
-training='steps'
-training_steps=2000
-eval_steps=100
-
 parser_rnn_layers_options=(
   0
   # 1
@@ -99,10 +64,27 @@ parser_rnn_hidden_size_options=(
   # 400
   )
 arc_representation_dim_options=(100 300 500)
-
-results_suffix='_lstm_size_ablations'
-# bias_type='dozat'
 bias_type='simple'
+results_suffix='no_tagger'
+
+# Fixed parameters
+augment_train=0
+augment_val=0
+augment_test=0
+augment_k_train=0
+augment_k_val=0
+augment_k_test=0
+keep_og_train=1
+keep_og_val=1
+keep_og_test=1
+use_bert_positional_embeddings=1
+use_abs_step_embeddings=0
+use_gnn=0
+use_step_mask=0
+laplacian_pe=0
+training='steps'
+training_steps=2000
+eval_steps=100
 
 valid_combinations=()
 for seed in "${seed_values[@]}"; do
@@ -151,11 +133,6 @@ done
 # Get the total number of combinations
 total_combinations=${#valid_combinations[@]}
 echo "Total combinations: $total_combinations"
-
-# for combo in "${valid_combinations[@]}"; do
-#   echo "$combo"
-#   echo ''
-#   done
 
 # If SLURM_ARRAY_TASK_ID exists, use it to select the combination
 if [ -n "$SLURM_ARRAY_TASK_ID" ]; then

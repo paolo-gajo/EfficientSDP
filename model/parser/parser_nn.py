@@ -116,6 +116,122 @@ class LayerNormLSTM(nn.Module):
 
         return out, (h_n, c_n)
 
+class LayerNormRNN(nn.Module):
+    """
+    A multi-layer RNN with Layer Normalization applied to the outputs of each layer.
+    This module mimics nn.RNN's interface but inserts nn.LayerNorm between layers.
+
+    Args:
+        input_size:     The number of expected features in the input x.
+        hidden_size:    The number of features in the hidden state h.
+        num_layers:     Number of recurrent layers.
+        nonlinearity:   The nonlinearity to use ('tanh' or 'relu'). Default 'tanh'.
+        bidirectional:  If True, becomes a bidirectional RNN.
+        dropout:        If non-zero, introduces a Dropout layer on the outputs of each
+                        RNN layer except the last layer.
+        batch_first:    If True, input and output tensors are provided as (batch, seq, feature).
+    """
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int = 1,
+        nonlinearity: str = 'tanh',
+        bidirectional: bool = False,
+        dropout: float = 0.0,
+        batch_first: bool = True
+    ):
+        super().__init__()
+        self.num_layers    = num_layers
+        self.hidden_size   = hidden_size
+        self.bidirectional = bidirectional
+        self.num_directions = 2 if bidirectional else 1
+        self.batch_first   = batch_first
+
+        # Dropout applied between layers (not after last)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 and num_layers > 1 else None
+
+        # Build per-layer RNNs and LayerNorms
+        self.layers = nn.ModuleList()
+        self.layer_norms = nn.ModuleList()
+
+        for layer in range(num_layers):
+            in_size = input_size if layer == 0 else hidden_size * self.num_directions
+            rnn = nn.RNN(
+                input_size=in_size,
+                hidden_size=hidden_size,
+                num_layers=1,
+                nonlinearity=nonlinearity,
+                bidirectional=bidirectional,
+                batch_first=batch_first
+            )
+            self.layers.append(rnn)
+            # LayerNorm over the hidden feature dimension (times directions)
+            self.layer_norms.append(nn.LayerNorm(hidden_size * self.num_directions))
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        h0: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            x:  Input tensor of shape (batch, seq_len, input_size) if batch_first=True.
+            h0: Optional initial hidden state of shape
+                (num_layers * num_directions, batch, hidden_size).
+        Returns:
+            out:  Output tensor of shape (batch, seq_len, num_directions * hidden_size).
+            h_n:  Final hidden state of shape (num_layers * num_directions, batch, hidden_size).
+        """
+        batch_size, seq_len, _ = x.size()
+
+        # Prepare initial hidden states per layer
+        if h0 is None:
+            # Each layer will initialize its own zeros
+            h_prev = [None] * self.num_layers
+        else:
+            # Split the combined h0 into per-layer chunks
+            # shape of h0: (num_layers * num_directions, batch, hidden_size)
+            h_prev = list(h0.view(self.num_layers, self.num_directions, batch_size, self.hidden_size))
+
+        layer_input = x
+        final_states = []
+
+        # Iterate through layers
+        for layer_idx, (rnn, ln) in enumerate(zip(self.layers, self.layer_norms)):
+            # pick initial state for this layer, if provided
+            init_h = None
+            if h_prev[layer_idx] is not None:
+                # rnn expects shape (num_directions, batch, hidden_size)
+                init_h = h_prev[layer_idx].contiguous()
+
+            # Forward through RNN layer
+            out, h_n = rnn(layer_input, init_h)
+
+            # Apply layer normalization on the feature dimension
+            out = ln(out)
+
+            # Apply dropout except after last layer
+            if self.dropout is not None and layer_idx < self.num_layers - 1:
+                out = self.dropout(out)
+
+            # Collect final hidden state
+            final_states.append(h_n)
+
+            # The output of this layer is the input to next
+            layer_input = out
+
+        # Stack hidden states from all layers
+        # final_states is list of length num_layers, each of shape (num_directions, batch, hidden_size)
+        h_n = torch.stack(final_states, dim=0).view(
+            self.num_layers * self.num_directions,
+            batch_size,
+            self.hidden_size
+        )
+
+        return out, h_n
+
+
 class BilinearMatrixAttention(nn.Module):
     """
     Computes attention between two matrices using a bilinear attention function.
