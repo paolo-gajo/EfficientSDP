@@ -13,6 +13,46 @@ from debug import save_heatmap
 import warnings
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+def show_grad(grad):
+    # grad has the same shape [B, N, N]
+    # you can log its norm, mean, or even the full tensor
+    print(f"attended_arcs.grad ‖·‖₂ = {grad.norm().item():.4f}, mean = {grad.mean().item():.4f}")
+
+class GraphNNUnit(nn.Module):
+    def __init__(self,
+                h_dim,
+                d_dim,
+                use_residual=False,
+                use_layer_norm=False,
+                *args,
+                **kwargs):
+        super().__init__(*args, **kwargs)
+        self.W = nn.Parameter(torch.Tensor(h_dim, d_dim))
+        self.B = nn.Parameter(torch.Tensor(h_dim, h_dim))
+        self.use_residual = use_residual
+        self.use_layer_norm = use_layer_norm
+
+        if self.use_residual:
+            self.res = nn.Linear(h_dim, h_dim)
+        
+        if self.use_layer_norm:
+            self.layer_norm = nn.LayerNorm(h_dim)
+            
+        nn.init.xavier_uniform_(self.W)
+        nn.init.xavier_uniform_(self.B)
+
+    def forward(self, H, D):
+        H_new = torch.matmul(H, self.W)
+        D_new = torch.matmul(D, self.B)
+        out = F.tanh(H_new + D_new)
+        if self.use_residual:
+            out = out + H
+            # out = out + H
+        if self.use_layer_norm:
+            return self.layer_norm(out)
+        else:
+            return out
+
 class GNNParser(nn.Module):
     def __init__(
         self,
@@ -134,10 +174,8 @@ class GNNParser(nn.Module):
         float_mask = mask.float()
         for k in range(self.config['gnn_enc_layers']):
             attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) # / self.arc_bilinear[k].norm
-            # attended_arcs_t = self.arc_bilinear_t[k](head_arc, dept_arc)
-            
-            # arc_probs_t = torch.nn.functional.softmax(attended_arcs_t, dim = -1)
-            # arc_probs = torch.eye(attended_arcs.shape[-1], device=attended_arcs.device).expand(attended_arcs.shape[0])
+
+            # arc_probs = torch.eye(attended_arcs.shape[-1], device=attended_arcs.device).expand(attended_arcs.shape[0], -1, -1)
             arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
             arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
             range_tensor = torch.arange(batch_size).unsqueeze(1)
@@ -165,8 +203,8 @@ class GNNParser(nn.Module):
             fr = hr + dr
             
             head_tag = self.head_rel_gnn(fr, head_tag)
-            fr_intermediate = torch.matmul(arc_probs, head_tag) + dr
-            dept_tag = self.dept_rel_gnn(fr_intermediate, dept_tag)
+            # fr_intermediate = torch.matmul(arc_probs, head_tag) + dr
+            dept_tag = self.dept_rel_gnn(fr, dept_tag)
 
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc) # / self.arc_bilinear[-1].norm
 

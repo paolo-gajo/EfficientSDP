@@ -19,8 +19,10 @@ class LaplacePE(torch.nn.Module):
             eigenvalues, eigenvectors = torch.linalg.eigh(L)
             eigenvectors = pad_square_matrix(eigenvectors, self.max_steps)#[:L.shape[0], :]
             eigen_pad = torch.zeros(self.max_steps).unsqueeze(0).to(eigenvectors.device)
+            # we need `eigen_pad` because we need to be able to index the 0 vector for the indices that are 0
             eigenvectors = torch.cat([eigen_pad, eigenvectors], dim = 0)
             laplacian_pe = self.lap_proj(eigenvectors)
+            step_idx_monitor = step_idx.clone().detach().cpu()
             laplacian_pe_extended = laplacian_pe[step_idx, :]
             # save_heatmap(laplacian_pe_extended, 'lap_pe.pdf')
             input[i] = input[i] + laplacian_pe_extended

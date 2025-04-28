@@ -72,8 +72,6 @@ class SimpleParser(nn.Module):
             self.apply(self._init_weights_xavier_uniform)
             torch.nn.init.normal_(self.head_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
             torch.nn.init.normal_(self.dept_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
-            # torch.nn.init.normal_(self.head_tag_feedforward.weight, std=np.sqrt(2 / (encoder_dim + tag_representation_dim)))
-            # torch.nn.init.normal_(self.dept_tag_feedforward.weight, std=np.sqrt(2 / (encoder_dim + tag_representation_dim)))
         if self.config['bma_init'] == 'norm':
             torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
             torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
