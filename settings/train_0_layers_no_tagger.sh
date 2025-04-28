@@ -65,7 +65,7 @@ parser_rnn_hidden_size_options=(
   )
 arc_representation_dim_options=(100 300 500)
 bias_type='simple'
-results_suffix='no_tagger'
+results_suffix='_no_tagger'
 
 # Fixed parameters
 augment_train=0

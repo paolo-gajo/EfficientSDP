@@ -26,9 +26,9 @@ class Tagger(nn.Module):
         hidden_size_tagger = 128
         encoder_output_size = self.config['encoder_output_dim']
         self.num_tags = self.config['n_tags']
-        parser_rnn_type = self.config['parser_rnn_type']
+        tagger_rnn_type = self.config['tagger_rnn_type']
         if config['use_tagger_rnn']:
-            if parser_rnn_type == 'lstm':
+            if tagger_rnn_type == 'lstm':
                 self.seq_encoder = nn.LSTM(
                     input_size=encoder_output_size,
                     hidden_size=hidden_size_tagger,
@@ -37,7 +37,7 @@ class Tagger(nn.Module):
                     bidirectional=True,
                     dropout=0.3,
                 )
-            elif parser_rnn_type == 'gru':
+            elif tagger_rnn_type == 'gru':
                 self.seq_encoder = nn.GRU(
                     input_size=encoder_output_size,
                     hidden_size=hidden_size_tagger,
@@ -47,7 +47,7 @@ class Tagger(nn.Module):
                     dropout=0.3,
                 )
             else:
-                warnings.warn(f"Parser type `{parser_rnn_type}` is neither `gru` nor `lstm`. Setting it to None.")
+                warnings.warn(f"Tagger RNN type `{tagger_rnn_type}` is neither `gru` nor `lstm`. Setting it to None.")
                 self.seq_encoder = None
             classifier_input_size = 2 * hidden_size_tagger
         else:

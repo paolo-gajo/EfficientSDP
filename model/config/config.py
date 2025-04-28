@@ -32,6 +32,7 @@ custom_config = {
 
     # vanilla options
     'use_tagger_rnn': 0,
+    'tagger_rnn_type': 'lstm',
     'use_parser_rnn': 1,
     'parser_rnn_type': 'lstm',
     # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
