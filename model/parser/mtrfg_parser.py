@@ -43,6 +43,7 @@ class MTRFGParser(nn.Module):
                     use_input_biases=True,
                     bias_type='simple',
                     arc_norm=self.config['arc_norm'],
+                    
                 )
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)

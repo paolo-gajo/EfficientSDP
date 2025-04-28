@@ -12,4 +12,4 @@
 
 source .env/bin/activate
 
-python ./tools/train.py --opt --use_tag_embeddings_in_parser 0 --use_tagger_rnn 0 --use_parser_rnn 1 --training steps --training_steps 2000 --eval_steps 100 --freeze_encoder 1 --seed 1 --parser_type simple --gnn_enc_layers 0 --arc_norm 1 --parser_rnn_type lstm --model_name bert-base-uncased --use_lora 0 --parser_residual 0 --parser_rnn_layers 2 --parser_rnn_hidden_size 200 --dataset_name yamakata --results_suffix _lstm_size_ablations --arc_representation_dim 300
+python ./tools/train.py # --opt --use_tag_embeddings_in_parser 0 --use_tagger_rnn 0 --use_parser_rnn 1 --training steps --training_steps 2000 --eval_steps 100 --freeze_encoder 1 --seed 1 --parser_type simple --gnn_enc_layers 0 --arc_norm 1 --parser_rnn_type lstm --model_name bert-base-uncased --use_lora 0 --parser_residual 0 --parser_rnn_layers 2 --parser_rnn_hidden_size 200 --dataset_name yamakata --results_suffix _lstm_size_ablations --arc_representation_dim 300
