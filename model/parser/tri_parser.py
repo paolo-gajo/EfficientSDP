@@ -27,6 +27,7 @@ class TriParser(nn.Module):
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
+        raise NotImplementedError('this is wip for a parser with triaffine scoring')
         self.config = config
         if self.config["use_parser_rnn"]:
             self.encoder_h = encoder
