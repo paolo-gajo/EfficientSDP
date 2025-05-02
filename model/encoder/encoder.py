@@ -24,7 +24,7 @@ class Encoder(nn.Module):
                 # bert_config.device = self.config['device']
                 self.encoder = BertModelLaplacian.from_pretrained(self.config['model_name'], config=bert_config)
             else:
-                self.encoder = BertModel.from_pretrained(self.config['model_name'])
+                self.encoder = AutoModel.from_pretrained(self.config['model_name'])
         else:
             self.encoder = BertModelNoPos.from_pretrained(self.config['model_name'])
 

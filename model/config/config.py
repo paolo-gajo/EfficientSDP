@@ -63,6 +63,7 @@ custom_config = {
     'freeze_encoder': 1,
     'use_lora': 0,
     'model_name': 'bert-base-uncased',
+    # 'model_name': 'answerdotai/ModernBERT-base',
     # 'model_name': 'google-bert/bert-large-uncased',
     'seed': 0,
     'tagger_lambda': 0.1,

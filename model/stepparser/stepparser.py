@@ -19,7 +19,7 @@ class StepParser(torch.nn.Module):
         super().__init__()
         self.config = config
         self.encoder = Encoder(config)
-        self.config["encoder_output_dim"] = (self.encoder.encoder.embeddings.word_embeddings.weight.shape[-1])
+        self.config["encoder_output_dim"] = (self.encoder.encoder.config.hidden_size)
 
         if self.config["use_gnn"] == "gat":
             self.gnn = GATNet(
@@ -42,7 +42,7 @@ class StepParser(torch.nn.Module):
         elif self.config['parser_type'] == 'simple':
             self.parser = SimpleParser.get_model(self.config)
         elif self.config['parser_type'] == 'dual':
-            self.parser = DualEncParser.get_model(self.config)            
+            self.parser = DualEncParser.get_model(self.config)
         elif self.config['parser_type'] == 'multi':
             self.parser = MultiParser.get_model(self.config)            
         elif self.config['parser_type'] == 'gnn':
