@@ -38,13 +38,13 @@ custom_config = {
     # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 3,
-    'use_tag_embeddings_in_parser': 0,
+    # 'use_tag_embeddings_in_parser': 0,
     'tag_embedding_type': 'linear',
 
     # parser options
     'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
-    'parser_init': 'xu+norm', # 'xu', 'norm', 'xu+norm'
-    'bma_init': 'norm', # 'xu', 'norm'
+    'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
+    'bma_init': 'xu', # 'xu', 'norm'
     'arc_norm': 1,
     'gnn_enc_layers': 0,
     'parser_residual': 0,
@@ -62,7 +62,8 @@ custom_config = {
     # model options
     'freeze_encoder': 1,
     'use_lora': 0,
-    'model_name': 'bert-base-uncased',
+    # 'model_name': 'bert-base-uncased',
+    'model_name': 'microsoft/deberta-v3-base',
     # 'model_name': 'answerdotai/ModernBERT-base',
     # 'model_name': 'google-bert/bert-large-uncased',
     'seed': 0,
@@ -73,7 +74,6 @@ custom_config = {
     'use_abs_step_embeddings': 0,
     'learning_rate_encoder': 1e-4,
     'learning_rate_freeze': 1e-3,
-    'use_gnn': 0,  # 'gat' or 'mpnn'
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
     'unfreeze_layers': [],

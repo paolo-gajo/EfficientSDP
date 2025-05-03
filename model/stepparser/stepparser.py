@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
 from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import MTRFGParser, SimpleParser, MultiParser, DualEncParser, GNNParser, GCNParser, GATParser, GNNParserDualLSTM
+from model.parser import MTRFGParser, SimpleParser, GNNParser, GCNParser, GATParser
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
 from model.decoder import GraphDecoder, masked_log_softmax
@@ -19,36 +19,14 @@ class StepParser(torch.nn.Module):
         super().__init__()
         self.config = config
         self.encoder = Encoder(config)
-        self.config["encoder_output_dim"] = (self.encoder.encoder.config.hidden_size)
 
-        if self.config["use_gnn"] == "gat":
-            self.gnn = GATNet(
-                self.config["encoder_output_dim"],
-                self.config["encoder_output_dim"],
-                num_layers=3,
-                heads=8,
-            )
-        if self.config["use_gnn"] == "mpnn":
-            self.gnn = MPNNNet(
-                input_dim=self.config["encoder_output_dim"],
-                output_dim=self.config["encoder_output_dim"],
-                num_layers=3,  # or adjust as needed
-                dropout=0.2,
-                aggr="mean",  # mean aggregation as specified
-            )
         self.tagger = Tagger(self.config)
         if self.config['parser_type'] == 'mtrfg':
             self.parser = MTRFGParser.get_model(self.config)
         elif self.config['parser_type'] == 'simple':
-            self.parser = SimpleParser.get_model(self.config)
-        elif self.config['parser_type'] == 'dual':
-            self.parser = DualEncParser.get_model(self.config)
-        elif self.config['parser_type'] == 'multi':
-            self.parser = MultiParser.get_model(self.config)            
+            self.parser = SimpleParser.get_model(self.config)         
         elif self.config['parser_type'] == 'gnn':
             self.parser = GNNParser.get_model(self.config)
-        elif self.config['parser_type'] == 'gnn2':
-            self.parser = GNNParserDualLSTM.get_model(self.config)
         elif self.config['parser_type'] == 'gcn':
             self.parser = GCNParser.get_model(self.config)
         elif self.config['parser_type'] == 'gat':
@@ -122,15 +100,6 @@ class StepParser(torch.nn.Module):
             # OR PUT A FLAG TO LET ME CONTROL WHETHER TO USE ORACLE/NOT ORACLE FOR LAPLACIAN
             edge_index=None
 
-        # GNN processing
-        gnn_out_pooled = None
-        if self.config["use_gnn"] in ["mpnn", "gat"]:
-            encoder_output, gnn_out_pooled = self.gnn.process_step_representations(
-                encoder_output=encoder_output,
-                step_indices=step_indices,
-                edge_index_batch=edge_index,
-            )
-
         # Tagging
         tagger_output = self.tagger(
             encoder_output, mask=mask, labels=tagger_labels
@@ -156,10 +125,19 @@ class StepParser(torch.nn.Module):
             'pos_tags_labels': tagger_labels,
         }
 
+        if self.config['tag_embedding_type'] == 'linear':
+            pos_tags = pos_tags_dict['pos_tags_one_hot']
+        elif self.config['tag_embedding_type'] == 'embedding':
+            pos_tags = pos_tags_dict['pos_tags_labels']
+        elif self.config['tag_embedding_type'] == 'none':
+            pos_tags = None
+        else:
+            raise ValueError('parameter `tag_embedding_type` can only be == `linear` or `embedding`')
+
         # Parsing
         parser_output = self.parser(
             encoded_text_input=encoder_output,
-            pos_tags=pos_tags_dict, # if self.config['one_hot_tags'] else tagger_output.logits,
+            pos_tags=pos_tags,
             mask=mask,
             head_tags=head_tags,
             head_indices=head_indices,

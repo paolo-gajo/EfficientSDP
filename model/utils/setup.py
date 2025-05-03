@@ -37,21 +37,30 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     dir_path = os.path.join(f"{save_dir}{config['results_suffix']}",
                             f"freeze_encoder_{config['freeze_encoder']}",
                             f"arc_pred{config['arc_pred']}",
-                            f"stepmask_{config['use_step_mask']}",
-                            f"gnn_{config['use_gnn']}",
-                            f"bpos_{config['use_bert_positional_embeddings']}",
-                            f"tagemb_{config['use_tag_embeddings_in_parser']}",'' \
+                            # f"stepmask_{config['use_step_mask']}",
+                            # f"bpos_{config['use_bert_positional_embeddings']}",
                             f'tagger_rnn_{tagger_rnn_string}',
                             f"parser_rnn_{parser_rnn_string}_{config['parser_rnn_type']}_l{config['parser_rnn_layers']}_h{config['parser_rnn_hidden_size']}",
-                            f"laplacian_pe_{config['laplacian_pe']}",
-                            f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
+                            # f"laplacian_pe_{config['laplacian_pe']}",
+                            # f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
                             f"data={config['dataset_name']}",
                             f"parser_type_{parser_type}_mlp_{config['arc_representation_dim']}",
                             f"arc_norm_{config['arc_norm']}",
-                            f"parser_residual_{config['parser_residual']}",
+                            # f"parser_residual_{config['parser_residual']}",
                             f"use_lora_{config['use_lora']}",
-                            f"aug_{aug_string}_{augment_type}_{keep_k_string}_{training_amount}",
-                            f"{model_name}_{get_current_time_string()}_seed_{config['seed']}")
+                            f"tag_embedding_type_{config['tag_embedding_type']}",
+                            f"{model_name}_{get_current_time_string()}_seed_{config['seed']}",
+                            )
+
+    if config['freeze_encoder']:
+    # if not config['use_lora']:
+        config['learning_rate'] = config['learning_rate_freeze']
+    else:
+        config['learning_rate'] = config['learning_rate_encoder']
+
+    if 'deberta' in model_name.lower() or 'modern' in model_name.lower():
+        config['learning_rate'] = 2e-5
+    print('learning rate:', config['learning_rate'])
 
     config['save_dir'] = dir_path
     print(f'Created dir: {dir_path}')
@@ -68,12 +77,6 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
 
     ## get encoder output dimension (aka hidden size)
     config['encoder_output_dim'] = AutoConfig.from_pretrained(config['model_name']).hidden_size
-
-    if config['freeze_encoder']:
-    # if not config['use_lora']:
-        config['learning_rate'] = config['learning_rate_freeze']
-    else:
-        config['learning_rate'] = config['learning_rate_encoder']
 
     return config
 

@@ -18,6 +18,7 @@ class DGMParser(nn.Module):
         config: Dict,
         encoder: nn.LSTM,
         embedding_dim: int,
+        n_edge_labels: int,
         tag_embedder: nn.Linear,
         arc_representation_dim: int,
         tag_representation_dim: int,
@@ -32,7 +33,7 @@ class DGMParser(nn.Module):
         else:
             encoder_dim = embedding_dim
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
 
         self.tag_dropout = nn.Dropout(0.2)
@@ -65,7 +66,7 @@ class DGMParser(nn.Module):
 
         self.arc_representation_dim = arc_representation_dim
         self.tag_representation_dim = tag_representation_dim
-        self.n_edge_labels = self.config['n_edge_labels']
+        self.n_edge_labels = n_edge_labels
 
     def forward(
         self,
@@ -80,7 +81,7 @@ class DGMParser(nn.Module):
     ) -> Dict[str, torch.Tensor]:
 
         # encoded_text_input, mask, head_tags, head_indices = self.remove_extra_padding(encoded_text_input, mask, head_tags, head_indices)
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_labels'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
@@ -224,15 +225,21 @@ class DGMParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        if config["use_tag_embeddings_in_parser"]:
-            embedding_dim = (
-                config["encoder_output_dim"] + config["tag_embedding_dimension"]
-            )
-            # tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+        # Determine embedding_dim and tag_embedder
+        if config['tag_embedding_type'] == 'linear':
+            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"] # 768 + 100 = 868
+            tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+            print('Using nn.Linear for tag embeddings!')
+        elif config['tag_embedding_type'] == 'embedding':
+            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"] # 768 + 100 = 868
             tag_embedder = nn.Embedding(config["n_tags"], config["tag_embedding_dimension"])
-        else:
-            embedding_dim = config["encoder_output_dim"]
+            print('Using nn.Embedding for tag embeddings!')
+        elif config['tag_embedding_type'] == 'none':
+            embedding_dim = config["encoder_output_dim"] # 768
             tag_embedder = None
+        else:
+            raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
+        n_edge_labels = config["n_edge_labels"]
         if config['use_parser_rnn']:
             encoder = nn.LSTM(
                 input_size=embedding_dim,
@@ -248,6 +255,7 @@ class DGMParser(nn.Module):
             config=config,
             encoder=encoder,
             embedding_dim=embedding_dim,
+            n_edge_labels=n_edge_labels,
             tag_embedder=tag_embedder,
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],

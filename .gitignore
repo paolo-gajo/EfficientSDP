@@ -12,3 +12,4 @@ notebooks/
 *.pth
 results*
 inference_outputs/
+settings/

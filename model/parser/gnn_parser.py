@@ -74,7 +74,7 @@ class GNNParser(nn.Module):
         else:
             encoder_dim = embedding_dim
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(0.2)
         
@@ -97,8 +97,12 @@ class GNNParser(nn.Module):
         if self.config['gnn_enc_layers'] > 0:
             self.head_gnn = GraphNNUnit(arc_representation_dim, arc_representation_dim)
             self.dept_gnn = GraphNNUnit(arc_representation_dim, arc_representation_dim)
-            self.head_rel_gnn = GraphNNUnit(tag_representation_dim, tag_representation_dim)
-            self.dept_rel_gnn = GraphNNUnit(tag_representation_dim, tag_representation_dim)
+            self.head_rel_gnn = GraphNNUnit(tag_representation_dim,
+                                            tag_representation_dim,
+                                            use_residual=True)
+            self.dept_rel_gnn = GraphNNUnit(tag_representation_dim,
+                                            tag_representation_dim,
+                                            use_residual=True)
 
         self._dropout = nn.Dropout(dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
@@ -119,7 +123,7 @@ class GNNParser(nn.Module):
         graph_laplacian: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_labels'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
@@ -206,7 +210,7 @@ class GNNParser(nn.Module):
             # fr_intermediate = torch.matmul(arc_probs, head_tag) + dr
             dept_tag = self.dept_rel_gnn(fr, dept_tag)
 
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc) # / self.arc_bilinear[-1].norm
+        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
@@ -248,15 +252,20 @@ class GNNParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        if config["use_tag_embeddings_in_parser"]:
-            embedding_dim = (
-                config["encoder_output_dim"] + config["tag_embedding_dimension"]
-            )
-            # tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+        # Determine embedding_dim and tag_embedder
+        if config['tag_embedding_type'] == 'linear':
+            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"] # 768 + 100 = 868
+            tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+            print('Using nn.Linear for tag embeddings!')
+        elif config['tag_embedding_type'] == 'embedding':
+            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"] # 768 + 100 = 868
             tag_embedder = nn.Embedding(config["n_tags"], config["tag_embedding_dimension"])
-        else:
-            embedding_dim = config["encoder_output_dim"]
+            print('Using nn.Embedding for tag embeddings!')
+        elif config['tag_embedding_type'] == 'none':
+            embedding_dim = config["encoder_output_dim"] # 768
             tag_embedder = None
+        else:
+            raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
         n_edge_labels = config["n_edge_labels"]
         parser_rnn_type = config['parser_rnn_type']
         if config['use_parser_rnn']:

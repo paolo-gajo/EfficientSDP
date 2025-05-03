@@ -31,7 +31,7 @@ class MTRFGParser(nn.Module):
         else:
             encoder_dim = embedding_dim
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(0.2)
         
@@ -69,7 +69,7 @@ class MTRFGParser(nn.Module):
         graph_laplacian: torch.Tensor = None,
     ) -> Dict[str, torch.Tensor]:
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_one_hot'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
@@ -211,12 +211,20 @@ class MTRFGParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        if config["use_tag_embeddings_in_parser"]:
-            embedding_dim = (
-                config["encoder_output_dim"] + config["tag_embedding_dimension"]
-            )
+        # Determine embedding_dim and tag_embedder
+        if config['tag_embedding_type'] == 'linear':
+            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"] # 768 + 100 = 868
+            tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+            print('Using nn.Linear for tag embeddings!')
+        elif config['tag_embedding_type'] == 'embedding':
+            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"] # 768 + 100 = 868
+            tag_embedder = nn.Embedding(config["n_tags"], config["tag_embedding_dimension"])
+            print('Using nn.Embedding for tag embeddings!')
+        elif config['tag_embedding_type'] == 'none':
+            embedding_dim = config["encoder_output_dim"] # 768
+            tag_embedder = None
         else:
-            embedding_dim = config["encoder_output_dim"]
+            raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
         n_edge_labels = config["n_edge_labels"]
         if config['use_parser_rnn']:
             encoder = nn.LSTM(

@@ -29,7 +29,7 @@ def main():
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     # config = json.load(open('./results_steps/freeze_encoder_1/arc_predattn/stepmask_0/gnn_0/bpos_1/tagemb_0/lstm_0/laplacian_pe_/use_abs_step_embeddings_0/data=yamakata/parser_type_gnn_1/aug_000_none_keep_111_k_0-0-0_2000/bert-base-uncased_2025-03-31--08:05:16_seed_0/config.json', 'r'))['config']
     # config['model_path'] = 'bert-base-uncased'
-    print('Custom config:\n\n', json.dumps(custom_config, indent=4))
+    print('Config:\n\n', json.dumps(config, indent=4))
     print('Args:\n\n', json.dumps(args, indent=4))
     
     # Set seeds and show save directory
@@ -173,6 +173,7 @@ def main():
     # Save best model checkpoint if available
     if best_model_state is not None and config.get('save_model', False):
         torch.save(best_model_state, config['model_path'])
+        print(f"Model saved at: {config['model_path']}")
 
     # Save validation results and configuration details
     save_json(val_results_list, os.path.join(config['save_dir'], "val_results.json"))
@@ -189,14 +190,14 @@ def main():
         val_results, benchmark_metrics = run_evaluation(
             model, val_loader, evaluate_model, config, label_index_map
         )
-        save_json(val_results, os.path.join(config['save_dir'], f"val_results_best_f1={val_results['parser_labeled_results']}.json"))
+        save_json(val_results, os.path.join(config['save_dir'], f"val_results_best.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'val_results_benchmark.json'))
         print('Validation results:', val_results)
 
         test_results, benchmark_metrics = run_evaluation(
             model, test_loader, evaluate_model, config, label_index_map
         )
-        save_json(test_results, os.path.join(config['save_dir'], f"test_results_f1={test_results['parser_labeled_results']}.json"))
+        save_json(test_results, os.path.join(config['save_dir'], f"test_results_f1.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'test_results_benchmark.json'))
         print('Test results:', test_results)
 
