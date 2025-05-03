@@ -10,12 +10,13 @@
 #SBATCH --array=0-N%8
 mkdir -p .slurm
 nvidia-smi
+module load rust
 source .env/bin/activate
 
 # Define all parameter combinations
 declare -a seed_values=(
-  0
-  # 1
+  # 0
+  1
   # 2
   # 3
   # 4
