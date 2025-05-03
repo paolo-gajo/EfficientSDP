@@ -46,8 +46,8 @@ declare -a parser_residual_options=(0)
 #   1
 #   )
 declare -a freeze_encoder_options=(
-  0
   1
+  0
   )
 declare -a use_lora_options=(
   0
