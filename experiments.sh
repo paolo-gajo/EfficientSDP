@@ -15,8 +15,8 @@ source .env/bin/activate
 
 # Define all parameter combinations
 declare -a seed_values=(
-  # 0
-  1
+  0
+  # 1
   # 2
   # 3
   # 4
@@ -93,8 +93,8 @@ bias_type='simple'
 
 # Fixed parameters
 training='steps'
-training_steps=10
-eval_steps=10
+training_steps=2000
+eval_steps=100
 
 # new norm setting
 # results_suffix='_testing'

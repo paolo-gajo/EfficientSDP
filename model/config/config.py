@@ -31,7 +31,7 @@ custom_config = {
     'procedural': 0,
 
     # vanilla options
-    'use_tagger_rnn': 1,
+    'use_tagger_rnn': 0,
     'tagger_rnn_type': 'lstm',
     'use_parser_rnn': 1,
     'parser_rnn_type': 'lstm',
@@ -39,7 +39,7 @@ custom_config = {
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 3,
     # 'use_tag_embeddings_in_parser': 0,
-    'tag_embedding_type': 'embedding',
+    'tag_embedding_type': 'linear',
 
     # parser options
     'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
@@ -63,7 +63,7 @@ custom_config = {
     'freeze_encoder': 1,
     'use_lora': 0,
     'model_name': 'bert-base-uncased',
-    # 'model_name': 'microsoft/deberta-v3-base',
+    # 'model_name': 'microsoft/deberta-v/3-base',
     # 'model_name': 'answerdotai/ModernBERT-base',
     # 'model_name': 'google-bert/bert-large-uncased',
     'seed': 0,
