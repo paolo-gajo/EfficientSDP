@@ -35,7 +35,14 @@ def main():
     # Set seeds and show save directory
     set_seeds(config['seed'])
     print(f"Will save to: {config['save_dir']}")
-
+    
+    summary = {'config': config}
+    save_json(summary, os.path.join(config['save_dir'], 'config.json'))
+    cmd_file = os.path.join(config['save_dir'], 'train_command.txt')
+    save_python_command(cmd_file, sys.argv)
+    reproduce_training_cmd_file = os.path.join(config['save_dir'], 'full_train_reproduce_cmd.txt')
+    save_reproduce_training_cmd(sys.argv[0], config, args, reproduce_training_cmd_file)
+    
     # Build dataloaders for training, validation, and testing
     train_loader = build_dataloader(config, loader_type='train')
     val_loader = build_dataloader(config, loader_type='val')
@@ -179,10 +186,7 @@ def main():
     save_json(val_results_list, os.path.join(config['save_dir'], "val_results.json"))
     save_json(train_loader.dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
 
-    cmd_file = os.path.join(config['save_dir'], 'train_command.txt')
-    save_python_command(cmd_file, sys.argv)
-    reproduce_training_cmd_file = os.path.join(config['save_dir'], 'full_train_reproduce_cmd.txt')
-    save_reproduce_training_cmd(sys.argv[0], config, args, reproduce_training_cmd_file)
+
 
     # Final evaluation on validation and test sets
     if config.get('save_model', False):

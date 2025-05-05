@@ -1,6 +1,5 @@
 **/__pycache__/**
 **/.ipynb_checkpoints/**
-# results/
 **/*.egg-info/
 data/
 .env/
@@ -13,3 +12,4 @@ notebooks/
 results*
 inference_outputs/
 settings/
+paper/
