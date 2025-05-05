@@ -207,7 +207,6 @@ class GNNParser(nn.Module):
             fr = hr + dr
             
             head_tag = self.head_rel_gnn(fr, head_tag)
-            # fr_intermediate = torch.matmul(arc_probs, head_tag) + dr
             dept_tag = self.dept_rel_gnn(fr, dept_tag)
 
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)

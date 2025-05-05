@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH -J bert-yama-4to10
+#SBATCH -J bert-gnn
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=06:00:00
+#SBATCH --time=01:00:00
 #SBATCH --output=./.slurm/%A_%a_output.log
 #SBATCH --error=./.slurm/%A_%a_error.log
 #SBATCH --mem=64G
@@ -22,9 +22,9 @@ declare -a seed_values=(
   4
   )
 declare -a dataset_name_options=(
-  # "ade"
-  # "conll04"
-  # "scierc"
+  "ade"
+  "conll04"
+  "scierc"
   "yamakata"
   )
 declare -a model_name_options=(
@@ -34,12 +34,20 @@ declare -a model_name_options=(
   "bert-base-uncased"
   # "bert-large-uncased"
   )
-declare -a parser_type_options=("simple")
+declare -a parser_type_options=(
+  # "simple"
+  "gnn"
+  )
 declare -a arc_norm_options=(
   0
-  # 1
+  1
   )
-declare -a gnn_enc_layers_options=(0)
+declare -a gnn_enc_layers_options=(
+  0
+  1
+  2
+  3
+  )
 declare -a parser_residual_options=(0)
 declare -a freeze_encoder_options=(
   1
@@ -51,7 +59,7 @@ declare -a use_lora_options=(
   )
 declare -a use_tagger_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
   0
-  # 1
+  1
   )
 declare -a parser_rnn_type_options=(
   # "none"
@@ -59,17 +67,17 @@ declare -a parser_rnn_type_options=(
   "lstm"
   )
 parser_rnn_layers_options=(
-  # 0
-  # 1
-  # 2
-  # 3
-  4
-  5
-  6
-  7
-  8
-  9
-  10
+  0
+  1
+  2
+  3
+  # 4
+  # 5
+  # 6
+  # 7
+  # 8
+  # 9
+  # 10
   )
 parser_rnn_hidden_size_options=(
   # 0
@@ -80,13 +88,13 @@ parser_rnn_hidden_size_options=(
   )
 arc_representation_dim_options=(
   # 100
-  300
-  # 500
+  # 300
+  500
   )
 tag_embedding_type_options=(
-  # "linear"
+  "linear"
   # "embedding"
-  "none"
+  # "none"
 )
 bias_type='simple'
 
@@ -95,13 +103,13 @@ training='steps'
 training_steps=2000
 eval_steps=100
 
+results_suffix="_gnn"
+
 # new norm setting
-# results_suffix='_testing'
 # parser_init='xu+norm'
 # bma_init='norm'
 
 # original norm setting
-results_suffix="_yamkata_4to10"
 parser_init='xu'
 bma_init='xu'
 
@@ -194,6 +202,6 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
 else
   # If run manually, print the total number of combinations
   echo "This script should be run as a SLURM array job."
-  echo "Use: sbatch --array=0-$((total_combinations-1))%N your_script.sh"
+  echo "Use: sbatch --array=0-$((total_combinations-1))%999 experiments.sh"
   echo "This will distribute $total_combinations jobs across N GPUs."
 fi
