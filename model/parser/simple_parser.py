@@ -232,7 +232,8 @@ class SimpleParser(nn.Module):
         and config['parser_rnn_layers'] > 0 \
         and config['parser_rnn_hidden_size'] > 0:
             typ = config['parser_rnn_type']
-            if typ in ['lstm', 'normlstm']:
+            if typ == 'lstm':
+                print(f'Using {nn.LSTM} as parser encoder!')
                 encoder = nn.LSTM(
                     input_size=embedding_dim,
                     hidden_size=config["parser_rnn_hidden_size"],
@@ -241,9 +242,29 @@ class SimpleParser(nn.Module):
                     bidirectional=True,
                     dropout=0.3,
                 )
-            elif typ in ['rnn', 'normrnn']:
-                RNNClass = nn.RNN if typ == 'rnn' else LayerNormRNN
-                encoder = RNNClass(
+            elif typ == 'normlstm':
+                print(f'Using {LayerNormLSTM} as parser encoder!')
+                encoder = LayerNormLSTM(
+                    input_size=embedding_dim,
+                    hidden_size=config["parser_rnn_hidden_size"],
+                    num_layers=config['parser_rnn_layers'],
+                    batch_first=True,
+                    bidirectional=True,
+                    dropout=0.3,
+                )
+            elif typ == 'rnn':
+                print(f'Using {nn.RNN} as parser encoder!')
+                encoder = nn.RNN(
+                    input_size=embedding_dim,
+                    hidden_size=config["parser_rnn_hidden_size"],
+                    num_layers=config['parser_rnn_layers'],
+                    batch_first=True,
+                    bidirectional=True,
+                    dropout=0.3,
+                )
+            elif typ == 'normrnn':
+                print(f'Using {LayerNormRNN} as parser encoder!')
+                encoder = LayerNormRNN(
                     input_size=embedding_dim,
                     hidden_size=config["parser_rnn_hidden_size"],
                     num_layers=config['parser_rnn_layers'],
@@ -252,6 +273,7 @@ class SimpleParser(nn.Module):
                     dropout=0.3,
                 )
             elif typ == 'gru':
+                print(f'Using {nn.GRU} as parser encoder!')
                 encoder = nn.GRU(
                     input_size=embedding_dim,
                     hidden_size=config["parser_rnn_hidden_size"],
@@ -261,7 +283,7 @@ class SimpleParser(nn.Module):
                     dropout=0.3,
                 )
             elif typ == 'transformer':
-                # TransformerEncoder for sequence encoding
+                print(f'Using {nn.TransformerEncoderLayer} as parser encoder!')
                 layer = nn.TransformerEncoderLayer(
                     d_model=embedding_dim,
                     nhead=config.get('transformer_n_heads', 8),
@@ -273,6 +295,7 @@ class SimpleParser(nn.Module):
                     num_layers=config['parser_rnn_layers'],
                 )
             else:
+                print(f'Using {None} as parser encoder!')
                 warnings.warn(f"Unknown parser_rnn_type {typ}, setting encoder to None.")
                 encoder = None
 
