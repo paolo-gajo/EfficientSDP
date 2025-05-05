@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH -J train_sdp_s0
+#SBATCH -J bert-yama-4to10
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=01:00:00
+#SBATCH --time=06:00:00
 #SBATCH --output=./.slurm/%A_%a_output.log
 #SBATCH --error=./.slurm/%A_%a_error.log
 #SBATCH --mem=64G
-#SBATCH --array=0-N%8
+#SBATCH --array=0-N%999
 mkdir -p .slurm
 nvidia-smi
 module load rust
@@ -16,15 +16,15 @@ source .env/bin/activate
 # Define all parameter combinations
 declare -a seed_values=(
   0
-  # 1
-  # 2
-  # 3
-  # 4
+  1
+  2
+  3
+  4
   )
 declare -a dataset_name_options=(
-  "ade"
-  "conll04"
-  "scierc"
+  # "ade"
+  # "conll04"
+  # "scierc"
   "yamakata"
   )
 declare -a model_name_options=(
@@ -37,29 +37,21 @@ declare -a model_name_options=(
 declare -a parser_type_options=("simple")
 declare -a arc_norm_options=(
   0
-  1
+  # 1
   )
 declare -a gnn_enc_layers_options=(0)
 declare -a parser_residual_options=(0)
-# declare -a use_tag_embeddings_in_parser_options=(
-#   # 0
-#   1
-#   )
 declare -a freeze_encoder_options=(
   1
-  0
+  # 0
   )
 declare -a use_lora_options=(
   0
   # 1
   )
-# declare -a use_parser_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
-#   # 0
-#   1
-#   )
 declare -a use_tagger_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
   0
-  1
+  # 1
   )
 declare -a parser_rnn_type_options=(
   # "none"
@@ -67,10 +59,17 @@ declare -a parser_rnn_type_options=(
   "lstm"
   )
 parser_rnn_layers_options=(
-  0
-  1
-  2
-  3
+  # 0
+  # 1
+  # 2
+  # 3
+  4
+  5
+  6
+  7
+  8
+  9
+  10
   )
 parser_rnn_hidden_size_options=(
   # 0
@@ -80,13 +79,13 @@ parser_rnn_hidden_size_options=(
   400
   )
 arc_representation_dim_options=(
-  100
+  # 100
   300
-  500
+  # 500
   )
 tag_embedding_type_options=(
-  "linear"
-  "embedding"
+  # "linear"
+  # "embedding"
   "none"
 )
 bias_type='simple'
@@ -102,7 +101,7 @@ eval_steps=100
 # bma_init='norm'
 
 # original norm setting
-results_suffix="_lstm_steps_$training_steps"
+results_suffix="_yamkata_4to10"
 parser_init='xu'
 bma_init='xu'
 
