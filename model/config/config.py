@@ -2,7 +2,7 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
-    'dataset_name': 'yamakata',
+    'dataset_name': 'scierc',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -39,7 +39,7 @@ custom_config = {
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 3,
     # 'use_tag_embeddings_in_parser': 0,
-    'tag_embedding_type': 'linear',
+    'tag_embedding_type': 'embedding', # 'linear', 'embedding', 'none'
 
     # parser options
     'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'

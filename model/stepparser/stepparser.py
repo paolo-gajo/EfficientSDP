@@ -122,7 +122,7 @@ class StepParser(torch.nn.Module):
 
         pos_tags_dict = {
             'pos_tags_one_hot': pos_tags_parser.float(),
-            'pos_tags_labels': tagger_labels,
+            'pos_tags_labels': torch.argmax(tagger_output.logits, dim=-1),
         }
 
         if self.config['tag_embedding_type'] == 'linear':
