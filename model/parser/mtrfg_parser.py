@@ -25,10 +25,13 @@ class MTRFGParser(nn.Module):
     ) -> None:
         super().__init__()
         self.config = config
-        if self.config["use_parser_rnn"]:
+        if config['use_parser_rnn'] \
+        and config['parser_rnn_layers'] > 0 \
+        and config['parser_rnn_hidden_size'] > 0:
             self.seq_encoder = encoder
             encoder_dim = self.config["parser_rnn_hidden_size"] * 2
         else:
+            self.encoder_h = None
             encoder_dim = embedding_dim
 
         if self.config["tag_embedding_type"] != 'none':
@@ -73,7 +76,7 @@ class MTRFGParser(nn.Module):
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_one_hot'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
-        if self.config["use_parser_rnn"]:
+        if self.encoder_h is not None:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.
@@ -226,7 +229,9 @@ class MTRFGParser(nn.Module):
         else:
             raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
         n_edge_labels = config["n_edge_labels"]
-        if config['use_parser_rnn']:
+        if config['use_parser_rnn'] \
+        and config['parser_rnn_layers'] > 0 \
+        and config['parser_rnn_hidden_size'] > 0:
             encoder = nn.LSTM(
                 input_size=embedding_dim,
                 hidden_size=config["parser_rnn_hidden_size"],
