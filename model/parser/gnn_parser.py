@@ -124,7 +124,7 @@ class GNNParser(nn.Module):
     ) -> Dict[str, torch.Tensor]:
 
         if self.config["tag_embedding_type"] != 'none':
-            tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_labels'])))
+            tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
         if self.config["use_parser_rnn"]:

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J bert-gnn
+#SBATCH -J gnn-ablation
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
@@ -43,7 +43,7 @@ declare -a arc_norm_options=(
   1
   )
 declare -a gnn_enc_layers_options=(
-  0
+  # 0
   1
   2
   3
@@ -58,13 +58,14 @@ declare -a use_lora_options=(
   # 1
   )
 declare -a use_tagger_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
-  0
+  # 0
   1
   )
 declare -a parser_rnn_type_options=(
   # "none"
   # "gru"
   "lstm"
+  # "normlstm"
   )
 parser_rnn_layers_options=(
   0
