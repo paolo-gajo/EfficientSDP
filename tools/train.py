@@ -63,8 +63,24 @@ def main():
     # Build model and set up optimizer
     model_start_path = args.get('model_start_path', None)
     model = build_model(config, model_start_path=model_start_path)
-    # print(model)
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
+
+    warmup_steps = int(config['training_steps'] * config['warmup_ratio'])
+
+    if config['use_warmup']:
+        def lr_lambda(current_step):
+            # warm up
+            if current_step < warmup_steps:
+                return float(current_step) / float(max(1, warmup_steps))
+            else:
+                progress = float(current_step - warmup_steps) / float(max(1, config['training_steps'] - warmup_steps))
+                # decay
+                return 1.0 - progress * (1.0 - config['decay_ratio'])
+        
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    else:
+        scheduler = None
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -109,6 +125,7 @@ def main():
 
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
 
                 current_step += 1
                 pbar.update(1)

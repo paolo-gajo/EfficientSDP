@@ -81,10 +81,15 @@ custom_config = {
     'output_edge_scores': 1,
 
     # training options
+    'use_warmup': 1,
+    'warmup_ratio': 0.06,
+    'decay_ratio': 0.01,
+
     'batch_size': 8,
     'training': 'steps',
     'training_steps': 2000,
     'eval_steps': 100,
+    'test_steps': 2000,
     'epochs': 100,
     'patience': 0.3,
 }

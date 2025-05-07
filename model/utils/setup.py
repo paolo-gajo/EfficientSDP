@@ -58,8 +58,6 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     else:
         config['learning_rate'] = config['learning_rate_encoder']
 
-    if 'deberta' in model_name.lower() or 'modern' in model_name.lower():
-        config['learning_rate'] = 2e-5
     print('learning rate:', config['learning_rate'])
 
     config['save_dir'] = dir_path

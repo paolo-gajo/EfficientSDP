@@ -30,36 +30,36 @@ declare -a dataset_name_options=(
 declare -a model_name_options=(
   # "answerdotai/ModernBERT-base"
   # "microsoft/deberta-v3-base"
-  # "microsoft/deberta-v3-large"
-  "bert-base-uncased"
-  # "bert-large-uncased"
+  "microsoft/deberta-v3-large"
+  # "bert-base-uncased"
+  "bert-large-uncased"
   )
 declare -a parser_type_options=(
-  # "simple"
-  "gnn"
+  "simple"
+  # "gnn"
   )
 declare -a arc_norm_options=(
   0
   1
   )
 declare -a gnn_enc_layers_options=(
-  # 0
-  1
-  2
-  3
+  0
+  # 1
+  # 2
+  # 3
   )
 declare -a parser_residual_options=(0)
 declare -a freeze_encoder_options=(
-  1
-  # 0
+  # 1
+  0
   )
 declare -a use_lora_options=(
   0
   # 1
   )
 declare -a use_tagger_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
-  # 0
-  1
+  0
+  # 1
   )
 declare -a parser_rnn_type_options=(
   # "none"
@@ -101,10 +101,11 @@ bias_type='simple'
 
 # Fixed parameters
 training='steps'
-training_steps=2000
+training_steps=10000
 eval_steps=100
+test_steps=2000
 
-results_suffix="_gnn"
+results_suffix="_ft_large"
 
 # new norm setting
 # parser_init='xu+norm'
@@ -113,6 +114,10 @@ results_suffix="_gnn"
 # original norm setting
 parser_init='xu'
 bma_init='xu'
+
+use_warmup=1
+warmup_ratio=0.06
+decay_ratio=0.01
 
 valid_combinations=()
 for seed in "${seed_values[@]}"; do
@@ -192,7 +197,11 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
 --results_suffix $results_suffix \
 --training $training \
 --training_steps $training_steps \
---eval_steps $eval_steps"
+--eval_steps $eval_steps \
+--use_warmup $use_warmup \
+--warmup_ratio $warmup_ratio \
+--decay_ratio $decay_ratio \
+--test_steps $test_steps"
     
     echo "Running job $SLURM_ARRAY_TASK_ID: $command_to_run"
     $command_to_run
