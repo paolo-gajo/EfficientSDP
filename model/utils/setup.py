@@ -57,6 +57,8 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
         config['learning_rate'] = config['learning_rate_freeze']
     else:
         config['learning_rate'] = config['learning_rate_encoder']
+    if 'large' in model_name:
+        config['learning_rate'] = config['learning_rate_large']
 
     print('learning rate:', config['learning_rate'])
 

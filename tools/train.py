@@ -19,7 +19,7 @@ import sys
 import json
 from copy import deepcopy
 from tqdm.auto import tqdm
-
+from transformers import get_linear_schedule_with_warmup
 def main():
 
     # torch.set_printoptions(linewidth=10000, threshold=10000)
@@ -69,16 +69,9 @@ def main():
     warmup_steps = int(config['training_steps'] * config['warmup_ratio'])
 
     if config['use_warmup']:
-        def lr_lambda(current_step):
-            # warm up
-            if current_step < warmup_steps:
-                return float(current_step) / float(max(1, warmup_steps))
-            else:
-                progress = float(current_step - warmup_steps) / float(max(1, config['training_steps'] - warmup_steps))
-                # decay
-                return 1.0 - progress * (1.0 - config['decay_ratio'])
-        
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+        scheduler = get_linear_schedule_with_warmup(optimizer=optimizer,
+                                                    num_warmup_steps=warmup_steps,
+                                                    num_training_steps=config['training_steps'],)
     else:
         scheduler = None
 

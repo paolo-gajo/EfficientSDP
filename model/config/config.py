@@ -74,6 +74,7 @@ custom_config = {
     'use_abs_step_embeddings': 0,
     'learning_rate_encoder': 1e-4,
     'learning_rate_freeze': 1e-3,
+    'learning_rate_large': 5e-5,
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
     'unfreeze_layers': [],
