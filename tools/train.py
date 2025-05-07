@@ -89,12 +89,14 @@ def main():
 
     # Initialize tracking variables for evaluation and early stopping
     val_results_list = []
+    test_results_list = []
     best_model_state = None
     best_val_metric = -np.inf
     patience_counter = 0
 
     # Define evaluation frequency
-    eval_steps = config.get('eval_steps', 1000)
+    eval_steps = config.get('eval_steps', 100)
+    test_steps = config.get('test_steps', 2000)
 
     # Choose training mode
     training_mode = config.get('training', 'epochs')  # 'epochs' or 'steps'
@@ -160,6 +162,17 @@ def main():
                             print("Early stopping triggered.")
                             current_step = training_steps  # Force exit of outer loop
                             break
+                if current_step % eval_steps == 0:
+                    test_results, _ = run_evaluation(
+                        model=model,
+                        data_loader=test_loader,
+                        eval_function=evaluate_model,
+                        config=config,
+                        label_index_map=label_index_map,
+                        steps=current_step,
+                    )
+                    print(test_results)
+                    test_results_list.append(test_results)
 
     elif training_mode == 'epochs':
         num_epochs = config.get('epochs', 10)
@@ -200,7 +213,8 @@ def main():
         print(f"Model saved at: {config['model_path']}")
 
     # Save validation results and configuration details
-    save_json(val_results_list, os.path.join(config['save_dir'], "val_results.json"))
+    save_json(val_results_list, os.path.join(config['save_dir'], "val_results_series.json"))
+    save_json(test_results_list, os.path.join(config['save_dir'], "test_results_series.json"))
     save_json(train_loader.dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
 
 
@@ -211,14 +225,14 @@ def main():
         val_results, benchmark_metrics = run_evaluation(
             model, val_loader, evaluate_model, config, label_index_map
         )
-        save_json(val_results, os.path.join(config['save_dir'], f"val_results_best.json"))
+        save_json(val_results, os.path.join(config['save_dir'], f"val_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'val_results_benchmark.json'))
         print('Validation results:', val_results)
 
         test_results, benchmark_metrics = run_evaluation(
             model, test_loader, evaluate_model, config, label_index_map
         )
-        save_json(test_results, os.path.join(config['save_dir'], f"test_results_f1.json"))
+        save_json(test_results, os.path.join(config['save_dir'], f"test_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'test_results_benchmark.json'))
         print('Test results:', test_results)
 
