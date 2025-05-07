@@ -103,7 +103,7 @@ bias_type='simple'
 training='steps'
 training_steps=10000
 eval_steps=100
-test_steps=2000
+test_steps=100
 
 results_suffix="_ft_large"
 
