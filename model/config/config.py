@@ -2,7 +2,7 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
-    'dataset_name': 'scierc',
+    'dataset_name': 'ade',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -33,11 +33,11 @@ custom_config = {
     # vanilla options
     'use_tagger_rnn': 0,
     'tagger_rnn_type': 'lstm',
-    'use_parser_rnn': 1,
+    'use_parser_rnn': 0,
     'parser_rnn_type': 'lstm',
     # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'parser_rnn_hidden_size': 400,
-    'parser_rnn_layers': 3,
+    'parser_rnn_layers': 0,
     # 'use_tag_embeddings_in_parser': 0,
     'tag_embedding_type': 'embedding', # 'linear', 'embedding', 'none'
 
@@ -60,7 +60,7 @@ custom_config = {
     'tag_representation_dim': 100,
     
     # model options
-    'freeze_encoder': 1,
+    'freeze_encoder': 0,
     'use_lora': 0,
     'model_name': 'bert-base-uncased',
     # 'model_name': 'microsoft/deberta-v3-base',
@@ -89,9 +89,9 @@ custom_config = {
 
     'batch_size': 8,
     'training': 'steps',
-    'training_steps': 2000,
+    'training_steps': 10000,
     'eval_steps': 100,
-    'test_steps': 2000,
+    'test_steps': 100,
     'epochs': 100,
     'patience': 0.3,
 }
@@ -116,7 +116,6 @@ default_cfg = {
     'freeze_until_epoch' : 999, ## it freezes the encoder until a given epoch number, then unfreezes it. If freeze_until_epoch > epochs, then entire training will be with frozen encoder
     'test_ignore_tag': ['O', 'no_label'], ## this will be ignored during evaluation
     'test_ignore_edge_dep': ['root'], ## this will be ignored during evaluation
-    'tag_embedding_dimension': 100,
     'seed': 27,
     'self_attention_heads': 2,
     'use_multihead_attention' : False, ## whether to use multihead attention in encoder or not! This is a learnable module that would help in generating better representations.

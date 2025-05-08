@@ -230,12 +230,12 @@ class DGMParser(nn.Module):
     def get_model(cls, config):
         # Determine embedding_dim and tag_embedder
         if config['tag_embedding_type'] == 'linear':
-            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"] # 768 + 100 = 868
-            tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
+            tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
             print('Using nn.Linear for tag embeddings!')
         elif config['tag_embedding_type'] == 'embedding':
-            embedding_dim = config["encoder_output_dim"] + config["tag_embedding_dimension"] # 768 + 100 = 868
-            tag_embedder = nn.Embedding(config["n_tags"], config["tag_embedding_dimension"])
+            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
+            tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
             print('Using nn.Embedding for tag embeddings!')
         elif config['tag_embedding_type'] == 'none':
             embedding_dim = config["encoder_output_dim"] # 768

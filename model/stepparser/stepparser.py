@@ -188,7 +188,7 @@ class StepParser(torch.nn.Module):
                 )
             if self.config['output_edge_scores']:
                 scores = parser_output['attended_arcs']
-                softmax_scores = F.softmax(scores)
+                softmax_scores = F.softmax(scores, dim = -1)
                 masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
                 score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
                 softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)

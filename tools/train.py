@@ -66,6 +66,7 @@ def main():
     # Build model and set up optimizer
     model_start_path = args.get('model_start_path', None)
     model = build_model(config, model_start_path=model_start_path)
+    print(model)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
 
