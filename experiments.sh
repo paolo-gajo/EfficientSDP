@@ -2,7 +2,7 @@
 #SBATCH -J large
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:v100l:1
 #SBATCH --time=12:00:00
 #SBATCH --output=./.slurm/%A_%a_output.log
 #SBATCH --error=./.slurm/%A_%a_error.log
@@ -105,7 +105,7 @@ training_steps=10000
 eval_steps=100
 test_steps=100
 
-results_suffix="_ft_large"
+results_suffix="_ft_large_cosine_scheduler"
 
 # new norm setting
 # parser_init='xu+norm'
@@ -117,7 +117,6 @@ bma_init='xu'
 
 use_warmup=1
 warmup_ratio=0.06
-decay_ratio=0.01
 
 valid_combinations=()
 for seed in "${seed_values[@]}"; do

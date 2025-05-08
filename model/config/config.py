@@ -75,7 +75,7 @@ custom_config = {
     'use_abs_step_embeddings': 0,
     'learning_rate_encoder': 1e-4,
     'learning_rate_freeze': 1e-3,
-    'learning_rate_large': 5e-5,
+    'learning_rate_large': 3e-5,
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
     'unfreeze_layers': [],
@@ -84,8 +84,7 @@ custom_config = {
 
     # training options
     'use_warmup': 1,
-    'warmup_ratio': 0.06,
-    'decay_ratio': 0.01,
+    'warmup_ratio': 0.06, # percentage of steps over which to warm up
 
     'batch_size': 8,
     'training': 'steps',
