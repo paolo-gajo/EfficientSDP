@@ -2,7 +2,7 @@
 #SBATCH -J large
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:v100l:1
+#SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
 #SBATCH --output=./.slurm/%A_%a_output.log
 #SBATCH --error=./.slurm/%A_%a_error.log
@@ -199,7 +199,6 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
 --eval_steps $eval_steps \
 --use_warmup $use_warmup \
 --warmup_ratio $warmup_ratio \
---decay_ratio $decay_ratio \
 --test_steps $test_steps"
     
     echo "Running job $SLURM_ARRAY_TASK_ID: $command_to_run"
