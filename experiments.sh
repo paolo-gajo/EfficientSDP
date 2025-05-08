@@ -105,7 +105,7 @@ training_steps=10000
 eval_steps=100
 test_steps=100
 
-results_suffix="_ft_large_cosine_scheduler"
+results_suffix="_ft_base_10k"
 
 # new norm setting
 # parser_init='xu+norm'
@@ -115,8 +115,9 @@ results_suffix="_ft_large_cosine_scheduler"
 parser_init='xu'
 bma_init='xu'
 
-use_warmup=1
+use_warmup=0
 warmup_ratio=0.06
+scheduler_type='linear'
 
 valid_combinations=()
 for seed in "${seed_values[@]}"; do
@@ -199,6 +200,7 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
 --eval_steps $eval_steps \
 --use_warmup $use_warmup \
 --warmup_ratio $warmup_ratio \
+--scheduler_type $scheduler_type \
 --test_steps $test_steps"
     
     echo "Running job $SLURM_ARRAY_TASK_ID: $command_to_run"

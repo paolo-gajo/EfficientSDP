@@ -1,5 +1,4 @@
 import torch
-import torchtune
 import os
 
 import torchtune.training
@@ -13,7 +12,9 @@ from model.utils import (save_json,
                               run_evaluation,
                               load_json,
                               save_python_command,
-                              save_reproduce_training_cmd)
+                              save_reproduce_training_cmd,
+                              )
+from model.utils.train_utils import get_scheduler
 from model.config import default_cfg, custom_config
 from model.evaluation import evaluate_model
 from model.utils.graph_data_utils import get_mappings
@@ -68,17 +69,11 @@ def main():
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
 
-    warmup_steps = int(config['training_steps'] * config['warmup_ratio'])
-
-    if config['use_warmup']:
-        # scheduler = get_linear_schedule_with_warmup(optimizer=optimizer,
-        #                                             num_warmup_steps=warmup_steps,
-        #                                             num_training_steps=config['training_steps'],)
-        scheduler = torchtune.training.get_cosine_schedule_with_warmup(optimizer=optimizer,
-                                                    num_warmup_steps=warmup_steps,
-                                                    num_training_steps=config['training_steps'],)
-    else:
-        scheduler = None
+    scheduler = get_scheduler(optimizer=optimizer,
+                            warmup_steps=int(config['training_steps'] * config['warmup_ratio']),
+                            training_steps=config['training_steps'],
+                            scheduler_type=config['scheduler_type'],
+                            use_warmup=config['use_warmup'])
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -125,7 +120,8 @@ def main():
 
                 loss.backward()
                 optimizer.step()
-                scheduler.step()
+                if config['use_warmup']:
+                    scheduler.step()
 
                 current_step += 1
                 pbar.update(1)

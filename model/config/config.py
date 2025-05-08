@@ -62,9 +62,9 @@ custom_config = {
     # model options
     'freeze_encoder': 1,
     'use_lora': 0,
-    # 'model_name': 'bert-base-uncased',
+    'model_name': 'bert-base-uncased',
     # 'model_name': 'microsoft/deberta-v3-base',
-    'model_name': 'microsoft/deberta-v3-large',
+    # 'model_name': 'microsoft/deberta-v3-large',
     # 'model_name': 'answerdotai/ModernBERT-base',
     # 'model_name': 'google-bert/bert-large-uncased',
     'seed': 0,
@@ -85,6 +85,7 @@ custom_config = {
     # training options
     'use_warmup': 1,
     'warmup_ratio': 0.06, # percentage of steps over which to warm up
+    'scheduler_type': 'linear',
 
     'batch_size': 8,
     'training': 'steps',
