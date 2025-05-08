@@ -32,7 +32,7 @@ declare -a model_name_options=(
   # "microsoft/deberta-v3-base"
   "microsoft/deberta-v3-large"
   # "bert-base-uncased"
-  "bert-large-uncased"
+  # "bert-large-uncased"
   )
 declare -a parser_type_options=(
   "simple"

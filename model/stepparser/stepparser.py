@@ -12,7 +12,7 @@ import numpy as np
 import warnings
 from typing import Set, Tuple, List
 import matplotlib.pyplot as plt
-
+from debug.nan_checker import nan_checker
 
 class StepParser(torch.nn.Module):
     def __init__(self, config):
@@ -70,6 +70,8 @@ class StepParser(torch.nn.Module):
         
         # Run encoder to get token/word representations
         encoder_output = self.encoder(encoder_input)
+        nan_checker(encoder_output, self.encoder, model_label='encoder')
+
 
         # Determine which representation mode to use
         if self.config["rep_mode"] == "words":
@@ -104,6 +106,8 @@ class StepParser(torch.nn.Module):
         tagger_output = self.tagger(
             encoder_output, mask=mask, labels=tagger_labels
         )
+        nan_checker(tagger_output.logits, self.tagger, model_label='tagger')
+
         pos_tags_pred = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
 
         # Ground-truth tags
@@ -144,6 +148,9 @@ class StepParser(torch.nn.Module):
             step_indices=step_indices,
             graph_laplacian=graph_laplacian,
         )
+        for key, value in parser_output.items():
+            if isinstance(value, torch.Tensor):
+                nan_checker(value, self.parser, model_label='parser')
 
         decoder_output = self.decoder(
             head_tag = parser_output['head_tag'],
@@ -154,6 +161,10 @@ class StepParser(torch.nn.Module):
             mask = parser_output['mask'],
             metadata = parser_output['metadata'],
         )
+        for key, value in decoder_output.items():
+            if isinstance(value, torch.Tensor):
+                nan_checker(value, self.decoder, model_label='decoder')
+
         gnn_losses = parser_output.get('gnn_losses', [])
         decoder_mask = decoder_output['mask']
         # Calculate loss or return predictions

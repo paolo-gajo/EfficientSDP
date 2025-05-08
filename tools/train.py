@@ -1,5 +1,8 @@
 import torch
+import torchtune
 import os
+
+import torchtune.training
 from model.utils import (save_json, 
                               build_dataloader,  
                               setup_config, 
@@ -27,7 +30,7 @@ def main():
     # Get the arguments and set up configuration
     args = get_args()
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
-    # config = json.load(open('./results_steps/freeze_encoder_1/arc_predattn/stepmask_0/gnn_0/bpos_1/tagemb_0/lstm_0/laplacian_pe_/use_abs_step_embeddings_0/data=yamakata/parser_type_gnn_1/aug_000_none_keep_111_k_0-0-0_2000/bert-base-uncased_2025-03-31--08:05:16_seed_0/config.json', 'r'))['config']
+    config = json.load(open('/home/pgajo/Multitask-RFG-torch/results_ft_large/freeze_encoder_0/arc_predattn/tagger_rnn_0/parser_rnn_1_lstm_l0_h400/data=ade/parser_type_simple_0_mlp_500/arc_norm_0/use_lora_0/tag_embedding_type_linear/microsoft-deberta-v3-large_2025-05-08--00:31:07_seed_0/config.json', 'r'))['config']
     # config['model_path'] = 'bert-base-uncased'
     print('Config:\n\n', json.dumps(config, indent=4))
     print('Args:\n\n', json.dumps(args, indent=4))
@@ -69,9 +72,13 @@ def main():
     warmup_steps = int(config['training_steps'] * config['warmup_ratio'])
 
     if config['use_warmup']:
-        scheduler = get_linear_schedule_with_warmup(optimizer=optimizer,
+        # scheduler = get_linear_schedule_with_warmup(optimizer=optimizer,
+        #                                             num_warmup_steps=warmup_steps,
+        #                                             num_training_steps=config['training_steps'],)
+        scheduler = torchtune.training.get_cosine_schedule_with_warmup(optimizer=optimizer,
                                                     num_warmup_steps=warmup_steps,
                                                     num_training_steps=config['training_steps'],)
+        
     else:
         scheduler = None
 
@@ -89,7 +96,9 @@ def main():
 
     # Define evaluation frequency
     eval_steps = config.get('eval_steps', 100)
-    test_steps = config.get('test_steps', 2000)
+    test_steps = config.get('test_steps', 100)
+
+    model.load_state_dict(torch.load('/home/pgajo/Multitask-RFG-torch/results_ft_large/freeze_encoder_0/arc_predattn/tagger_rnn_0/parser_rnn_1_lstm_l0_h400/data=ade/parser_type_simple_0_mlp_500/arc_norm_0/use_lora_0/tag_embedding_type_linear/microsoft-deberta-v3-large_2025-05-08--00:31:07_seed_0/model_junk.pth'))
 
     # Choose training mode
     training_mode = config.get('training', 'epochs')  # 'epochs' or 'steps'
@@ -135,7 +144,7 @@ def main():
                         label_index_map=label_index_map,
                         steps=current_step,
                     )
-                    print(val_results)
+                    print(f'val F1 @ {current_step}:\t', val_results)
                     val_results_list.append(val_results)
 
                     parser_f1 = val_results['parser_labeled_results']['F1']
@@ -155,7 +164,7 @@ def main():
                             print("Early stopping triggered.")
                             current_step = training_steps  # Force exit of outer loop
                             break
-                if current_step % eval_steps == 0:
+                if current_step % test_steps == 0:
                     test_results, _ = run_evaluation(
                         model=model,
                         data_loader=test_loader,
@@ -164,7 +173,11 @@ def main():
                         label_index_map=label_index_map,
                         steps=current_step,
                     )
-                    print(test_results)
+                    print(f'test F1 @ {current_step}:\t', test_results)
+                    tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')
+                    if test_results['parser_labeled_results']['F1'] < 1e-6 and current_step > 300:
+                        tmp_model_name = tmp_model_name.replace('.pth', '_junk.pth')
+                    torch.save(deepcopy(model.state_dict()), tmp_model_name)
                     test_results_list.append(test_results)
 
     elif training_mode == 'epochs':
