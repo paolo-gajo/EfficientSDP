@@ -10,7 +10,7 @@
 #SBATCH --array=0-N%999
 mkdir -p .slurm
 nvidia-smi
-module load rust
+module load rust gcc arrow
 source .env/bin/activate
 
 # Define all parameter combinations
@@ -30,8 +30,8 @@ declare -a dataset_name_options=(
 declare -a model_name_options=(
   # "answerdotai/ModernBERT-base"
   # "microsoft/deberta-v3-base"
-  "microsoft/deberta-v3-large"
-  # "bert-base-uncased"
+  # "microsoft/deberta-v3-large"
+  "bert-base-uncased"
   # "bert-large-uncased"
   )
 declare -a parser_type_options=(

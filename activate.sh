@@ -1,3 +1,3 @@
 # deactivate
-module load rust
+module load rust gcc arrow
 source .env/bin/activate
