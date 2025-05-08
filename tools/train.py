@@ -30,8 +30,7 @@ def main():
     # Get the arguments and set up configuration
     args = get_args()
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
-    config = json.load(open('/home/pgajo/Multitask-RFG-torch/results_ft_large/freeze_encoder_0/arc_predattn/tagger_rnn_0/parser_rnn_1_lstm_l0_h400/data=ade/parser_type_simple_0_mlp_500/arc_norm_0/use_lora_0/tag_embedding_type_linear/microsoft-deberta-v3-large_2025-05-08--00:31:07_seed_0/config.json', 'r'))['config']
-    # config['model_path'] = 'bert-base-uncased'
+
     print('Config:\n\n', json.dumps(config, indent=4))
     print('Args:\n\n', json.dumps(args, indent=4))
     
@@ -78,7 +77,6 @@ def main():
         scheduler = torchtune.training.get_cosine_schedule_with_warmup(optimizer=optimizer,
                                                     num_warmup_steps=warmup_steps,
                                                     num_training_steps=config['training_steps'],)
-        
     else:
         scheduler = None
 
@@ -97,8 +95,6 @@ def main():
     # Define evaluation frequency
     eval_steps = config.get('eval_steps', 100)
     test_steps = config.get('test_steps', 100)
-
-    model.load_state_dict(torch.load('/home/pgajo/Multitask-RFG-torch/results_ft_large/freeze_encoder_0/arc_predattn/tagger_rnn_0/parser_rnn_1_lstm_l0_h400/data=ade/parser_type_simple_0_mlp_500/arc_norm_0/use_lora_0/tag_embedding_type_linear/microsoft-deberta-v3-large_2025-05-08--00:31:07_seed_0/model_junk.pth'))
 
     # Choose training mode
     training_mode = config.get('training', 'epochs')  # 'epochs' or 'steps'
@@ -175,9 +171,10 @@ def main():
                     )
                     print(f'test F1 @ {current_step}:\t', test_results)
                     tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')
-                    if test_results['parser_labeled_results']['F1'] < 1e-6 and current_step > 300:
+                    if test_results['parser_labeled_results']['F1'] < 1e-2 and current_step > 1000:
                         tmp_model_name = tmp_model_name.replace('.pth', '_junk.pth')
-                    torch.save(deepcopy(model.state_dict()), tmp_model_name)
+                        torch.save(deepcopy(model.state_dict()), tmp_model_name)
+                        raise RuntimeError('Bricked model!')
                     test_results_list.append(test_results)
 
     elif training_mode == 'epochs':
