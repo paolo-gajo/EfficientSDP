@@ -3,7 +3,6 @@ from tqdm import tqdm
 import torch
 import os
 import numpy as np
-from torchtune.training import get_cosine_schedule_with_warmup
 from transformers import get_linear_schedule_with_warmup
 
 # def get_curriculum_learning_data_paths(dataset_path, until_dataset = 0, data_strategy = 'bin_by_bin'):
@@ -69,10 +68,6 @@ def get_scheduler(optimizer, warmup_steps: int, training_steps: int, scheduler_t
     if use_warmup:
         if scheduler_type == 'linear':
             return get_linear_schedule_with_warmup(optimizer=optimizer,
-                                                        num_warmup_steps=warmup_steps,
-                                                        num_training_steps=training_steps,)
-        elif scheduler_type == 'cosine':
-            return get_cosine_schedule_with_warmup(optimizer=optimizer,
                                                         num_warmup_steps=warmup_steps,
                                                         num_training_steps=training_steps,)
     else:

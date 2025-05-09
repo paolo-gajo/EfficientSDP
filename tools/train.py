@@ -12,7 +12,6 @@ from model.utils import (save_json,
                               save_python_command,
                               save_reproduce_training_cmd,
                               )
-from model.utils.train_utils import get_scheduler
 from model.config import default_cfg, custom_config
 from model.evaluation import evaluate_model
 from model.utils.graph_data_utils import get_mappings
