@@ -31,7 +31,7 @@ class MTRFGParser(nn.Module):
         else:
             encoder_dim = embedding_dim
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(0.2)
         
@@ -69,7 +69,7 @@ class MTRFGParser(nn.Module):
         graph_laplacian: torch.Tensor = None,
     ) -> Dict[str, torch.Tensor]:
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_one_hot'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
@@ -211,9 +211,9 @@ class MTRFGParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        if config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             embedding_dim = (
-                config["encoder_output_dim"] + config["tag_embedding_dimension"]
+                config["encoder_output_dim"] + config["tag_representation_dim"]
             )
         else:
             embedding_dim = config["encoder_output_dim"]
@@ -230,7 +230,7 @@ class MTRFGParser(nn.Module):
         else:
             encoder = None
 
-        tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+        tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
         model_obj = cls(
             config=config,
             encoder=encoder,

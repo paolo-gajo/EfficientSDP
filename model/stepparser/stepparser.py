@@ -19,23 +19,8 @@ class StepParser(torch.nn.Module):
         super().__init__()
         self.config = config
         self.encoder = Encoder(config)
-        self.config["encoder_output_dim"] = (self.encoder.encoder.config.hidden_size)
+        # self.config["encoder_output_dim"] = (self.encoder.encoder.config.hidden_size)
 
-        if self.config["use_gnn"] == "gat":
-            self.gnn = GATNet(
-                self.config["encoder_output_dim"],
-                self.config["encoder_output_dim"],
-                num_layers=3,
-                heads=8,
-            )
-        if self.config["use_gnn"] == "mpnn":
-            self.gnn = MPNNNet(
-                input_dim=self.config["encoder_output_dim"],
-                output_dim=self.config["encoder_output_dim"],
-                num_layers=3,  # or adjust as needed
-                dropout=0.2,
-                aggr="mean",  # mean aggregation as specified
-            )
         self.tagger = Tagger(self.config)
         if self.config['parser_type'] == 'mtrfg':
             self.parser = MTRFGParser.get_model(self.config)
@@ -122,15 +107,6 @@ class StepParser(torch.nn.Module):
             # OR PUT A FLAG TO LET ME CONTROL WHETHER TO USE ORACLE/NOT ORACLE FOR LAPLACIAN
             edge_index=None
 
-        # GNN processing
-        gnn_out_pooled = None
-        if self.config["use_gnn"] in ["mpnn", "gat"]:
-            encoder_output, gnn_out_pooled = self.gnn.process_step_representations(
-                encoder_output=encoder_output,
-                step_indices=step_indices,
-                edge_index_batch=edge_index,
-            )
-
         # Tagging
         tagger_output = self.tagger(
             encoder_output, mask=mask, labels=tagger_labels
@@ -153,7 +129,7 @@ class StepParser(torch.nn.Module):
 
         pos_tags_dict = {
             'pos_tags_one_hot': pos_tags_parser.float(),
-            'pos_tags_labels': tagger_labels,
+            'pos_tags_labels': torch.argmax(tagger_output.logits, dim = -1),
         }
 
         # Parsing
@@ -199,7 +175,7 @@ class StepParser(torch.nn.Module):
                 )
             if self.config['output_edge_scores']:
                 scores = parser_output['attended_arcs']
-                softmax_scores = F.softmax(scores)
+                softmax_scores = F.softmax(scores, dim = -1)
                 masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
                 score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
                 softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)

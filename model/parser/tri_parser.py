@@ -35,7 +35,7 @@ class TriParser(nn.Module):
         else:
             encoder_dim = embedding_dim
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(0.2)
         
@@ -75,7 +75,7 @@ class TriParser(nn.Module):
         
         pos_tags = pos_tags['pos_tags_one_hot'] if self.config['tag_embedding_type'] == 'linear' else pos_tags['pos_tags_labels']
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
@@ -162,14 +162,14 @@ class TriParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        if config["use_tag_embeddings_in_parser"]:
+        if config["tag_embedding_type"] != 'none':
             embedding_dim = (
-                config["encoder_output_dim"] + config["tag_embedding_dimension"]
+                config["encoder_output_dim"] + config["tag_representation_dim"]
             )
             if config['tag_embedding_type'] == 'linear':
-                tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
+                tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
             else:
-                tag_embedder = nn.Embedding(config["n_tags"], config["tag_embedding_dimension"])
+                tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
         else:
             embedding_dim = config["encoder_output_dim"]
             tag_embedder = None
@@ -237,7 +237,7 @@ class DualEncParser(nn.Module):
         else:
             encoder_dim = embedding_dim
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(0.2)
         
@@ -280,7 +280,7 @@ class DualEncParser(nn.Module):
         graph_laplacian: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_labels'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
@@ -385,12 +385,12 @@ class DualEncParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        if config["use_tag_embeddings_in_parser"]:
+        if config["tag_embedding_type"] != 'none':
             embedding_dim = (
-                config["encoder_output_dim"] + config["tag_embedding_dimension"]
+                config["encoder_output_dim"] + config["tag_representation_dim"]
             )
-            # tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
-            tag_embedder = nn.Embedding(config["n_tags"], config["tag_embedding_dimension"])
+            # tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
+            tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
         else:
             embedding_dim = config["encoder_output_dim"]
             tag_embedder = None
@@ -455,7 +455,7 @@ class MultiParser(nn.Module):
         else:
             encoder_dim = embedding_dim
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(0.2)
         
@@ -510,7 +510,7 @@ class MultiParser(nn.Module):
         graph_laplacian: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
 
-        if self.config["use_tag_embeddings_in_parser"]:
+        if self.config["tag_embedding_type"] != 'none':
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags['pos_tags_labels'])))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
@@ -602,12 +602,12 @@ class MultiParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        if config["use_tag_embeddings_in_parser"]:
+        if config["tag_embedding_type"] != 'none':
             embedding_dim = (
-                config["encoder_output_dim"] + config["tag_embedding_dimension"]
+                config["encoder_output_dim"] + config["tag_representation_dim"]
             )
-            # tag_embedder = nn.Linear(config["n_tags"], config["tag_embedding_dimension"])
-            tag_embedder = nn.Embedding(config["n_tags"], config["tag_embedding_dimension"])
+            # tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
+            tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
         else:
             embedding_dim = config["encoder_output_dim"]
             tag_embedder = None

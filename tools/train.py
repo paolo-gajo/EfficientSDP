@@ -1,5 +1,6 @@
 import torch
 import os
+
 from model.utils import (save_json, 
                               build_dataloader,  
                               setup_config, 
@@ -10,7 +11,8 @@ from model.utils import (save_json,
                               run_evaluation,
                               load_json,
                               save_python_command,
-                              save_reproduce_training_cmd)
+                              save_reproduce_training_cmd,
+                              )
 from model.config import default_cfg, custom_config
 from model.evaluation import evaluate_model
 from model.utils.graph_data_utils import get_mappings
@@ -19,7 +21,6 @@ import sys
 import json
 from copy import deepcopy
 from tqdm.auto import tqdm
-
 def main():
 
     # torch.set_printoptions(linewidth=10000, threshold=10000)
@@ -27,15 +28,21 @@ def main():
     # Get the arguments and set up configuration
     args = get_args()
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
-    # config = json.load(open('./results_steps/freeze_encoder_1/arc_predattn/stepmask_0/gnn_0/bpos_1/tagemb_0/lstm_0/laplacian_pe_/use_abs_step_embeddings_0/data=yamakata/parser_type_gnn_1/aug_000_none_keep_111_k_0-0-0_2000/bert-base-uncased_2025-03-31--08:05:16_seed_0/config.json', 'r'))['config']
-    # config['model_path'] = 'bert-base-uncased'
-    print('Custom config:\n\n', json.dumps(custom_config, indent=4))
+
+    print('Config:\n\n', json.dumps(config, indent=4))
     print('Args:\n\n', json.dumps(args, indent=4))
     
     # Set seeds and show save directory
     set_seeds(config['seed'])
     print(f"Will save to: {config['save_dir']}")
-
+    
+    summary = {'config': config}
+    save_json(summary, os.path.join(config['save_dir'], 'config.json'))
+    cmd_file = os.path.join(config['save_dir'], 'train_command.txt')
+    save_python_command(cmd_file, sys.argv)
+    reproduce_training_cmd_file = os.path.join(config['save_dir'], 'full_train_reproduce_cmd.txt')
+    save_reproduce_training_cmd(sys.argv[0], config, args, reproduce_training_cmd_file)
+    
     # Build dataloaders for training, validation, and testing
     train_loader = build_dataloader(config, loader_type='train')
     val_loader = build_dataloader(config, loader_type='val')
@@ -56,7 +63,8 @@ def main():
     # Build model and set up optimizer
     model_start_path = args.get('model_start_path', None)
     model = build_model(config, model_start_path=model_start_path)
-    # print(model)
+    print(model)
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -66,12 +74,14 @@ def main():
 
     # Initialize tracking variables for evaluation and early stopping
     val_results_list = []
+    test_results_list = []
     best_model_state = None
     best_val_metric = -np.inf
     patience_counter = 0
 
     # Define evaluation frequency
-    eval_steps = config.get('eval_steps', 1000)
+    eval_steps = config.get('eval_steps', 100)
+    test_steps = config.get('test_steps', 100)
 
     # Choose training mode
     training_mode = config.get('training', 'epochs')  # 'epochs' or 'steps'
@@ -116,7 +126,7 @@ def main():
                         label_index_map=label_index_map,
                         steps=current_step,
                     )
-                    print(val_results)
+                    print(f'val F1 @ {current_step}:\t', val_results)
                     val_results_list.append(val_results)
 
                     parser_f1 = val_results['parser_labeled_results']['F1']
@@ -136,6 +146,22 @@ def main():
                             print("Early stopping triggered.")
                             current_step = training_steps  # Force exit of outer loop
                             break
+                if current_step % test_steps == 0:
+                    test_results, _ = run_evaluation(
+                        model=model,
+                        data_loader=test_loader,
+                        eval_function=evaluate_model,
+                        config=config,
+                        label_index_map=label_index_map,
+                        steps=current_step,
+                    )
+                    print(f'test F1 @ {current_step}:\t', test_results)
+                    tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')
+                    if test_results['parser_labeled_results']['F1'] < 1e-2 and current_step > 1000:
+                        tmp_model_name = tmp_model_name.replace('.pth', '_junk.pth')
+                        torch.save(deepcopy(model.state_dict()), tmp_model_name)
+                        raise RuntimeError('Bricked model!')
+                    test_results_list.append(test_results)
 
     elif training_mode == 'epochs':
         num_epochs = config.get('epochs', 10)
@@ -173,15 +199,14 @@ def main():
     # Save best model checkpoint if available
     if best_model_state is not None and config.get('save_model', False):
         torch.save(best_model_state, config['model_path'])
+        print(f"Model saved at: {config['model_path']}")
 
     # Save validation results and configuration details
-    save_json(val_results_list, os.path.join(config['save_dir'], "val_results.json"))
+    save_json(val_results_list, os.path.join(config['save_dir'], "val_results_series.json"))
+    save_json(test_results_list, os.path.join(config['save_dir'], "test_results_series.json"))
     save_json(train_loader.dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
 
-    cmd_file = os.path.join(config['save_dir'], 'train_command.txt')
-    save_python_command(cmd_file, sys.argv)
-    reproduce_training_cmd_file = os.path.join(config['save_dir'], 'full_train_reproduce_cmd.txt')
-    save_reproduce_training_cmd(sys.argv[0], config, args, reproduce_training_cmd_file)
+
 
     # Final evaluation on validation and test sets
     if config.get('save_model', False):
@@ -189,14 +214,14 @@ def main():
         val_results, benchmark_metrics = run_evaluation(
             model, val_loader, evaluate_model, config, label_index_map
         )
-        save_json(val_results, os.path.join(config['save_dir'], f"val_results_best_f1={val_results['parser_labeled_results']}.json"))
+        save_json(val_results, os.path.join(config['save_dir'], f"val_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'val_results_benchmark.json'))
         print('Validation results:', val_results)
 
         test_results, benchmark_metrics = run_evaluation(
             model, test_loader, evaluate_model, config, label_index_map
         )
-        save_json(test_results, os.path.join(config['save_dir'], f"test_results_f1={test_results['parser_labeled_results']}.json"))
+        save_json(test_results, os.path.join(config['save_dir'], f"test_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'test_results_benchmark.json'))
         print('Test results:', test_results)
 

@@ -30,28 +30,26 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     tagger_rnn_string = 1 if config['use_tagger_rnn'] else 0
     parser_rnn_string = 1 if config['use_parser_rnn'] else 0
     save_dir, model_name = config['save_dir'], config['model_name'].replace('/', '-').replace(' ', '')
-    augment_type = 'none' if '1' not in aug_string else config['augment_type']
-    training_amount = config['training_steps'] if config['training'] == 'steps' else config['epochs']
+
     model_name = model_name if not config['use_abs_step_embeddings'] else 'step-bert'
     parser_type = 'mtrfg' if config['parser_type'] == 'mtrfg' else f"{config['parser_type']}_{config['gnn_enc_layers']}"
     dir_path = os.path.join(f"{save_dir}{config['results_suffix']}",
                             f"freeze_encoder_{config['freeze_encoder']}",
                             f"arc_pred{config['arc_pred']}",
-                            f"stepmask_{config['use_step_mask']}",
-                            f"gnn_{config['use_gnn']}",
-                            f"bpos_{config['use_bert_positional_embeddings']}",
-                            f"tagemb_{config['use_tag_embeddings_in_parser']}",'' \
+                            # f"stepmask_{config['use_step_mask']}",
+                            # f"bpos_{config['use_bert_positional_embeddings']}",
                             f'tagger_rnn_{tagger_rnn_string}',
                             f"parser_rnn_{parser_rnn_string}_{config['parser_rnn_type']}_l{config['parser_rnn_layers']}_h{config['parser_rnn_hidden_size']}",
-                            f"laplacian_pe_{config['laplacian_pe']}",
-                            f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
+                            # f"laplacian_pe_{config['laplacian_pe']}",
+                            # f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
                             f"data={config['dataset_name']}",
                             f"parser_type_{parser_type}_mlp_{config['arc_representation_dim']}",
                             f"arc_norm_{config['arc_norm']}",
-                            f"parser_residual_{config['parser_residual']}",
+                            # f"parser_residual_{config['parser_residual']}",
                             f"use_lora_{config['use_lora']}",
-                            f"aug_{aug_string}_{augment_type}_{keep_k_string}_{training_amount}",
-                            f"{model_name}_{get_current_time_string()}_seed_{config['seed']}")
+                            f"tag_embedding_type_{config['tag_embedding_type']}",
+                            f"{model_name}_{get_current_time_string()}_seed_{config['seed']}",
+                            )
 
     config['save_dir'] = dir_path
     print(f'Created dir: {dir_path}')
@@ -74,7 +72,8 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
         config['learning_rate'] = config['learning_rate_freeze']
     else:
         config['learning_rate'] = config['learning_rate_encoder']
-
+    if 'large' in model_name:
+        config['learning_rate'] = config['learning_rate_large']
     return config
 
 def set_seeds(seed):
