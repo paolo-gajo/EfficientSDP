@@ -39,7 +39,7 @@ custom_config = {
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 0,
     # 'use_tag_embeddings_in_parser': 0,
-    'tag_embedding_type': 'embedding', # 'linear', 'embedding', 'none'
+    'tag_embedding_type': 'linear', # 'linear', 'embedding', 'none'
 
     # parser options
     'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
@@ -62,8 +62,8 @@ custom_config = {
     # model options
     'freeze_encoder': 0,
     'use_lora': 0,
-    'model_name': 'bert-base-uncased',
-    # 'model_name': 'microsoft/deberta-v3-base',
+    # 'model_name': 'bert-base-uncased',
+    'model_name': 'microsoft/deberta-v3-base',
     # 'model_name': 'microsoft/deberta-v3-large',
     # 'model_name': 'answerdotai/ModernBERT-base',
     # 'model_name': 'google-bert/bert-large-uncased',
@@ -86,7 +86,8 @@ custom_config = {
     'use_warmup': 1,
     'warmup_ratio': 0.06, # percentage of steps over which to warm up
     'scheduler_type': 'linear',
-
+    'use_clip_grad_norm': 1,
+    'grad_clip_norm': 1.0,
     'batch_size': 8,
     'training': 'steps',
     'training_steps': 10000,

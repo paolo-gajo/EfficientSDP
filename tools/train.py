@@ -66,6 +66,7 @@ def main():
     # Build model and set up optimizer
     model_start_path = args.get('model_start_path', None)
     model = build_model(config, model_start_path=model_start_path)
+
     print(model)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
@@ -113,13 +114,15 @@ def main():
                 model.train()
                 model.set_mode('train')
                 optimizer.zero_grad()
-
                 loss = model(batch)
 
                 if torch.isnan(loss).item():
                     continue
 
                 loss.backward()
+                if config['use_clip_grad_norm']:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=config['grad_clip_norm'])
+                
                 optimizer.step()
                 if config['use_warmup']:
                     scheduler.step()

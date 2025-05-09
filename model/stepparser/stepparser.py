@@ -12,7 +12,7 @@ import numpy as np
 import warnings
 from typing import Set, Tuple, List
 import matplotlib.pyplot as plt
-from debug.nan_checker import nan_checker
+from debug.model_debugging import nan_checker, check_param_norm, check_grad_norm
 
 class StepParser(torch.nn.Module):
     def __init__(self, config):
@@ -67,11 +67,9 @@ class StepParser(torch.nn.Module):
             encoder_input["words_mask_custom"] = self.token_mask_to_word_mask(
                 encoder_input["attention_mask"], encoder_input
             )
-        
+
         # Run encoder to get token/word representations
         encoder_output = self.encoder(encoder_input)
-        nan_checker(encoder_output, self.encoder, model_label='encoder')
-
 
         # Determine which representation mode to use
         if self.config["rep_mode"] == "words":
@@ -148,9 +146,6 @@ class StepParser(torch.nn.Module):
             step_indices=step_indices,
             graph_laplacian=graph_laplacian,
         )
-        for key, value in parser_output.items():
-            if isinstance(value, torch.Tensor):
-                nan_checker(value, self.parser, model_label='parser')
 
         decoder_output = self.decoder(
             head_tag = parser_output['head_tag'],
@@ -161,9 +156,6 @@ class StepParser(torch.nn.Module):
             mask = parser_output['mask'],
             metadata = parser_output['metadata'],
         )
-        for key, value in decoder_output.items():
-            if isinstance(value, torch.Tensor):
-                nan_checker(value, self.decoder, model_label='decoder')
 
         gnn_losses = parser_output.get('gnn_losses', [])
         decoder_mask = decoder_output['mask']
@@ -199,6 +191,33 @@ class StepParser(torch.nn.Module):
                     output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
             return output_as_list_of_dicts
 
+    def log_gradients(self):
+        """
+        Logs gradient norms for all components after backward pass
+        Call this method after loss.backward() but before optimizer.step()
+        """
+        grad_debug_dict = {}
+        
+        # Check gradient norms for each component
+        encoder_grad_norm = check_grad_norm(self.encoder)
+        grad_debug_dict['encoder_grad_norm'] = encoder_grad_norm.item()
+        
+        tagger_grad_norm = check_grad_norm(self.tagger)
+        grad_debug_dict['tagger_grad_norm'] = tagger_grad_norm.item()
+        
+        parser_grad_norm = check_grad_norm(self.parser)
+        grad_debug_dict['parser_grad_norm'] = parser_grad_norm.item()
+        
+        decoder_grad_norm = check_grad_norm(self.decoder)
+        grad_debug_dict['decoder_grad_norm'] = decoder_grad_norm.item()
+        
+        # Overall model gradient norm
+        overall_grad_norm = check_grad_norm(self)
+        grad_debug_dict['overall_grad_norm'] = overall_grad_norm.item()
+        
+        self.grad_debug_list.append(grad_debug_dict)
+        return grad_debug_dict
+    
     def make_step_mask(
         self,
         attention_mask: torch.Tensor,
