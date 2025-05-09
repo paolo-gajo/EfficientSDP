@@ -31,7 +31,7 @@ declare -a model_name_options=(
   # "answerdotai/ModernBERT-base"
   "microsoft/deberta-v3-base"
   # "microsoft/deberta-v3-large"
-  # "bert-base-uncased"
+  "bert-base-uncased"
   # "bert-large-uncased"
   )
 declare -a parser_type_options=(
@@ -105,7 +105,7 @@ training_steps=10000
 eval_steps=100
 test_steps=100
 
-results_suffix="_ft_base_10k"
+results_suffix="_ft_base_10k_grad_clipping"
 
 # new norm setting
 # parser_init='xu+norm'
@@ -118,6 +118,9 @@ bma_init='xu'
 use_warmup=0
 warmup_ratio=0.06
 scheduler_type='linear'
+
+use_clip_grad_norm=1
+grad_clip_norm=1.0
 
 valid_combinations=()
 for seed in "${seed_values[@]}"; do
@@ -201,7 +204,9 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
 --use_warmup $use_warmup \
 --warmup_ratio $warmup_ratio \
 --scheduler_type $scheduler_type \
---test_steps $test_steps"
+--test_steps $test_steps \
+--use_clip_grad_norm $use_clip_grad_norm \
+--grad_clip_norm $grad_clip_norm"
     
     echo "Running job $SLURM_ARRAY_TASK_ID: $command_to_run"
     $command_to_run
