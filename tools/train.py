@@ -1,7 +1,5 @@
 import torch
 import os
-
-import torchtune.training
 from model.utils import (save_json, 
                               build_dataloader,  
                               setup_config, 
