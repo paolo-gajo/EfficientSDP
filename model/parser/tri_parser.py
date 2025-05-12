@@ -27,7 +27,6 @@ class TriParser(nn.Module):
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
-        raise NotImplementedError('this is wip for a parser with triaffine scoring')
         self.config = config
         if config['use_parser_rnn'] \
         and config['parser_rnn_layers'] > 0 \
@@ -71,9 +70,6 @@ class TriParser(nn.Module):
         metadata: List[Dict[str, Any]] = [],
         head_tags: torch.LongTensor = None,
         head_indices: torch.LongTensor = None,
-        step_indices: torch.LongTensor = None,
-        graph_laplacian: torch.LongTensor = None,
-        encoder_attentions: torch.FloatTensor = None,
     ) -> Dict[str, torch.Tensor]:
         
         pos_tags = pos_tags['pos_tags_one_hot'] if self.config['tag_embedding_type'] == 'linear' else pos_tags['pos_tags_labels']
@@ -83,14 +79,11 @@ class TriParser(nn.Module):
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
         if self.encoder_h is not None:
-            # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
-            # Pack the padded sequence using the lengths.
             packed_input = pack_padded_sequence(
                 encoded_text_input, lengths, batch_first=True, enforce_sorted=False
             )
             packed_output, _ = self.encoder_h(packed_input)
-            # Unpack the sequence, ensuring the output has the original sequence length.
             encoded_text_input, _ = pad_packed_sequence(packed_output,
                                                         batch_first=True,
                                                         total_length=encoded_text_input.size(1))
@@ -98,7 +91,6 @@ class TriParser(nn.Module):
         batch_size, _, encoding_dim = encoded_text_input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         
-        # Concatenate the head sentinel onto the sentence representation.
         encoded_text_input = torch.cat([head_sentinel, encoded_text_input], dim=1)
 
         mask_ones = mask.new_ones(batch_size, 1)
@@ -115,10 +107,8 @@ class TriParser(nn.Module):
         
         encoded_text_input = self._dropout(encoded_text_input)
             
-        # shape (batch_size, sequence_length, arc_representation_dim)
         head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
         dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
-        # shape (batch_size, sequence_length, tag_representation_dim)
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
         dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
 
