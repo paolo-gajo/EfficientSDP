@@ -7,7 +7,7 @@ The repo can be installed with pip:
 pip install -e .
 pip install -r requirements.txt
 ```
-although we recommend simply iteratively running ``./src/train.py`` and waiting each time for it to throw a ModuleNotFoundError.
+although we recommend simply iteratively running ``./src/train.py`` and waiting each time for it to throw a ``ModuleNotFoundError``.
 
 The script ``./src/experiments.sh`` can be used to launch ``./src/train.py`` in parallel for all of the hyperparameter combinations considered in our paper. First, launch the command without ``sbatch``:
 
