@@ -13,4 +13,7 @@ results*
 inference_outputs/
 settings/
 paper/
-*.sh
+activate.sh
+reset.sh
+run.sh
+sal.sh

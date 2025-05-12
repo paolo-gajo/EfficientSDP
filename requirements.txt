@@ -238,7 +238,6 @@ pexpect==4.9.0+computecanada
 pillow==11.1.0+computecanada
 platformdirs==4.3.7
 preshed==3.0.9+computecanada
--e git+https://github.com/paolo-gajo/Multitask-RFG-torch.git@b7480b1d96f27238d7448a7d4c8d4ae0f9603b28#egg=proctext_stepparser
 prompt_toolkit==3.0.50+computecanada
 propcache==0.3.0+computecanada
 psutil==6.1.1+computecanada
@@ -320,7 +319,6 @@ matplotlib==3.10.0+computecanada
 mdurl==0.1.2+computecanada
 mpmath==1.3.0+computecanada
 multidict==6.4.3
--e git+https://github.com/paolo-gajo/Multitask-RFG-torch.git@f38fadbaf534c373ede62a2d23c791224587fe2f#egg=Multitask_RFG_torch
 murmurhash==1.0.10+computecanada
 networkx==3.4.2+computecanada
 numpy==2.2.2+computecanada
