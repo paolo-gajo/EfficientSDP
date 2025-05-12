@@ -13,3 +13,4 @@ results*
 inference_outputs/
 settings/
 paper/
+*.sh
