@@ -184,6 +184,7 @@ class GNNParser(nn.Module):
 
             # arc_probs = torch.eye(attended_arcs.shape[-1], device=attended_arcs.device).expand(attended_arcs.shape[0], -1, -1)
             arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
+            arc_probs = self._dropout(arc_probs)
             arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
             range_tensor = torch.arange(batch_size).unsqueeze(1)
             length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)

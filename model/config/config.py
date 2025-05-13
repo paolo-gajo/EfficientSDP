@@ -60,7 +60,7 @@ custom_config = {
     'tag_representation_dim': 100,
     
     # model options
-    'freeze_encoder': 0,
+    'freeze_encoder': 1,
     'use_lora': 0,
     'model_name': 'bert-base-uncased',
     # 'model_name': 'microsoft/deberta-v3-base',
