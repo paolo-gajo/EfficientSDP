@@ -178,7 +178,7 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
     use_lora dataset_name parser_rnn_layers parser_rnn_hidden_size arc_representation_dim tag_embedding_type <<< "$current_combination"
     
     # Run the command with these parameters
-    command_to_run="python ./tools/train.py --opt \
+    command_to_run="python ./src/train.py --opt \
 --seed $seed \
 --use_tagger_rnn $use_tagger_rnn \
 --parser_type $parser_type \
