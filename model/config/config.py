@@ -2,7 +2,7 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
-    'dataset_name': 'ud202xpos',
+    'dataset_name': 'ade',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -27,7 +27,7 @@ custom_config = {
     'keep_og_test': 1,
     'augment_type': 'permute', # 'permute', 'random', 'hybrid'
     'adjacency_direction': 'directed', # 'directed', 'mirrored', 'undirected'
-    'results_suffix': '_syntax',
+    'results_suffix': '',
     'padding': 1,
     'procedural': 0,
 
@@ -40,7 +40,7 @@ custom_config = {
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 3,
     # 'use_tag_embeddings_in_parser': 0,
-    'tag_embedding_type': 'embedding', # 'linear', 'embedding', 'none'
+    'tag_embedding_type': 'linear', # 'linear', 'embedding', 'none'
 
     # parser options
     'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
@@ -64,19 +64,19 @@ custom_config = {
     'freeze_encoder': 1,
     'use_lora': 0,
     'model_name': 'bert-base-uncased',
-    'use_pred_tags' : 0, ## this will determine if gold tags are used for train/test/validation or not. 
+    'use_pred_tags' : 1, ## this will determine if gold tags are used for train/test/validation or not. 
     # 'model_name': 'microsoft/deberta-v3-base',
     # 'model_name': 'microsoft/deberta-v3-large',
     # 'model_name': 'answerdotai/ModernBERT-base',
     # 'model_name': 'google-bert/bert-large-uncased',
     'seed': 0,
-    'tagger_lambda': 0,
+    'tagger_lambda': 0.1,
     'parser_lambda': 1,
     'rep_mode': 'words', # either 'words' or 'tokens'
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
     'learning_rate_encoder': 1e-4,
-    'learning_rate_freeze': 2e-3,
+    'learning_rate_freeze': 1e-3,
     'learning_rate_large': 3e-5,
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
@@ -90,11 +90,11 @@ custom_config = {
     'scheduler_type': 'linear',
     'use_clip_grad_norm': 0,
     'grad_clip_norm': 1.0,
-    'batch_size': 100,
+    'batch_size': 8,
     'training': 'steps',
-    'training_steps': 50000,
-    'eval_steps': 1000,
-    'test_steps': 1000,
+    'training_steps': 2000,
+    'eval_steps': 100,
+    'test_steps': 100,
     'epochs': 100,
     'patience': 0.3,
 }
