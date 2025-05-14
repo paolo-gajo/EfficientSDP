@@ -149,7 +149,12 @@ def run_evaluation(model, data_loader, eval_function = None, config = None, labe
     model_summary['inference time'] = f'{mean_inf_time} +/- {std_dev}'
     if not config['procedural']:
         config['test_ignore_edge_dep'] = ['root']
-    results = eval_function(val_outputs, label_index_map, ignore_tags = config['test_ignore_tag'], ignore_edges = config['test_ignore_edge_dep'], use_word_level = config['word_majority_eval']) 
+    results = eval_function(val_outputs,
+                            label_index_map,
+                            ignore_tags = config['test_ignore_tag'],
+                            ignore_edges = config['test_ignore_edges'],
+                            ignore_edge_labels = config['test_ignore_edge_dep'],
+                            )
     results['epoch'] = epoch
     results['steps'] = steps
     ## let's add results to the benchmark

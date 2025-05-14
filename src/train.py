@@ -32,7 +32,8 @@ def main():
 
     print('Config:\n\n', json.dumps(config, indent=4))
     print('Args:\n\n', json.dumps(args, indent=4))
-    
+    if not config['use_pred_tags']:
+        print('Using POS tag oracle!')
     # Set seeds and show save directory
     set_seeds(config['seed'])
     print(f"Will save to: {config['save_dir']}")
@@ -44,28 +45,35 @@ def main():
     reproduce_training_cmd_file = os.path.join(config['save_dir'], 'full_train_reproduce_cmd.txt')
     save_reproduce_training_cmd(sys.argv[0], config, args, reproduce_training_cmd_file)
     
+    all_splits_data = load_json(config['train_file_graphs']) + \
+                    load_json(config['val_file_graphs']) + \
+                    load_json(config['test_file_graphs'])
+    config['label_index_map'] = get_mappings(all_splits_data)
+
     # Build dataloaders for training, validation, and testing
     train_loader = build_dataloader(config, loader_type='train')
     val_loader = build_dataloader(config, loader_type='val')
     test_loader = build_dataloader(config, loader_type='test')
 
     # Build label index map and set additional configurations
-    all_splits_data = load_json(config['train_file_graphs']) + \
-                    load_json(config['val_file_graphs']) + \
-                    load_json(config['test_file_graphs'])
-    label_index_map = get_mappings(all_splits_data)
+
+    tag2class = config['label_index_map']['tag2class']
+    edgelabel2class = config['label_index_map']['edgelabel2class']
+    print('tag2class', len(tag2class), tag2class)
+    print('edgelabel2class', len(edgelabel2class), edgelabel2class)
+    # return
     if config['procedural']:
         config['max_steps'] = max(train_loader.dataset.max_steps,
                               val_loader.dataset.max_steps,
                               test_loader.dataset.max_steps,)
-    config['n_tags'] = len(label_index_map['tag2class'])
-    config['n_edge_labels'] = len(label_index_map['edgelabel2class'])
+    config['n_tags'] = len(config['label_index_map']['tag2class'])
+    config['n_edge_labels'] = len(config['label_index_map']['edgelabel2class'])
 
     # Build model and set up optimizer
     model_start_path = args.get('model_start_path', None)
     model = build_model(config, model_start_path=model_start_path)
 
-    print(model)
+    # print(model)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
 
@@ -93,7 +101,7 @@ def main():
 
     # Choose training mode
     training_mode = config.get('training', 'epochs')  # 'epochs' or 'steps'
-    torch.autograd.set_detect_anomaly(True)
+    # torch.autograd.set_detect_anomaly(True)
     if training_mode == 'steps':
         training_steps = config.get('training_steps', 10000)
         patience = config.get('patience', 0.3)
@@ -135,10 +143,10 @@ def main():
                         data_loader=val_loader,
                         eval_function=evaluate_model,
                         config=config,
-                        label_index_map=label_index_map,
+                        label_index_map=config['label_index_map'],
                         steps=current_step,
                     )
-                    print(f'val F1 @ {current_step}:\t', val_results)
+                    print(f'val F1 @ {current_step}:\t', json.dumps(val_results, indent=4))
                     val_results_list.append(val_results)
 
                     parser_f1 = val_results['parser_labeled_results']['F1']
@@ -164,10 +172,10 @@ def main():
                         data_loader=test_loader,
                         eval_function=evaluate_model,
                         config=config,
-                        label_index_map=label_index_map,
+                        label_index_map=config['label_index_map'],
                         steps=current_step,
                     )
-                    print(f'test F1 @ {current_step}:\t', test_results)
+                    print(f'test F1 @ {current_step}:\t', json.dumps(test_results, indent=4))
                     tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')
                     if test_results['parser_labeled_results']['F1'] < 1e-2 and current_step > 1000:
                         tmp_model_name = tmp_model_name.replace('.pth', '_junk.pth')
@@ -185,7 +193,7 @@ def main():
             model = train_epoch(model, train_loader, optimizer, epoch)
 
             val_results, _ = run_evaluation(
-                model, val_loader, evaluate_model, config, label_index_map, epoch
+                model, val_loader, evaluate_model, config, config['label_index_map'], epoch
             )
             print(val_results)
             val_results_list.append(val_results)
@@ -224,14 +232,14 @@ def main():
     if config.get('save_model', False):
         model.load_state_dict(best_model_state)
         val_results, benchmark_metrics = run_evaluation(
-            model, val_loader, evaluate_model, config, label_index_map
+            model, val_loader, evaluate_model, config, config['label_index_map']
         )
         save_json(val_results, os.path.join(config['save_dir'], f"val_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'val_results_benchmark.json'))
         print('Validation results:', val_results)
 
         test_results, benchmark_metrics = run_evaluation(
-            model, test_loader, evaluate_model, config, label_index_map
+            model, test_loader, evaluate_model, config, config['label_index_map']
         )
         save_json(test_results, os.path.join(config['save_dir'], f"test_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'test_results_benchmark.json'))

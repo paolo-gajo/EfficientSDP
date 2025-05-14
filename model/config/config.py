@@ -2,13 +2,14 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
-    'dataset_name': 'ade',
+    'dataset_name': 'ud202xpos',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
     'dataset_max_steps': {'train': 0, 'val': 0, 'test': 0,},
     'gat_conv_heads': 8,
     'test_ignore_edge_dep': ['root', '-'], ## this will be ignored during evaluation
+    'test_ignore_edges': ['0'],
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'plot': 0,
 
@@ -26,26 +27,26 @@ custom_config = {
     'keep_og_test': 1,
     'augment_type': 'permute', # 'permute', 'random', 'hybrid'
     'adjacency_direction': 'directed', # 'directed', 'mirrored', 'undirected'
-    'results_suffix': '',
+    'results_suffix': '_syntax',
     'padding': 1,
     'procedural': 0,
 
     # vanilla options
-    'use_tagger_rnn': 0,
+    'use_tagger_rnn': 1,
     'tagger_rnn_type': 'lstm',
-    'use_parser_rnn': 0,
+    'use_parser_rnn': 1,
     'parser_rnn_type': 'lstm',
     # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'parser_rnn_hidden_size': 400,
-    'parser_rnn_layers': 0,
+    'parser_rnn_layers': 3,
     # 'use_tag_embeddings_in_parser': 0,
-    'tag_embedding_type': 'linear', # 'linear', 'embedding', 'none'
+    'tag_embedding_type': 'embedding', # 'linear', 'embedding', 'none'
 
     # parser options
     'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
     'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
     'bma_init': 'xu', # 'xu', 'norm'
-    'arc_norm': 1,
+    'arc_norm': 0,
     'gnn_enc_layers': 0,
     'parser_residual': 0,
     'bias_type': 'simple',
@@ -63,18 +64,19 @@ custom_config = {
     'freeze_encoder': 1,
     'use_lora': 0,
     'model_name': 'bert-base-uncased',
+    'use_pred_tags' : 0, ## this will determine if gold tags are used for train/test/validation or not. 
     # 'model_name': 'microsoft/deberta-v3-base',
     # 'model_name': 'microsoft/deberta-v3-large',
     # 'model_name': 'answerdotai/ModernBERT-base',
     # 'model_name': 'google-bert/bert-large-uncased',
     'seed': 0,
-    'tagger_lambda': 0.1,
+    'tagger_lambda': 0,
     'parser_lambda': 1,
     'rep_mode': 'words', # either 'words' or 'tokens'
     'laplacian_pe': '', # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
     'learning_rate_encoder': 1e-4,
-    'learning_rate_freeze': 1e-3,
+    'learning_rate_freeze': 2e-3,
     'learning_rate_large': 3e-5,
     'use_step_mask': 0,
     'use_bert_positional_embeddings': 1,
@@ -83,16 +85,16 @@ custom_config = {
     'output_edge_scores': 1,
 
     # training options
-    'use_warmup': 1,
+    'use_warmup': 0,
     'warmup_ratio': 0.06, # percentage of steps over which to warm up
     'scheduler_type': 'linear',
-    'use_clip_grad_norm': 1,
+    'use_clip_grad_norm': 0,
     'grad_clip_norm': 1.0,
-    'batch_size': 8,
+    'batch_size': 100,
     'training': 'steps',
-    'training_steps': 10000,
-    'eval_steps': 100,
-    'test_steps': 100,
+    'training_steps': 50000,
+    'eval_steps': 1000,
+    'test_steps': 1000,
     'epochs': 100,
     'patience': 0.3,
 }

@@ -104,9 +104,8 @@ class StepParser(torch.nn.Module):
         tagger_output = self.tagger(
             encoder_output, mask=mask, labels=tagger_labels
         )
-        nan_checker(tagger_output.logits, self.tagger, model_label='tagger')
 
-        pos_tags_pred = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
+        pos_tags_pred_one_hot = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
 
         # Ground-truth tags
         try:
@@ -117,14 +116,15 @@ class StepParser(torch.nn.Module):
             warnings.warn(
                 "Ground truth tags are unavailable, using predicted tags for all purposes."
             )
-            pos_tags_gt = pos_tags_pred
+            pos_tags_gt = pos_tags_pred_one_hot
 
         # Use predicted or ground truth tags based on config
-        pos_tags_parser = pos_tags_pred if self.config["use_pred_tags"] else pos_tags_gt
+        pos_tags_parser_one_hot = pos_tags_pred_one_hot if self.config["use_pred_tags"] else pos_tags_gt
+        pos_tags_parser_cls_idx = torch.argmax(tagger_output.logits, dim=-1) if self.config["use_pred_tags"] else tagger_labels
 
         pos_tags_dict = {
-            'pos_tags_one_hot': pos_tags_parser.float(),
-            'pos_tags_labels': torch.argmax(tagger_output.logits, dim=-1),
+            'pos_tags_one_hot': pos_tags_parser_one_hot.float(),
+            'pos_tags_labels': pos_tags_parser_cls_idx,
         }
 
         if self.config['tag_embedding_type'] == 'linear':
@@ -178,17 +178,17 @@ class StepParser(torch.nn.Module):
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
                     tagger_human_readable, decoder_human_readable, model_input, mask
                 )
-            if self.config['output_edge_scores']:
-                scores = parser_output['attended_arcs']
-                softmax_scores = F.softmax(scores, dim = -1)
-                masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
-                score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
-                softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)
-                masked_log_softmax_score_var = torch.var(masked_log_softmax_scores.view(masked_log_softmax_scores.shape[0], -1), dim=1, unbiased=False)
-                for i in range(len(output_as_list_of_dicts)):
-                    output_as_list_of_dicts[i]['attn_scores_var'] = score_var.tolist()[i]
-                    output_as_list_of_dicts[i]['attn_scores_softmax_var'] = softmax_score_var.tolist()[i]
-                    output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
+            # if self.config['output_edge_scores']:
+            #     scores = parser_output['attended_arcs']
+            #     softmax_scores = F.softmax(scores, dim = -1)
+            #     masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
+            #     score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
+            #     softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)
+            #     masked_log_softmax_score_var = torch.var(masked_log_softmax_scores.view(masked_log_softmax_scores.shape[0], -1), dim=1, unbiased=False)
+            #     for i in range(len(output_as_list_of_dicts)):
+            #         output_as_list_of_dicts[i]['attn_scores_var'] = score_var.tolist()[i]
+            #         output_as_list_of_dicts[i]['attn_scores_softmax_var'] = softmax_score_var.tolist()[i]
+            #         output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
             return output_as_list_of_dicts
 
     def log_gradients(self):
@@ -422,91 +422,16 @@ class StepParser(torch.nn.Module):
                 .numpy()[valid_input_indices]
                 .tolist()
             )
-            elem_dict["pos_tags_pred"] = tagger_output[i]
+            elem_dict["pos_tags_pred"] = tagger_output[i] if self.config['use_pred_tags'] else tagger_output[i][:input_length]
 
-            elem_dict["word_ids_custom"] = (
-                model_input["encoded_input"]["word_ids_custom"][i]
-                .cpu()
-                .detach()
-                .numpy()[valid_input_indices]
-                .tolist()
-            )
-
-            assert np.all(
-                [len(elem_dict[key]) == input_length for key in elem_dict]
-            ), "Predictions are not same length as input!"
-
-            ## append
-            outputs.append(elem_dict)
-
-        return outputs
-
-    def get_output_as_list_of_dicts_tokens(
-        self, tagger_output, parser_output, model_input, mask
-    ):
-        """
-        Returns list of dictionaries, each element in the dictionary is
-        1 item in the batch, list has same length as batchsize. The dictionary
-        will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
-        'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
-        should have exactly identical length, during testing, '*_gt' keys() will have empty
-        tensors.
-        """
-        outputs = []
-        batch_size = len(tagger_output)
-
-        for i in range(batch_size):
-            elem_dict = {}
-
-            ## find non-masked indices
-            valid_input_indices = (
-                torch.where(mask[i] == 1)[0].cpu().detach().numpy().tolist()
-            )
-
-            input_length = len(valid_input_indices)
-
-            elem_dict["input_ids"] = np.array(
-                model_input["encoded_input"]["input_ids"][i]
-            )[valid_input_indices].tolist()
-
-            elem_dict["head_tags_gt"] = (
-                model_input["head_tags_tokens"][i]
-                .cpu()
-                .detach()
-                .numpy()[valid_input_indices]
-                .tolist()
-            )
-            elem_dict["head_tags_pred"] = [
-                int(el) for el in parser_output["predicted_dependencies"][i]
-            ]
-
-            elem_dict["head_indices_gt"] = (
-                model_input["head_indices_tokens"][i]
-                .cpu()
-                .detach()
-                .numpy()[valid_input_indices]
-                .tolist()
-            )
-            elem_dict["head_indices_pred"] = [
-                int(el) for el in parser_output["predicted_heads"][i]
-            ]
-
-            elem_dict["pos_tags_gt"] = (
-                model_input["pos_tags_tokens"][i]
-                .cpu()
-                .detach()
-                .numpy()[valid_input_indices]
-                .tolist()
-            )
-            elem_dict["pos_tags_pred"] = tagger_output[i]
-
-            elem_dict["word_ids_custom"] = (
-                model_input["encoded_input"]["word_ids_custom"][i]
-                .cpu()
-                .detach()
-                .numpy()[valid_input_indices]
-                .tolist()
-            )
+            # word_ids_custom = model_input["encoded_input"]["word_ids_custom"][i]
+            # elem_dict["word_ids_custom"] = (
+            #     word_ids_custom
+            #     .cpu()
+            #     .detach()
+            #     .numpy()[valid_input_indices]
+            #     .tolist()
+            # )
 
             assert np.all(
                 [len(elem_dict[key]) == input_length for key in elem_dict]
@@ -516,6 +441,82 @@ class StepParser(torch.nn.Module):
             outputs.append(elem_dict)
 
         return outputs
+
+    # def get_output_as_list_of_dicts_tokens(
+    #     self, tagger_output, parser_output, model_input, mask
+    # ):
+    #     """
+    #     Returns list of dictionaries, each element in the dictionary is
+    #     1 item in the batch, list has same length as batchsize. The dictionary
+    #     will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
+    #     'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
+    #     should have exactly identical length, during testing, '*_gt' keys() will have empty
+    #     tensors.
+    #     """
+    #     outputs = []
+    #     batch_size = len(tagger_output)
+
+    #     for i in range(batch_size):
+    #         elem_dict = {}
+
+    #         ## find non-masked indices
+    #         valid_input_indices = (
+    #             torch.where(mask[i] == 1)[0].cpu().detach().numpy().tolist()
+    #         )
+
+    #         input_length = len(valid_input_indices)
+
+    #         elem_dict["input_ids"] = np.array(
+    #             model_input["encoded_input"]["input_ids"][i]
+    #         )[valid_input_indices].tolist()
+
+    #         elem_dict["head_tags_gt"] = (
+    #             model_input["head_tags_tokens"][i]
+    #             .cpu()
+    #             .detach()
+    #             .numpy()[valid_input_indices]
+    #             .tolist()
+    #         )
+    #         elem_dict["head_tags_pred"] = [
+    #             int(el) for el in parser_output["predicted_dependencies"][i]
+    #         ]
+
+    #         elem_dict["head_indices_gt"] = (
+    #             model_input["head_indices_tokens"][i]
+    #             .cpu()
+    #             .detach()
+    #             .numpy()[valid_input_indices]
+    #             .tolist()
+    #         )
+    #         elem_dict["head_indices_pred"] = [
+    #             int(el) for el in parser_output["predicted_heads"][i]
+    #         ]
+
+    #         elem_dict["pos_tags_gt"] = (
+    #             model_input["pos_tags_tokens"][i]
+    #             .cpu()
+    #             .detach()
+    #             .numpy()[valid_input_indices]
+    #             .tolist()
+    #         )
+    #         elem_dict["pos_tags_pred"] = tagger_output[i]
+    #         word_ids_custom = model_input["encoded_input"]["word_ids_custom"][i]
+    #         elem_dict["word_ids_custom"] = (
+    #             word_ids_custom
+    #             .cpu()
+    #             .detach()
+    #             .numpy()[valid_input_indices]
+    #             .tolist()
+    #         )
+
+    #         assert np.all(
+    #             [len(elem_dict[key]) == input_length for key in elem_dict]
+    #         ), "Predictions are not same length as input!"
+
+    #         ## append
+    #         outputs.append(elem_dict)
+
+    #     return outputs
 
     def set_mode(self, mode="train"):
         """

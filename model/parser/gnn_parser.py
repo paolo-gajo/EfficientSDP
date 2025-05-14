@@ -181,10 +181,10 @@ class GNNParser(nn.Module):
         float_mask = mask.float()
         for k in range(self.config['gnn_enc_layers']):
             attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) # / self.arc_bilinear[k].norm
-
-            # arc_probs = torch.eye(attended_arcs.shape[-1], device=attended_arcs.device).expand(attended_arcs.shape[0], -1, -1)
+            # attended_arcs = attended_arcs - torch.diag(torch.tensor([1e9 for _ in range(attended_arcs.shape[-1])])).to(attended_arcs.device)
             arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
             arc_probs = self._dropout(arc_probs)
+
             arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
             range_tensor = torch.arange(batch_size).unsqueeze(1)
             length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
@@ -195,7 +195,7 @@ class GNNParser(nn.Module):
 
             # this is just a way of getting both H and D into the same feature matrix
             # and have them automatically multiplied by the weights of the soft adjacency matrix
-            
+            # raise
             # this is transposed because the indices in equation 9 of the paper
             # are switched for h and arc_representation_dim
             hx = torch.matmul(arc_probs, head_arc)

@@ -99,6 +99,7 @@ class Tagger(nn.Module):
             mask: Binary mask of shape (batch_size, seq_len) where 1 indicates valid tokens.
             labels: (Optional) Tensor of shape (batch_size, seq_len) containing true tag labels.
         """
+        self.labels = labels
         encoder_reps = self.dropout(encoder_reps)
         
         if self.config['use_tagger_rnn']:
@@ -165,7 +166,7 @@ class Tagger(nn.Module):
             logits = tagger_output.logits[i]
             mask = attention_mask[i]
             logits_masked = logits[torch.where(mask == 1)[0]]
-            class_labels = torch.argmax(logits_masked, dim=1)
+            class_labels = torch.argmax(logits_masked, dim=1) if self.config['use_pred_tags'] else self.labels[i]
             tagger_out_classes.append(class_labels.cpu().detach().numpy().tolist())
 
         return tagger_out_classes

@@ -71,8 +71,7 @@ class GraphDataset(Dataset):
                  data: List[Dict[str, str]] = None,
                  config: Dict = None,
                  split = None,
-                 tokenizer = None,
-                 ):
+                 tokenizer = None,                 ):
         self.config = config
         self.split = split
         self.ignore_keys = ['edge_index', 'adj_m', 'deg_m', 'graph_laplacian']
@@ -82,7 +81,7 @@ class GraphDataset(Dataset):
         self.padding = config['padding']
         if not self.padding:
             raise NotImplementedError('Padding must be enabled.')
-        self.label_index_map = get_mappings(data)
+        self.label_index_map = config['label_index_map']
 
         if self.config['shuffle']:
             random.shuffle(data)

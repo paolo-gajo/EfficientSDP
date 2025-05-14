@@ -51,7 +51,11 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"tag_embedding_type_{config['tag_embedding_type']}",
                             f"{model_name}_{get_current_time_string()}_seed_{config['seed']}",
                             )
-
+    if config['dataset_name'] in ['ud202upos', 'ud202xpos', 'ptbsci', 'stac']:
+        config['test_ignore_edge_dep'] = ['punct']
+        config['test_ignore_tag'] = []
+        config['test_ignore_edges'] = []
+        
     if config['freeze_encoder']:
     # if not config['use_lora']:
         config['learning_rate'] = config['learning_rate_freeze']
