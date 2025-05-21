@@ -2,7 +2,7 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
-    'dataset_name': 'ade',
+    'dataset_name': 'ptbsci',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -32,26 +32,26 @@ custom_config = {
     'procedural': 0,
 
     # vanilla options
-    'use_tagger_rnn': 1,
+    'use_tagger_rnn': 0,
     'tagger_rnn_type': 'lstm',
-    'use_parser_rnn': 1,
+    'use_parser_rnn': 0,
     'parser_rnn_type': 'lstm',
     # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'parser_rnn_hidden_size': 400,
-    'parser_rnn_layers': 3,
+    'parser_rnn_layers': 0,
     # 'use_tag_embeddings_in_parser': 0,
-    'tag_embedding_type': 'linear', # 'linear', 'embedding', 'none'
+    'tag_embedding_type': 'none', # 'linear', 'embedding', 'none'
 
     # parser options
-    'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', or 'dgm', 'gnn2'
+    'parser_type': 'gat_unbatched', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', 'gat_unbatched', 'dgm', 'gnn2'
     'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
     'bma_init': 'xu', # 'xu', 'norm'
     'arc_norm': 0,
-    'gnn_enc_layers': 0,
+    'gnn_enc_layers': 1,
     'parser_residual': 0,
     'bias_type': 'simple',
     'activation': '',
-    'top_k': 1,
+    'top_k': 4,
     'num_attn_heads': 1,
     'step_bilinear_attn': 0,
     'arc_pred': 'attn',

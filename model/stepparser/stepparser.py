@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
 from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import MTRFGParser, SimpleParser, GNNParser, GCNParser, GATParser
+from model.parser import MTRFGParser, SimpleParser, GNNParser, GCNParser, GATParser, GATParserUnbatched
 from model.tagger import Tagger
 from model.gnn import GATNet, MPNNNet
 from model.decoder import GraphDecoder, masked_log_softmax
@@ -31,6 +31,8 @@ class StepParser(torch.nn.Module):
             self.parser = GCNParser.get_model(self.config)
         elif self.config['parser_type'] == 'gat':
             self.parser = GATParser.get_model(self.config)
+        elif self.config['parser_type'] == 'gat_unbatched':
+            self.parser = GATParserUnbatched.get_model(self.config)
         self.decoder = GraphDecoder(config=config,
                                     tag_representation_dim=self.parser.tag_representation_dim,
                                     n_edge_labels = self.parser.n_edge_labels)
