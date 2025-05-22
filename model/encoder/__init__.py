@@ -1,1 +1,1 @@
-from .encoder import Encoder, BERTWordEmbeddings
+from .encoder import Encoder

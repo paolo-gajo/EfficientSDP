@@ -3,14 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 from model.encoder import Encoder
-from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched
+from model.parser import SimpleParser
 from model.tagger import Tagger
-from model.decoder import GraphDecoder, masked_log_softmax
+from model.decoder import GraphDecoder
 import numpy as np
 import warnings
-from typing import Set, Tuple
 from debug.model_debugging import nan_checker, check_param_norm, check_grad_norm
-import copy
 
 class StepParser(torch.nn.Module):
     def __init__(self, config):
@@ -18,26 +16,12 @@ class StepParser(torch.nn.Module):
         self.config = config
         self.encoder = Encoder(config)
         self.tagger = Tagger(self.config)
-
-        # select the type of parser
-        if self.config['parser_type'] == 'simple':
-            self.parser = SimpleParser.get_model(self.config) # base setting
-        if self.config['parser_type'] == 'triaffine':
-            self.parser = TriParser.get_model(self.config) # triaffine parser
-        elif self.config['parser_type'] == 'gnn':
-            self.parser = GNNParser.get_model(self.config)
-        elif self.config['parser_type'] == 'gcn':
-            self.parser = GCNParser.get_model(self.config)
-        elif self.config['parser_type'] == 'gat':
-            self.parser = GATParser.get_model(self.config)
-        elif self.config['parser_type'] == 'gat_unbatched':
-            self.parser = GATParserUnbatched.get_model(self.config)
+        self.parser = SimpleParser.get_model(self.config) # base setting
         self.decoder = GraphDecoder(config=config,
                                     tag_representation_dim=self.parser.tag_representation_dim,
                                     n_edge_labels = self.parser.n_edge_labels)
         self.tokenizer = AutoTokenizer.from_pretrained(self.config["model_name"])
         self.mode = "train"
-        self.parser.current_step, self._current_step = 0, 0        
 
     def forward(self, model_input):
         # encoder
@@ -47,92 +31,50 @@ class StepParser(torch.nn.Module):
             for k, v in model_input.items()}
         encoder_input = {k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
             for k, v in model_input["encoded_input"].items()}
-        
-        if self.config['procedural']:
-            encoder_input['step_indices'] = model_input["step_indices_tokens"]
-            encoder_input['graph_laplacian'] = model_input["graph_laplacian"]
-
-        if self.config["use_step_mask"]:
-            # Create step mask for attention
-            encoder_input["attention_mask"] = self.make_step_mask(
-                encoder_input["attention_mask"],
-                model_input["step_graph"],
-                model_input["step_indices_tokens"],)
-            encoder_input["words_mask_custom"] = self.token_mask_to_word_mask(
-                encoder_input["attention_mask"], encoder_input)
-
-        # Run encoder to get token/word representations
         encoder_output = self.encoder(encoder_input)
 
-        # Determine which representation mode to use
+        # determine which representation mode to use
         if self.config["rep_mode"] == "words":
             tagger_labels = model_input["pos_tags"]
             mask = encoder_input["words_mask_custom"]
             head_indices = model_input["head_indices"]
             head_tags = model_input["head_tags"]
-            step_indices = model_input["step_indices"] if self.config['procedural'] else None
         elif self.config["rep_mode"] == "tokens":
             tagger_labels = model_input["pos_tags_tokens"]
             mask = encoder_input["attention_mask"]
             head_indices = model_input["head_indices_tokens"]
             head_tags = model_input["head_tags_tokens"]
-            step_indices = model_input["step_indices_tokens"]
 
-        # Use appropriate tags based on mode
-        # NOTE: step graph settings are WIP
+        # use appropriate tags based on mode
         if self.mode in ["train", "validation"]:
             head_tags, head_indices = head_tags, head_indices
-            step_graphs = model_input['step_graph'] if self.config['procedural'] else None
-            graph_laplacian = model_input['graph_laplacian'] if self.config['procedural'] else None
-            edge_index=model_input["edge_index"] if self.config['procedural'] else None
         elif self.mode == "test":
             head_tags, head_indices = None, None
-            step_graphs = None
-            graph_laplacian = model_input['graph_laplacian'] if self.config['procedural'] else None
-            # TODO: this eventually needs to be None
-            # it needs to be inferred during eval
-            # (or could use a flag to control whether to use oracle)
-            edge_index=None
 
-        # Tagging
+        # tagging
         tagger_output = self.tagger(encoder_output, mask=mask, labels=tagger_labels)
 
+        # convert preds/golds to one-hot
         pos_tags_pred_one_hot = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
+        pos_tags_gt = torch.nn.functional.one_hot(tagger_labels, num_classes=self.config["n_tags"])
 
-        # Ground-truth tags
-        try:
-            pos_tags_gt = torch.nn.functional.one_hot(tagger_labels, num_classes=self.config["n_tags"])
-        except:
-            warnings.warn("Ground truth tags are unavailable, using predicted tags for all purposes.")
-            pos_tags_gt = pos_tags_pred_one_hot
-
-        # Use predicted or ground truth tags based on config
+        # use predicted or ground truth tags (oracle)
         pos_tags_parser_one_hot = pos_tags_pred_one_hot if self.config["use_pred_tags"] else pos_tags_gt
-        pos_tags_parser_cls_idx = torch.argmax(tagger_output.logits, dim=-1) if self.config["use_pred_tags"] else tagger_labels
-
-        pos_tags_dict = {
-            'pos_tags_one_hot': pos_tags_parser_one_hot.float(),
-            'pos_tags_labels': pos_tags_parser_cls_idx,
-        }
 
         if self.config['tag_embedding_type'] == 'linear':
-            pos_tags = pos_tags_dict['pos_tags_one_hot']
-        elif self.config['tag_embedding_type'] == 'embedding':
-            pos_tags = pos_tags_dict['pos_tags_labels']
+            pos_tags = pos_tags_parser_one_hot.float()
         elif self.config['tag_embedding_type'] == 'none':
             pos_tags = None
         else:
             raise ValueError('parameter `tag_embedding_type` can only be == `linear` or `embedding`')
 
-        # Parsing
+        # parsing
         parser_output = self.parser(
             encoded_text_input=encoder_output,
             pos_tags=pos_tags,
             mask=mask,
             head_tags=head_tags,
             head_indices=head_indices,
-            step_indices=step_indices,
-            graph_laplacian=graph_laplacian,
         )
 
         decoder_output = self.decoder(
@@ -145,15 +87,11 @@ class StepParser(torch.nn.Module):
             metadata = parser_output['metadata'],
         )
 
-        gnn_losses = parser_output.get('gnn_losses', [])
-        decoder_mask = decoder_output['mask']
-        # Calculate loss or return predictions
+        # calculate loss or return predictions
         if self.mode in ["train", "validation"]:
             loss = (tagger_output.loss * self.config["tagger_lambda"]
                     + decoder_output["loss"] * self.config["parser_lambda"]
                     )
-            if len(gnn_losses) > 0:
-                loss += sum(gnn_losses)/len(gnn_losses) * self.config["parser_lambda"]
             return loss
         elif self.mode == "test":
             tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, mask)
@@ -166,67 +104,7 @@ class StepParser(torch.nn.Module):
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
                     tagger_human_readable, decoder_human_readable, model_input, mask
                 )
-            if self.config['output_edge_scores']:
-                scores = parser_output['attended_arcs']
-                softmax_scores = F.softmax(scores, dim = -1)
-                masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
-                score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
-                softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)
-                masked_log_softmax_score_var = torch.var(masked_log_softmax_scores.view(masked_log_softmax_scores.shape[0], -1), dim=1, unbiased=False)
-                for i in range(len(output_as_list_of_dicts)):
-                    output_as_list_of_dicts[i]['attn_scores_var'] = score_var.tolist()[i]
-                    output_as_list_of_dicts[i]['attn_scores_softmax_var'] = softmax_score_var.tolist()[i]
-                    output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
             return output_as_list_of_dicts
-
-    @property
-    def current_step(self):
-        return self._current_step
-
-    @current_step.setter
-    def current_step(self, val):
-        self._current_step = val
-        if hasattr(self, 'parser'):
-            self.parser.current_step = val
-
-    def freeze_gnn(self):
-        for param in self.parser.conv1_arc.parameters():
-            param.requires_grad = False
-        for param in self.parser.conv2_arc.parameters():
-            param.requires_grad = False
-        for param in self.parser.conv1_rel.parameters():
-            param.requires_grad = False
-        for param in self.parser.conv2_rel.parameters():
-            param.requires_grad = False
-        for layer in self.parser.arc_bilinear[:-1]:
-            for param in layer.parameters():
-                param.requires_grad = False
-        print(f"GNN frozen at step {self.config['current_step']}!")
-
-    def unfreeze_gnn(self):
-        for param in self.parser.conv1_arc.parameters():
-            param.requires_grad = True
-        for param in self.parser.conv2_arc.parameters():
-            param.requires_grad = True
-        for param in self.parser.conv1_rel.parameters():
-            param.requires_grad = True
-        for param in self.parser.conv2_rel.parameters():
-            param.requires_grad = True
-        for layer in self.parser.arc_bilinear[:-1]:
-            for param in layer.parameters():
-                param.requires_grad = True
-        print(f"GNN unfrozen at step {self.config['current_step']}!")
-        return True
-    
-    def init_gnn_biaffines(self):
-        layer = copy.deepcopy(self.parser.arc_bilinear[-1])
-        new_layers = [copy.deepcopy(layer) for _ in range(self.config['gnn_enc_layers'])]
-        self.parser.arc_bilinear = nn.ModuleList(new_layers + list(self.parser.arc_bilinear))
-        new_layers = self.parser.arc_bilinear[: self.config['gnn_enc_layers']]
-        new_params = []
-        for layer in new_layers:
-            new_params += list(layer.parameters())
-        return new_params
 
     def log_gradients(self):
         """
@@ -235,7 +113,7 @@ class StepParser(torch.nn.Module):
         """
         grad_debug_dict = {}
         
-        # Check gradient norms for each component
+        # check gradient norms for each component
         encoder_grad_norm = check_grad_norm(self.encoder)
         grad_debug_dict['encoder_grad_norm'] = encoder_grad_norm.item()
         
@@ -248,143 +126,12 @@ class StepParser(torch.nn.Module):
         decoder_grad_norm = check_grad_norm(self.decoder)
         grad_debug_dict['decoder_grad_norm'] = decoder_grad_norm.item()
         
-        # Overall model gradient norm
+        # overall model gradient norm
         overall_grad_norm = check_grad_norm(self)
         grad_debug_dict['overall_grad_norm'] = overall_grad_norm.item()
         
         self.grad_debug_list.append(grad_debug_dict)
         return grad_debug_dict
-    
-    def make_step_mask(
-        self,
-        attention_mask: torch.Tensor,
-        step_graph: Set[Tuple[int, int]],
-        step_idx_tokens: torch.Tensor,
-    ):
-        """
-        This function takes in an attention mask, a step graph, and per-token step indices
-        to return a mask where the ones (1) are only present in areas
-        relative to nodes connected within the step graph
-        """
-        step_idx_tokens = step_idx_tokens.to(self.config["device"])
-
-        _, seq_len = attention_mask.shape
-        step_mask_list = []
-
-        for nodes, step_indices, attn_mask in zip(
-            step_graph, step_idx_tokens, attention_mask
-        ):
-            # get inverse edge directions
-            nodes_reverse = set([tuple(sorted(el, reverse=True)) for el in nodes])
-            # nodes = nodes.union(nodes_reverse)
-            nodes = nodes_reverse
-            unique_nodes = set(step_indices.tolist()).difference({0})
-
-            # Initialize mask with zeros
-            mask = torch.zeros(
-                (seq_len, seq_len), dtype=torch.float32, device=self.config["device"]
-            )
-
-            # Add self-loops
-            for i in unique_nodes:
-                mask += (
-                    (step_indices[:, None] == i) & (step_indices[None, :] == i)
-                ).int()
-
-            # Add edges
-            for src, tgt in nodes:
-                mask += (
-                    (step_indices[:, None] == src) & (step_indices[None, :] == tgt)
-                ).int()
-
-            pad_limit = torch.max(torch.where(attn_mask == 1)[0])
-
-            # NOTE: these two lines include the SEP tokens, don't remove
-            mask[: pad_limit + 1, pad_limit : pad_limit + 1] = 1
-            mask[pad_limit : pad_limit + 1, : pad_limit + 1] = 1
-            # NOTE: this line includes the original padding, don't remove
-            mask[pad_limit:, : pad_limit + 1] = 1
-
-            # NOTE: the line below is the equivalent of using the original mask
-            # mask[:,:pad_limit+1] = 1
-
-            step_mask_list.append(mask)
-
-        # save_heatmap(mask, filename='step_mask.pdf')
-
-        batch_step_mask = torch.stack(step_mask_list, dim=0)
-        return batch_step_mask
-
-    def token_mask_to_word_mask(self, token_step_mask, encoder_input):
-        """
-        Convert a 3D token-level step mask to a word-level step mask using word_ids_custom.
-
-        Args:
-            token_step_mask (torch.Tensor): Shape (batch, seq_len, seq_len) with 1s for active token pairs.
-            encoder_input (dict): Contains 'word_ids_custom' (shape [batch, seq_len]) and 'words_mask_custom'.
-
-        Returns:
-            torch.Tensor: Word-level mask (batch, max_words, max_words) where 1s indicate active word pairs.
-        """
-        batch_size, seq_len, _ = token_step_mask.shape
-        max_words = encoder_input["words_mask_custom"].shape[1]
-        device = token_step_mask.device
-
-        word_step_mask = torch.zeros(
-            (batch_size, max_words, max_words), dtype=torch.long, device=device
-        )
-
-        for b in range(batch_size):
-            word_ids = encoder_input["word_ids_custom"][b]  # (seq_len)
-            words_mask = encoder_input["words_mask_custom"][b]  # (max_words)
-
-            current_token_mask = token_step_mask[b].float()  # (seq_len, seq_len)
-            # save_heatmap(current_token_mask, f'current_token_mask_{b}.pdf')
-            # Create a new tensor for mapped word IDs
-            # Map all special tokens (-100) to a temporary index and ensure all indices are valid
-            mapped_word_ids = word_ids.clone()
-
-            # Create a mask for valid word IDs (not -100 and within range)
-            valid_mask = (mapped_word_ids >= 0) & (mapped_word_ids < max_words)
-
-            # For invalid indices, we'll temporarily use 0 (we'll filter these out later)
-            mapped_word_ids = torch.where(
-                valid_mask, mapped_word_ids, torch.zeros_like(mapped_word_ids)
-            )
-
-            # Create one-hot matrix: (max_words, seq_len)
-            W = (
-                torch.nn.functional.one_hot(mapped_word_ids, num_classes=max_words)
-                .float()
-                .permute(1, 0)
-                .to(device)
-            )
-
-            # Apply valid mask to zero out contributions from special tokens
-            W = W * valid_mask.float().unsqueeze(0)
-
-            # Compute word interactions: W @ token_mask @ W.T
-            word_interactions = torch.matmul(W, torch.matmul(current_token_mask, W.T))
-            current_word_mask = (word_interactions > 0).long()
-
-            # Apply word mask to zero out padding
-            current_word_mask *= words_mask.unsqueeze(1)
-            current_word_mask *= words_mask.unsqueeze(0)
-
-            pad_limit = torch.max(torch.where(words_mask == 1)[0])
-
-            # NOTE: these two lines include the SEP tokens, don't remove
-            current_word_mask[: pad_limit + 1, pad_limit : pad_limit + 1] = 1
-            current_word_mask[pad_limit : pad_limit + 1, : pad_limit + 1] = 1
-            # NOTE: this line includes the original padding, don't remove
-            current_word_mask[pad_limit:, : pad_limit + 1] = 1
-
-            # Optionally save heatmap (consider commenting this out for production)
-            # save_heatmap(current_word_mask, f'word_step_mask_batch_{b}.pdf')
-
-            word_step_mask[b] = current_word_mask
-
-        return word_step_mask
 
     def freeze_tagger(self):
         """Freeze tagger if asked for!"""

@@ -72,13 +72,11 @@ class SimpleParser(nn.Module):
     def forward(
         self,
         encoded_text_input: torch.FloatTensor,
-        pos_tags: torch.LongTensor,
+        pos_tags: torch.Tensor,
         mask: torch.LongTensor,
         metadata: List[Dict[str, Any]] = [],
         head_tags: torch.LongTensor = None,
         head_indices: torch.LongTensor = None,
-        step_indices: torch.LongTensor = None,
-        graph_laplacian: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
 
         if self.config["tag_embedding_type"] != 'none':
@@ -209,10 +207,7 @@ class SimpleParser(nn.Module):
             embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
             tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
             print('Using nn.Linear for tag embeddings!')
-        elif config['tag_embedding_type'] == 'embedding':
-            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
-            tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
-            print('Using nn.Embedding for tag embeddings!')
+
         elif config['tag_embedding_type'] == 'none':
             embedding_dim = config["encoder_output_dim"] # 768
             tag_embedder = None

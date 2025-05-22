@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH -J large
+#SBATCH -J all_exp
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=12:00:00
+#SBATCH --time=00:20:00
 #SBATCH --output=./.slurm/%A_%a_output.log
 #SBATCH --error=./.slurm/%A_%a_error.log
 #SBATCH --mem=64G
@@ -16,62 +16,47 @@ source .env/bin/activate
 # Define all parameter combinations
 declare -a seed_values=(
   0
-  1
-  2
-  3
-  4
+  # 1
+  # 2
+  # 3
+  # 4
   )
 declare -a dataset_name_options=(
   "ade"
   "conll04"
   "scierc"
-  "yamakata"
+  "erfgc"
+  "scidtb"
+  "ud202xpos"
   )
 declare -a model_name_options=(
   # "answerdotai/ModernBERT-base"
   # "microsoft/deberta-v3-base"
-  "microsoft/deberta-v3-large"
-  # "bert-base-uncased"
-  "bert-large-uncased"
-  )
-declare -a parser_type_options=(
-  "simple"
-  # "gnn"
+  # "microsoft/deberta-v3-large"
+  "bert-base-uncased"
+  # "bert-large-uncased"
   )
 declare -a arc_norm_options=(
   0
   1
   )
-declare -a gnn_enc_layers_options=(
-  0
-  # 1
-  # 2
-  # 3
-  )
-declare -a parser_residual_options=(0)
 declare -a freeze_encoder_options=(
-  # 1
+  1
   0
-  )
-declare -a use_lora_options=(
-  0
-  # 1
   )
 declare -a use_tagger_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
   0
-  # 1
+  1
   )
 declare -a parser_rnn_type_options=(
-  # "none"
-  # "gru"
   "lstm"
   # "normlstm"
   )
 parser_rnn_layers_options=(
   0
   1
-  2
-  3
+  # 2
+  # 3
   # 4
   # 5
   # 6
@@ -82,30 +67,29 @@ parser_rnn_layers_options=(
   )
 parser_rnn_hidden_size_options=(
   # 0
-  # 100
+  100
   # 200
   # 300
-  400
+  # 400
   )
 arc_representation_dim_options=(
-  # 100
+  100
   # 300
-  500
+  # 500
   )
 tag_embedding_type_options=(
   "linear"
-  # "embedding"
   # "none"
 )
 bias_type='simple'
 
 # Fixed parameters
 training='steps'
-training_steps=10000
-eval_steps=100
-test_steps=100
+training_steps=100
+eval_steps=50
+test_steps=50
 
-results_suffix="_ft_base_10k_grad_clipping"
+results_suffix="_testing"
 
 # new norm setting
 # parser_init='xu+norm'
@@ -124,31 +108,23 @@ grad_clip_norm=1.0
 
 valid_combinations=()
 for seed in "${seed_values[@]}"; do
-  for parser_type in "${parser_type_options[@]}"; do
-    for freeze_encoder in "${freeze_encoder_options[@]}"; do
-      for gnn_enc_layers in "${gnn_enc_layers_options[@]}"; do
-        for arc_norm in "${arc_norm_options[@]}"; do
-          for use_tagger_rnn in "${use_tagger_rnn_options[@]}"; do
-            for parser_rnn_type in "${parser_rnn_type_options[@]}"; do
-              for model_name in "${model_name_options[@]}"; do
-                for parser_residual in "${parser_residual_options[@]}"; do
-                  for use_lora in "${use_lora_options[@]}"; do
-                    for dataset_name in "${dataset_name_options[@]}"; do
-                      for parser_rnn_layers in "${parser_rnn_layers_options[@]}"; do
-                        for parser_rnn_hidden_size in "${parser_rnn_hidden_size_options[@]}"; do
-                          for arc_representation_dim in "${arc_representation_dim_options[@]}"; do
-                            for tag_embedding_type in "${tag_embedding_type_options[@]}"; do
-                              if [ "$parser_rnn_layers" -gt 0 ] && [ "$freeze_encoder" == 0 ]; then
-                                continue
-                              fi
-                              if [ "$use_tagger_rnn" == 1 ] && [ "$freeze_encoder" == 0 ]; then
-                                continue
-                              fi
-                              valid_combinations+=("$seed $use_tagger_rnn $parser_type $freeze_encoder $gnn_enc_layers $arc_norm $parser_rnn_type $model_name $parser_residual $use_lora $dataset_name $parser_rnn_layers $parser_rnn_hidden_size $arc_representation_dim $tag_embedding_type")
-                            done
-                          done
-                        done
-                      done
+  for freeze_encoder in "${freeze_encoder_options[@]}"; do
+    for arc_norm in "${arc_norm_options[@]}"; do
+      for use_tagger_rnn in "${use_tagger_rnn_options[@]}"; do
+        for parser_rnn_type in "${parser_rnn_type_options[@]}"; do
+          for model_name in "${model_name_options[@]}"; do
+            for dataset_name in "${dataset_name_options[@]}"; do
+              for parser_rnn_layers in "${parser_rnn_layers_options[@]}"; do
+                for parser_rnn_hidden_size in "${parser_rnn_hidden_size_options[@]}"; do
+                  for arc_representation_dim in "${arc_representation_dim_options[@]}"; do
+                    for tag_embedding_type in "${tag_embedding_type_options[@]}"; do
+                      if [ "$parser_rnn_layers" -gt 0 ] && [ "$freeze_encoder" == 0 ]; then
+                        continue
+                      fi
+                      if [ "$use_tagger_rnn" == 1 ] && [ "$freeze_encoder" == 0 ]; then
+                        continue
+                      fi
+                      valid_combinations+=("$seed $use_tagger_rnn $parser_type $freeze_encoder $arc_norm $parser_rnn_type $model_name $parser_residual $dataset_name $parser_rnn_layers $parser_rnn_hidden_size $arc_representation_dim $tag_embedding_type")
                     done
                   done
                 done
@@ -173,22 +149,18 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
     
     # Parse the combination
     # use_tag_embeddings_in_parser
-    read -r seed use_tagger_rnn parser_type freeze_encoder gnn_enc_layers arc_norm \
-    parser_rnn_type model_name parser_residual \
-    use_lora dataset_name parser_rnn_layers parser_rnn_hidden_size arc_representation_dim tag_embedding_type <<< "$current_combination"
+    read -r seed use_tagger_rnn freeze_encoder arc_norm \
+    parser_rnn_type model_name \
+    dataset_name parser_rnn_layers parser_rnn_hidden_size arc_representation_dim tag_embedding_type <<< "$current_combination"
     
     # Run the command with these parameters
     command_to_run="python ./src/train.py --opt \
 --seed $seed \
 --use_tagger_rnn $use_tagger_rnn \
---parser_type $parser_type \
 --freeze_encoder $freeze_encoder \
---gnn_enc_layers $gnn_enc_layers \
 --arc_norm $arc_norm \
 --parser_rnn_type $parser_rnn_type \
 --model_name $model_name \
---parser_residual $parser_residual \
---use_lora $use_lora \
 --dataset_name $dataset_name \
 --parser_rnn_layers $parser_rnn_layers \
 --parser_rnn_hidden_size $parser_rnn_hidden_size \
