@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J large
+#SBATCH -J all_exp
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1

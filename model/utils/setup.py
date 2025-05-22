@@ -49,7 +49,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"tag_embedding_type_{config['tag_embedding_type']}",
                             f"{model_name}_{get_current_time_string()}_seed_{config['seed']}",
                             )
-    if config['dataset_name'] in ['ud202upos', 'ud202xpos', 'ptbsci', 'stac']:
+    if config['dataset_name'] in ['ud202xpos', 'scidtb']:
         config['test_ignore_edge_dep'] = ['punct']
         config['test_ignore_tag'] = []
         config['test_ignore_edges'] = []
