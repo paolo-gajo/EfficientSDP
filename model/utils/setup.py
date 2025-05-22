@@ -14,15 +14,15 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
         else:
             config[key] = args[key]
 
-    ## when we are doing validation or test, we just need to change variables
-    ## from command line args
+    # when we are doing validation or test, we just need to change variables
+    # from command line args
     if mode == 'validation' or mode == 'test':
         return config
 
-    ## let's set the device correctly
+    # let's set the device correctly
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     splits = ['train', 'val', 'test']
-    ## correct directory name
+    # correct directory name
     aug_string = ''.join([str(el) for el in [config[f'augment_{split}'] for split in splits]])
     k_string = '-'.join([str(el) for el in [config[f'augment_k_{split}'] for split in splits]])
     keep_og_string = ''.join([str(el) for el in [config[f'keep_og_{split}'] for split in splits]])
@@ -31,7 +31,6 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     parser_rnn_string = 1 if config['use_parser_rnn'] else 0
     save_dir, model_name = config['save_dir'], config['model_name'].replace('/', '-').replace(' ', '')
     augment_type = 'none' if '1' not in aug_string else config['augment_type']
-    training_amount = config['training_steps'] if config['training'] == 'steps' else config['epochs']
     model_name = model_name if not config['use_abs_step_embeddings'] else 'step-bert'
     parser_type = 'mtrfg' if config['parser_type'] == 'mtrfg' else f"{config['parser_type']}_{config['gnn_enc_layers']}"
     dir_path = os.path.join(f"{save_dir}{config['results_suffix']}",
@@ -46,7 +45,6 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"data={config['dataset_name']}",
                             f"parser_type_{parser_type}_mlp_{config['arc_representation_dim']}",
                             f"arc_norm_{config['arc_norm']}",
-                            # f"parser_residual_{config['parser_residual']}",
                             f"use_lora_{config['use_lora']}",
                             f"tag_embedding_type_{config['tag_embedding_type']}",
                             f"{model_name}_{get_current_time_string()}_seed_{config['seed']}",
@@ -57,7 +55,6 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
         config['test_ignore_edges'] = []
         
     if config['freeze_encoder']:
-    # if not config['use_lora']:
         config['learning_rate'] = config['learning_rate_freeze']
     else:
         config['learning_rate'] = config['learning_rate_encoder']
@@ -76,19 +73,19 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     config['val_file_graphs'] = config['val_file_graphs'].format(dataset_name = config['dataset_name'])
     config['test_file_graphs'] = config['test_file_graphs'].format(dataset_name = config['dataset_name'])
 
-    ## model path
+    # model path
     config['model_path'] = os.path.join(config['save_dir'], 'model.pth')
 
-    ## get encoder output dimension (aka hidden size)
+    # get encoder output dimension (aka hidden size)
     config['encoder_output_dim'] = AutoConfig.from_pretrained(config['model_name']).hidden_size
+    
+    set_seeds(config['seed'])
 
     return config
 
 def set_seeds(seed):
-
     """
-        This is to enable fully deterministic behaviour.
-        Borrowed from 
+        Enable deterministic behavior.
         https://github.com/huggingface/transformers/blob/main/src/transformers/trainer_utils.py#L58
     """
     set_seed(seed)

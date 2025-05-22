@@ -32,8 +32,8 @@ class GATParserUnbatched(nn.Module):
                                     bias_type='simple',
                                     arc_norm=self.config['arc_norm'],
                                     )
-            # for _ in range(1+self.config['gnn_enc_layers'])]).to(self.config['device'])
-            for _ in range(1)])
+            for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
+            # for _ in range(1)])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
@@ -70,7 +70,7 @@ class GATParserUnbatched(nn.Module):
 
         self.tag_representation_dim = tag_representation_dim
         self.n_edge_labels = self.config['n_edge_labels']
-        
+
     def forward(
         self,
         encoded_text_input: torch.FloatTensor,
@@ -110,74 +110,75 @@ class GATParserUnbatched(nn.Module):
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
 
-        # Loop over the number of GNN encoder layers.
-        for k in range(self.config['gnn_enc_layers']):
-            # Compute a soft adjacency (attention) matrix.
-            attended_arcs = self.arc_bilinear[0](head_arc, dept_arc)
-            arc_probs = F.softmax(attended_arcs, dim=-1)
-            
-            # Compute loss as in the original implementation.
-            arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
-            range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
-            length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
-            arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
-            arc_loss = arc_loss[:, 1:]
-            arc_nll = -arc_loss.sum() / valid_positions.float()
-            gnn_losses.append(arc_nll)
+        if self.config['current_step'] > self.config['use_gnn_steps'] and self.config['gnn_enc_layers'] > 0:
+            # Loop over the number of GNN encoder layers.
+            for k in range(self.config['gnn_enc_layers']):
+                # Compute a soft adjacency (attention) matrix.
+                attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
+                arc_probs = F.softmax(attended_arcs, dim=-1)
+                
+                # Compute loss as in the original implementation.
+                arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+                range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
+                length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
+                arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
+                arc_loss = arc_loss[:, 1:]
+                arc_nll = -arc_loss.sum() / valid_positions.float()
+                gnn_losses.append(arc_nll)
 
-            head_arc_updated = []
-            dept_arc_updated = []
-            head_tag_updated = []
-            dept_tag_updated = []
-            
-            for b in range(arc_probs.shape[0]):
-            
-                # Convert the dense soft adjacency matrix to a sparse representation.
-                # dense_to_sparse can handle batched inputs and will adjust node indices.
-                edge_index, edge_attr = batch_top_k(arc_probs[b].unsqueeze(0), k = self.config['top_k'])
-                edge_index_T, edge_attr_T = batch_top_k(arc_probs[b].transpose(0, 1).unsqueeze(0), k = self.config['top_k'])
+                head_arc_updated = []
+                dept_arc_updated = []
+                head_tag_updated = []
+                dept_tag_updated = []
                 
-                # ----- Update arc representations using GATv2Conv -----
-                # Flatten the batch: (B, N, F) -> (B*N, F)
-                # head_arc_flat = head_arc.reshape(batch_size * seq_len, -1)
-                # dept_arc_flat = dept_arc.reshape(batch_size * seq_len, -1)
+                for b in range(arc_probs.shape[0]):
                 
-                # Apply two GCN layers on head_arc.
-                head_arc_updated.append(self.conv1_arc[k](head_arc[b], edge_index, edge_attr))
-                # head_arc_updated = F.tanh(head_arc_updated)
-                # head_arc_updated = self.dropout_arc(head_arc_updated)
-                # head_arc_updated = self.conv2_arc[k](head_arc_updated, edge_index, edge_attr)
-                
-                # dept_arc_flat = (dept_arc_flat + head_arc_updated) / 2
-                
-                # Apply two GCN layers on dept_arc.
-                dept_arc_updated.append(self.conv2_arc[k](dept_arc[b], edge_index_T, edge_attr_T))
-                # dept_arc_updated = F.tanh(dept_arc_updated)
-                # dept_arc_updated = self.dropout_arc(dept_arc_updated)
-                # dept_arc_updated = self.conv2_arc[k](dept_arc_updated, edge_index, edge_attr)
-                
-                # Reshape back to (batch_size, sequence_length, F)
-                # head_arc = head_arc_updated.reshape(batch_size, seq_len, -1)
-                # dept_arc = dept_arc_updated.reshape(batch_size, seq_len, -1)
-                
-                # ----- Update relation (tag) representations using GATv2Conv -----
-                # head_tag_flat = head_tag.reshape(batch_size * seq_len, -1)
-                # dept_tag_flat = dept_tag.reshape(batch_size * seq_len, -1)
-                
-                head_tag_updated.append(self.conv1_rel[k](head_tag[b], edge_index, edge_attr))
-                # head_tag_updated = F.tanh(head_tag_updated)
-                # head_tag_updated = self.dropout_rel(head_tag_updated)
-                # head_tag_updated = self.conv2_rel[k](head_tag_updated, edge_index, edge_attr)
-                
-                # dept_tag_flat = (dept_tag_flat + head_tag_updated) / 2
-                
-                dept_tag_updated.append(self.conv2_rel[k](dept_tag[b], edge_index_T, edge_attr_T))
-                # dept_tag_updated = F.tanh(dept_tag_updated)
-                # dept_tag_updated = self.dropout_rel(dept_tag_updated)
-                # dept_tag_updated = self.conv2_rel[k](dept_tag_updated, edge_index, edge_attr)
-                
-                # head_tag = head_tag_updated.reshape(batch_size, seq_len, -1)
-                # dept_tag = dept_tag_updated.reshape(batch_size, seq_len, -1)
+                    # Convert the dense soft adjacency matrix to a sparse representation.
+                    # dense_to_sparse can handle batched inputs and will adjust node indices.
+                    edge_index, edge_attr = batch_top_k(arc_probs[b].unsqueeze(0), k = self.config['top_k'])
+                    edge_index_T, edge_attr_T = batch_top_k(arc_probs[b].transpose(0, 1).unsqueeze(0), k = self.config['top_k'])
+                    
+                    # ----- Update arc representations using GATv2Conv -----
+                    # Flatten the batch: (B, N, F) -> (B*N, F)
+                    # head_arc_flat = head_arc.reshape(batch_size * seq_len, -1)
+                    # dept_arc_flat = dept_arc.reshape(batch_size * seq_len, -1)
+                    
+                    # Apply two GCN layers on head_arc.
+                    head_arc_updated.append(self.conv1_arc[k](head_arc[b], edge_index, edge_attr))
+                    # head_arc_updated = F.tanh(head_arc_updated)
+                    # head_arc_updated = self.dropout_arc(head_arc_updated)
+                    # head_arc_updated = self.conv2_arc[k](head_arc_updated, edge_index, edge_attr)
+                    
+                    # dept_arc_flat = (dept_arc_flat + head_arc_updated) / 2
+                    
+                    # Apply two GCN layers on dept_arc.
+                    dept_arc_updated.append(self.conv2_arc[k](dept_arc[b], edge_index_T, edge_attr_T))
+                    # dept_arc_updated = F.tanh(dept_arc_updated)
+                    # dept_arc_updated = self.dropout_arc(dept_arc_updated)
+                    # dept_arc_updated = self.conv2_arc[k](dept_arc_updated, edge_index, edge_attr)
+                    
+                    # Reshape back to (batch_size, sequence_length, F)
+                    # head_arc = head_arc_updated.reshape(batch_size, seq_len, -1)
+                    # dept_arc = dept_arc_updated.reshape(batch_size, seq_len, -1)
+                    
+                    # ----- Update relation (tag) representations using GATv2Conv -----
+                    # head_tag_flat = head_tag.reshape(batch_size * seq_len, -1)
+                    # dept_tag_flat = dept_tag.reshape(batch_size * seq_len, -1)
+                    
+                    head_tag_updated.append(self.conv1_rel[k](head_tag[b], edge_index, edge_attr))
+                    # head_tag_updated = F.tanh(head_tag_updated)
+                    # head_tag_updated = self.dropout_rel(head_tag_updated)
+                    # head_tag_updated = self.conv2_rel[k](head_tag_updated, edge_index, edge_attr)
+                    
+                    # dept_tag_flat = (dept_tag_flat + head_tag_updated) / 2
+                    
+                    dept_tag_updated.append(self.conv2_rel[k](dept_tag[b], edge_index_T, edge_attr_T))
+                    # dept_tag_updated = F.tanh(dept_tag_updated)
+                    # dept_tag_updated = self.dropout_rel(dept_tag_updated)
+                    # dept_tag_updated = self.conv2_rel[k](dept_tag_updated, edge_index, edge_attr)
+                    
+                    # head_tag = head_tag_updated.reshape(batch_size, seq_len, -1)
+                    # dept_tag = dept_tag_updated.reshape(batch_size, seq_len, -1)
         
             head_arc = torch.stack(head_arc_updated, dim=0)
             dept_arc = torch.stack(dept_arc_updated, dim=0)
@@ -185,7 +186,7 @@ class GATParserUnbatched(nn.Module):
             dept_tag = torch.stack(dept_tag_updated, dim=0)
 
         # Compute final attended arcs.
-        attended_arcs = self.arc_bilinear[0](head_arc, dept_arc)
+        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,

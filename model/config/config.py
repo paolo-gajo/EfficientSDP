@@ -32,22 +32,24 @@ custom_config = {
     'procedural': 0,
 
     # vanilla options
-    'use_tagger_rnn': 0,
+    'use_tagger_rnn': 1,
     'tagger_rnn_type': 'lstm',
-    'use_parser_rnn': 0,
+    'use_parser_rnn': 1,
     'parser_rnn_type': 'lstm',
     # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'parser_rnn_hidden_size': 400,
-    'parser_rnn_layers': 0,
+    'parser_rnn_layers': 3,
     # 'use_tag_embeddings_in_parser': 0,
-    'tag_embedding_type': 'none', # 'linear', 'embedding', 'none'
+    'tag_embedding_type': 'linear', # 'linear', 'embedding', 'none'
 
     # parser options
-    'parser_type': 'gat_unbatched', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', 'gat_unbatched', 'dgm', 'gnn2'
+    'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', 'gat_unbatched', 'dgm', 'gnn2'
     'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
     'bma_init': 'xu', # 'xu', 'norm'
-    'arc_norm': 0,
+    'arc_norm': 1,
     'gnn_enc_layers': 1,
+    'use_gnn_steps': -1,
+    'current_step': 0,
     'parser_residual': 0,
     'bias_type': 'simple',
     'activation': '',
@@ -63,11 +65,10 @@ custom_config = {
     # model options
     'freeze_encoder': 1,
     'use_lora': 0,
-    'model_name': 'bert-base-uncased',
     'use_pred_tags' : 1, ## this will determine if gold tags are used for train/test/validation or not. 
+    'model_name': 'bert-base-uncased',
     # 'model_name': 'microsoft/deberta-v3-base',
     # 'model_name': 'microsoft/deberta-v3-large',
-    # 'model_name': 'answerdotai/ModernBERT-base',
     # 'model_name': 'google-bert/bert-large-uncased',
     'seed': 0,
     'tagger_lambda': 0.1,
@@ -95,7 +96,7 @@ custom_config = {
     'training_steps': 2000,
     'eval_steps': 100,
     'test_steps': 100,
-    'epochs': 100,
+    'epochs': 0 ,
     'patience': 0.3,
 }
 

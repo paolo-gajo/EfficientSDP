@@ -1,17 +1,11 @@
-from typing import Dict, Optional, Tuple, Any, List, Set
-import logging
+from typing import Dict, Any, List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from torch_geometric.nn import GCNConv
-from torch_geometric.data import Batch, Data
 from model.parser.parser_nn import *
-from model.decoder import masked_log_softmax
-import math
 from debug import save_heatmap
 import warnings
-import copy
 import numpy as np
 
 class SimpleParser(nn.Module):
@@ -222,6 +216,7 @@ class SimpleParser(nn.Module):
         elif config['tag_embedding_type'] == 'none':
             embedding_dim = config["encoder_output_dim"] # 768
             tag_embedder = None
+            print('NOT using tag embeddings!')
         else:
             raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
         n_edge_labels = config["n_edge_labels"]

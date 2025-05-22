@@ -2,8 +2,9 @@ from model.stepparser import StepParser
 from model.utils import is_file
 import torch
 from peft import LoraConfig, get_peft_model, TaskType
+from model.utils.train_utils import print_params
 
-def build_model(config, model_start_path = None):
+def build_model(config, model_start_path = None, verbose = False):
     """
         build and return full architecture from the config
     """
@@ -35,6 +36,9 @@ def build_model(config, model_start_path = None):
     ## freeze parser if asked for
     if config['freeze_parser']:
         model.freeze_parser()
+
+    if config['use_gnn_steps'] > 0:
+        model.freeze_gnn()
     
     if len(config['unfreeze_layers']):
         for l in config['unfreeze_layers']:
@@ -52,5 +56,7 @@ def build_model(config, model_start_path = None):
             # layers_to_transform=[11],
         )
         model.encoder.encoder = get_peft_model(model.encoder.encoder, lora_config)
-
+    
+    if verbose: print_params(model)
+    
     return model

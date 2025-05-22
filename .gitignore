@@ -1,4 +1,4 @@
-**/__pycache__/**
+__pycache__
 **/.ipynb_checkpoints/**
 **/*.egg-info/
 data/
@@ -17,3 +17,4 @@ activate.sh
 reset.sh
 run.sh
 sal.sh
+.slurm

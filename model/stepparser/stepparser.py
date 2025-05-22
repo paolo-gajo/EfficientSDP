@@ -1,30 +1,29 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATv2Conv
 from transformers import AutoTokenizer
-from model.encoder import Encoder, BERTWordEmbeddings
-from model.parser import MTRFGParser, SimpleParser, GNNParser, GCNParser, GATParser, GATParserUnbatched
+from model.encoder import Encoder
+from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched
 from model.tagger import Tagger
-from model.gnn import GATNet, MPNNNet
 from model.decoder import GraphDecoder, masked_log_softmax
 import numpy as np
 import warnings
-from typing import Set, Tuple, List
-import matplotlib.pyplot as plt
+from typing import Set, Tuple
 from debug.model_debugging import nan_checker, check_param_norm, check_grad_norm
+import copy
 
 class StepParser(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.encoder = Encoder(config)
-
         self.tagger = Tagger(self.config)
-        if self.config['parser_type'] == 'mtrfg':
-            self.parser = MTRFGParser.get_model(self.config)
-        elif self.config['parser_type'] == 'simple':
-            self.parser = SimpleParser.get_model(self.config)         
+
+        # select the type of parser
+        if self.config['parser_type'] == 'simple':
+            self.parser = SimpleParser.get_model(self.config) # base setting
+        if self.config['parser_type'] == 'triaffine':
+            self.parser = TriParser.get_model(self.config) # triaffine parser
         elif self.config['parser_type'] == 'gnn':
             self.parser = GNNParser.get_model(self.config)
         elif self.config['parser_type'] == 'gcn':
@@ -38,23 +37,17 @@ class StepParser(torch.nn.Module):
                                     n_edge_labels = self.parser.n_edge_labels)
         self.tokenizer = AutoTokenizer.from_pretrained(self.config["model_name"])
         self.mode = "train"
+        self.parser.current_step, self._current_step = 0, 0        
 
     def forward(self, model_input):
         # encoder
-        model_input = {
-            k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
-            for k, v in model_input.items()
-        }
-
-        model_input = {
-            k: [el.to(self.config["device"]) for el in v] if (isinstance(v, list) and isinstance(v[0], torch.Tensor)) else v
-            for k, v in model_input.items()
-        }
+        model_input = {k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
+            for k, v in model_input.items()}
+        model_input = {k: [el.to(self.config["device"]) for el in v] if (isinstance(v, list) and isinstance(v[0], torch.Tensor)) else v
+            for k, v in model_input.items()}
+        encoder_input = {k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
+            for k, v in model_input["encoded_input"].items()}
         
-        encoder_input = {
-            k: v.to(self.config["device"]) if isinstance(v, torch.Tensor) else v
-            for k, v in model_input["encoded_input"].items()
-        }
         if self.config['procedural']:
             encoder_input['step_indices'] = model_input["step_indices_tokens"]
             encoder_input['graph_laplacian'] = model_input["graph_laplacian"]
@@ -64,11 +57,9 @@ class StepParser(torch.nn.Module):
             encoder_input["attention_mask"] = self.make_step_mask(
                 encoder_input["attention_mask"],
                 model_input["step_graph"],
-                model_input["step_indices_tokens"],
-            )
+                model_input["step_indices_tokens"],)
             encoder_input["words_mask_custom"] = self.token_mask_to_word_mask(
-                encoder_input["attention_mask"], encoder_input
-            )
+                encoder_input["attention_mask"], encoder_input)
 
         # Run encoder to get token/word representations
         encoder_output = self.encoder(encoder_input)
@@ -88,6 +79,7 @@ class StepParser(torch.nn.Module):
             step_indices = model_input["step_indices_tokens"]
 
         # Use appropriate tags based on mode
+        # NOTE: step graph settings are WIP
         if self.mode in ["train", "validation"]:
             head_tags, head_indices = head_tags, head_indices
             step_graphs = model_input['step_graph'] if self.config['procedural'] else None
@@ -97,27 +89,21 @@ class StepParser(torch.nn.Module):
             head_tags, head_indices = None, None
             step_graphs = None
             graph_laplacian = model_input['graph_laplacian'] if self.config['procedural'] else None
-            # TODO: THIS NEEDS TO BE NONE AFTER I'M DONE TESTING!
-            # IT NEEDS TO BE INFERRED DURING EVAL/TEST!
-            # OR PUT A FLAG TO LET ME CONTROL WHETHER TO USE ORACLE/NOT ORACLE FOR LAPLACIAN
+            # TODO: this eventually needs to be None
+            # it needs to be inferred during eval
+            # (or could use a flag to control whether to use oracle)
             edge_index=None
 
         # Tagging
-        tagger_output = self.tagger(
-            encoder_output, mask=mask, labels=tagger_labels
-        )
+        tagger_output = self.tagger(encoder_output, mask=mask, labels=tagger_labels)
 
         pos_tags_pred_one_hot = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
 
         # Ground-truth tags
         try:
-            pos_tags_gt = torch.nn.functional.one_hot(
-                tagger_labels, num_classes=self.config["n_tags"]
-            )
+            pos_tags_gt = torch.nn.functional.one_hot(tagger_labels, num_classes=self.config["n_tags"])
         except:
-            warnings.warn(
-                "Ground truth tags are unavailable, using predicted tags for all purposes."
-            )
+            warnings.warn("Ground truth tags are unavailable, using predicted tags for all purposes.")
             pos_tags_gt = pos_tags_pred_one_hot
 
         # Use predicted or ground truth tags based on config
@@ -180,18 +166,67 @@ class StepParser(torch.nn.Module):
                 output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
                     tagger_human_readable, decoder_human_readable, model_input, mask
                 )
-            # if self.config['output_edge_scores']:
-            #     scores = parser_output['attended_arcs']
-            #     softmax_scores = F.softmax(scores, dim = -1)
-            #     masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
-            #     score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
-            #     softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)
-            #     masked_log_softmax_score_var = torch.var(masked_log_softmax_scores.view(masked_log_softmax_scores.shape[0], -1), dim=1, unbiased=False)
-            #     for i in range(len(output_as_list_of_dicts)):
-            #         output_as_list_of_dicts[i]['attn_scores_var'] = score_var.tolist()[i]
-            #         output_as_list_of_dicts[i]['attn_scores_softmax_var'] = softmax_score_var.tolist()[i]
-            #         output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
+            if self.config['output_edge_scores']:
+                scores = parser_output['attended_arcs']
+                softmax_scores = F.softmax(scores, dim = -1)
+                masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
+                score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
+                softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)
+                masked_log_softmax_score_var = torch.var(masked_log_softmax_scores.view(masked_log_softmax_scores.shape[0], -1), dim=1, unbiased=False)
+                for i in range(len(output_as_list_of_dicts)):
+                    output_as_list_of_dicts[i]['attn_scores_var'] = score_var.tolist()[i]
+                    output_as_list_of_dicts[i]['attn_scores_softmax_var'] = softmax_score_var.tolist()[i]
+                    output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
             return output_as_list_of_dicts
+
+    @property
+    def current_step(self):
+        return self._current_step
+
+    @current_step.setter
+    def current_step(self, val):
+        self._current_step = val
+        if hasattr(self, 'parser'):
+            self.parser.current_step = val
+
+    def freeze_gnn(self):
+        for param in self.parser.conv1_arc.parameters():
+            param.requires_grad = False
+        for param in self.parser.conv2_arc.parameters():
+            param.requires_grad = False
+        for param in self.parser.conv1_rel.parameters():
+            param.requires_grad = False
+        for param in self.parser.conv2_rel.parameters():
+            param.requires_grad = False
+        for layer in self.parser.arc_bilinear[:-1]:
+            for param in layer.parameters():
+                param.requires_grad = False
+        print(f"GNN frozen at step {self.config['current_step']}!")
+
+    def unfreeze_gnn(self):
+        for param in self.parser.conv1_arc.parameters():
+            param.requires_grad = True
+        for param in self.parser.conv2_arc.parameters():
+            param.requires_grad = True
+        for param in self.parser.conv1_rel.parameters():
+            param.requires_grad = True
+        for param in self.parser.conv2_rel.parameters():
+            param.requires_grad = True
+        for layer in self.parser.arc_bilinear[:-1]:
+            for param in layer.parameters():
+                param.requires_grad = True
+        print(f"GNN unfrozen at step {self.config['current_step']}!")
+        return True
+    
+    def init_gnn_biaffines(self):
+        layer = copy.deepcopy(self.parser.arc_bilinear[-1])
+        new_layers = [copy.deepcopy(layer) for _ in range(self.config['gnn_enc_layers'])]
+        self.parser.arc_bilinear = nn.ModuleList(new_layers + list(self.parser.arc_bilinear))
+        new_layers = self.parser.arc_bilinear[: self.config['gnn_enc_layers']]
+        new_params = []
+        for layer in new_layers:
+            new_params += list(layer.parameters())
+        return new_params
 
     def log_gradients(self):
         """
@@ -378,7 +413,7 @@ class StepParser(torch.nn.Module):
         for i in range(batch_size):
             elem_dict = {}
 
-            ## find non-masked indices
+            # find non-masked indices
             valid_input_indices = (
                 torch.where(model_input["encoded_input"]["words_mask_custom"][i] == 1)[
                     0
@@ -426,99 +461,14 @@ class StepParser(torch.nn.Module):
             )
             elem_dict["pos_tags_pred"] = tagger_output[i] if self.config['use_pred_tags'] else tagger_output[i][:input_length]
 
-            # word_ids_custom = model_input["encoded_input"]["word_ids_custom"][i]
-            # elem_dict["word_ids_custom"] = (
-            #     word_ids_custom
-            #     .cpu()
-            #     .detach()
-            #     .numpy()[valid_input_indices]
-            #     .tolist()
-            # )
-
             assert np.all(
                 [len(elem_dict[key]) == input_length for key in elem_dict]
             ), "Predictions are not same length as input!"
 
-            ## append
+            # append
             outputs.append(elem_dict)
 
         return outputs
-
-    # def get_output_as_list_of_dicts_tokens(
-    #     self, tagger_output, parser_output, model_input, mask
-    # ):
-    #     """
-    #     Returns list of dictionaries, each element in the dictionary is
-    #     1 item in the batch, list has same length as batchsize. The dictionary
-    #     will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
-    #     'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
-    #     should have exactly identical length, during testing, '*_gt' keys() will have empty
-    #     tensors.
-    #     """
-    #     outputs = []
-    #     batch_size = len(tagger_output)
-
-    #     for i in range(batch_size):
-    #         elem_dict = {}
-
-    #         ## find non-masked indices
-    #         valid_input_indices = (
-    #             torch.where(mask[i] == 1)[0].cpu().detach().numpy().tolist()
-    #         )
-
-    #         input_length = len(valid_input_indices)
-
-    #         elem_dict["input_ids"] = np.array(
-    #             model_input["encoded_input"]["input_ids"][i]
-    #         )[valid_input_indices].tolist()
-
-    #         elem_dict["head_tags_gt"] = (
-    #             model_input["head_tags_tokens"][i]
-    #             .cpu()
-    #             .detach()
-    #             .numpy()[valid_input_indices]
-    #             .tolist()
-    #         )
-    #         elem_dict["head_tags_pred"] = [
-    #             int(el) for el in parser_output["predicted_dependencies"][i]
-    #         ]
-
-    #         elem_dict["head_indices_gt"] = (
-    #             model_input["head_indices_tokens"][i]
-    #             .cpu()
-    #             .detach()
-    #             .numpy()[valid_input_indices]
-    #             .tolist()
-    #         )
-    #         elem_dict["head_indices_pred"] = [
-    #             int(el) for el in parser_output["predicted_heads"][i]
-    #         ]
-
-    #         elem_dict["pos_tags_gt"] = (
-    #             model_input["pos_tags_tokens"][i]
-    #             .cpu()
-    #             .detach()
-    #             .numpy()[valid_input_indices]
-    #             .tolist()
-    #         )
-    #         elem_dict["pos_tags_pred"] = tagger_output[i]
-    #         word_ids_custom = model_input["encoded_input"]["word_ids_custom"][i]
-    #         elem_dict["word_ids_custom"] = (
-    #             word_ids_custom
-    #             .cpu()
-    #             .detach()
-    #             .numpy()[valid_input_indices]
-    #             .tolist()
-    #         )
-
-    #         assert np.all(
-    #             [len(elem_dict[key]) == input_length for key in elem_dict]
-    #         ), "Predictions are not same length as input!"
-
-    #         ## append
-    #         outputs.append(elem_dict)
-
-    #     return outputs
 
     def set_mode(self, mode="train"):
         """
