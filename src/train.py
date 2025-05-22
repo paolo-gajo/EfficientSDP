@@ -149,7 +149,7 @@ def main():
     # save validation results and configuration details
     save_json(val_results_list, os.path.join(config['save_dir'], "val_results_series.json"))
     save_json(test_results_list, os.path.join(config['save_dir'], "test_results_series.json"))
-    save_json(dataloader['train'].dataloader.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
+    save_json(dataloader['train'].dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
 
     # final evaluation on validation and test sets
     if config.get('save_model', False):
