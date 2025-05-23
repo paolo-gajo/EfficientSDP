@@ -32,7 +32,7 @@ def main():
     # data
     dataloader = build_dataloader(config)
 
-    # set `model_start_path` to restart training
+    # set `model_start_path` to the dir of the model to restart training
     model_start_path = None
     model = build_model(config, model_start_path=model_start_path, verbose=True)
 
