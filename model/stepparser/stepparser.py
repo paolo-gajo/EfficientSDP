@@ -201,7 +201,7 @@ class StepParser(torch.nn.Module):
         for layer in self.parser.arc_bilinear[:-1]:
             for param in layer.parameters():
                 param.requires_grad = False
-        print(f"GNN frozen at step {self.config['current_step']}!")
+        print(f"GNN frozen at step {self.current_step}!")
 
     def unfreeze_gnn(self):
         for param in self.parser.conv1_arc.parameters():
@@ -215,7 +215,7 @@ class StepParser(torch.nn.Module):
         for layer in self.parser.arc_bilinear[:-1]:
             for param in layer.parameters():
                 param.requires_grad = True
-        print(f"GNN unfrozen at step {self.config['current_step']}!")
+        print(f"GNN unfrozen at step {self.current_step}!")
         return True
     
     def init_gnn_biaffines(self):
