@@ -11,6 +11,7 @@ from model.utils.io_utils import save_json
 from model.utils.train_utils import get_scheduler, print_params
 from model.config import default_cfg, custom_config
 from model.evaluation import evaluate_model
+import plotext as plt
 
 def main():
 
@@ -140,6 +141,8 @@ def main():
                     torch.save(deepcopy(model.state_dict()), tmp_model_name)
                     raise RuntimeError('Bricked model!')
                 test_results_list.append(test_results)
+            plt.plot(test_results_list)
+            plt.show()
 
     # save best model checkpoint
     if best_model_state is not None and config.get('save_model', False):
