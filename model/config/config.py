@@ -34,7 +34,7 @@ custom_config = {
     # vanilla options
     'use_tagger_rnn': 1,
     'tagger_rnn_type': 'lstm',
-    'use_parser_rnn': 1,
+    'use_parser_rnn': 0,
     'parser_rnn_type': 'lstm',
     # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'parser_rnn_hidden_size': 400,
@@ -63,7 +63,7 @@ custom_config = {
     'tag_representation_dim': 100,
     
     # model options
-    'freeze_encoder': 1,
+    'freeze_encoder': 0,
     'use_lora': 0,
     'use_pred_tags' : 1, ## this will determine if gold tags are used for train/test/validation or not. 
     'model_name': 'bert-base-uncased',
@@ -93,7 +93,7 @@ custom_config = {
     'grad_clip_norm': 1.0,
     'batch_size': 8,
     'training': 'steps',
-    'training_steps': 2000,
+    'training_steps': 10000,
     'eval_steps': 100,
     'test_steps': 100,
     'epochs': 0 ,
