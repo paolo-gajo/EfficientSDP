@@ -11,14 +11,11 @@ from model.utils.io_utils import save_json
 from model.utils.train_utils import get_scheduler, print_params
 from model.config import default_cfg, custom_config
 from model.evaluation import evaluate_model
-import plotext as plt
 
 def main():
 
     # get config
-    string_args = '--training_steps 5000 --use_gnn_steps 200 --gnn_enc_layers 3 --results_suffix _gnn --eval_steps 100 --test_steps 100 --use_tagger_rnn 0 --use_parser_rnn 0 --parser_rnn_hidden_size 400 --parser_rnn_layers 0 --parser_type gat_unbatched'
-    # string_args = None
-    args = get_args(string_args=string_args)
+    args = get_args()
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     print('Config:\n\n', json.dumps(config, indent=4))
     print('Args:\n\n', json.dumps(args, indent=4))    
@@ -143,8 +140,6 @@ def main():
                     torch.save(deepcopy(model.state_dict()), tmp_model_name)
                     raise RuntimeError('Bricked model!')
                 test_results_list.append(test_results)
-                plt.plot([el['parser_labeled_results']['F1'] for el in test_results_list])
-                plt.show()
 
     # save best model checkpoint
     if best_model_state is not None and config.get('save_model', False):
