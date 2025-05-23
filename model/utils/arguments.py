@@ -22,7 +22,7 @@ def build_dict_from_args(args):
 	return args_new
 
 
-def get_args():
+def get_args(string_args = None):
 
 	"""
 		This will parse all the arguments and return args
@@ -43,10 +43,11 @@ def get_args():
 		For example, if you want to change the learning rate and betas, pass them as below
 			python3 train.py --opts --learning_rate "0.001" --betas "[0.9,0.9]"
 	""" 
-	parser.add_argument("--opts",  help="""Modify config options using the command-line 'KEY VALUE' pairs""", default=None,nargs=argparse.REMAINDER)
+	parser.add_argument("--opts",  help="""Modify config options using the command-line 'KEY VALUE' pairs""", default=None, nargs=argparse.REMAINDER)
 	args = parser.parse_args().opts
-	
-	if args is None:
+	if string_args:
+		return build_dict_from_args(string_args.split())
+	elif args is None:
 		## return empty dictionary
 		return {}
 	else:

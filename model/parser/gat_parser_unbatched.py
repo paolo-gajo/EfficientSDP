@@ -70,6 +70,7 @@ class GATParserUnbatched(nn.Module):
 
         self.tag_representation_dim = tag_representation_dim
         self.n_edge_labels = self.config['n_edge_labels']
+        self.current_step = 0
 
     def forward(
         self,
@@ -110,7 +111,7 @@ class GATParserUnbatched(nn.Module):
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
 
-        if self.config['current_step'] > self.config['use_gnn_steps'] and self.config['gnn_enc_layers'] > 0:
+        if self.current_step > self.config['use_gnn_steps'] and self.config['gnn_enc_layers'] > 0:
             # Loop over the number of GNN encoder layers.
             for k in range(self.config['gnn_enc_layers']):
                 # Compute a soft adjacency (attention) matrix.
