@@ -71,7 +71,7 @@ class GraphDataset(Dataset):
                  data: List[Dict[str, str]] = None,
                  config: Dict = None,
                  split = None,
-                 tokenizer = None,                 ):
+                 tokenizer = None,):
         self.config = config
         self.split = split
         self.ignore_keys = ['edge_index', 'adj_m', 'deg_m', 'graph_laplacian']
@@ -94,6 +94,8 @@ class GraphDataset(Dataset):
             self.augment(k = config[f'augment_k_{self.split}'], keep_og = config[f'keep_og_{self.split}'])
             if self.config['shuffle']:
                 random.shuffle(data)
+        if self.config['eval_samples'] and self.split != 'train':
+            self.data = self.data[:self.config['eval_samples']]
         if self.config['plot']:
             self.plot_topological_sorts_histogram(savename = f"{split}_hist.pdf")
         if self.config['procedural']:

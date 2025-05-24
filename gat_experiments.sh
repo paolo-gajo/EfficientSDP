@@ -33,20 +33,21 @@ do
     do
         for parser_type in "${parser_type_opts[@]}"
         do
-            cmd="python ./src/train.py --opts --parser_type $parser_type \
-                            --training_steps 20000 \
-                            --use_gnn_steps $use_gnn_steps \
-                            --gnn_enc_layers $gnn_enc_layers \
-                            --results_suffix _usegnn_${use_gnn_steps}_${top_k} \
-                            --eval_steps 500 \
-                            --test_steps 500 \
-                            --use_tagger_rnn 0 \
-                            --use_parser_rnn 0 \
-                            --parser_rnn_hidden_size 400 \
-                            --parser_rnn_layers 0 \
-                            --top_k $top_k"
+            cmd="python ./src/train.py
+                        --opts --parser_type $parser_type
+                        --training_steps 20000
+                        --use_gnn_steps $use_gnn_steps
+                        --gnn_enc_layers $gnn_enc_layers
+                        --results_suffix _usegnn_${use_gnn_steps}_${top_k}
+                        --eval_steps 500
+                        --test_steps 500
+                        --use_tagger_rnn 0
+                        --use_parser_rnn 0
+                        --parser_rnn_hidden_size 400
+                        --parser_rnn_layers 0
+                        --top_k $top_k"
             echo $cmd
-            $cmd
+            # $cmd
         done
     done
 done

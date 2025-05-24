@@ -37,7 +37,7 @@ class GATParser(nn.Module):
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
 
-        # Two-layer GCNs for updating arc representations.
+        # Two-layer GATs for updating arc representations.
         self.conv1_arc = nn.ModuleList([GATv2Conv(arc_representation_dim,
                                     arc_representation_dim,
                                     heads=self.config['num_attn_heads'],
@@ -52,7 +52,7 @@ class GATParser(nn.Module):
                                     residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
         self.dropout_arc = nn.Dropout(input_dropout)
 
-        # Two-layer GCNs for updating relation (tag) representations.
+        # Two-layer GATs for updating relation (tag) representations.
         self.conv1_rel = nn.ModuleList([GATv2Conv(tag_representation_dim,
                                     tag_representation_dim,
                                     heads=self.config['num_attn_heads'],

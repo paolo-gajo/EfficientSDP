@@ -218,15 +218,16 @@ class StepParser(torch.nn.Module):
         print(f"GNN unfrozen at step {self.current_step}!")
         return True
     
-    def init_gnn_biaffines(self):
-        layer = copy.deepcopy(self.parser.arc_bilinear[-1])
-        new_layers = [copy.deepcopy(layer) for _ in range(self.config['gnn_enc_layers'])]
-        self.parser.arc_bilinear = nn.ModuleList(new_layers + list(self.parser.arc_bilinear))
-        new_layers = self.parser.arc_bilinear[: self.config['gnn_enc_layers']]
-        new_params = []
-        for layer in new_layers:
-            new_params += list(layer.parameters())
-        return new_params
+    def init_gnn_biaffines(self, optimizer):
+        original_arc_bilinear: nn.ModuleList = self.parser.arc_bilinear
+        params_to_remove = set(original_arc_bilinear.parameters())
+        for group in optimizer.param_groups:
+            group["params"] = [p for p in group["params"] if p not in params_to_remove]
+        trained_arc_bilinear = self.parser.arc_bilinear[-1]
+        new_layers = [copy.deepcopy(trained_arc_bilinear) for _ in range(self.config['gnn_enc_layers'])]
+        new_arc_bilinear: nn.ModuleList = nn.ModuleList(new_layers + [trained_arc_bilinear])
+        self.parser.arc_bilinear = new_arc_bilinear
+        optimizer.add_param_group({"params": self.parser.arc_bilinear.parameters()})
 
     def log_gradients(self):
         """

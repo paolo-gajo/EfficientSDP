@@ -15,7 +15,8 @@ from model.evaluation import evaluate_model
 def main():
 
     # get config
-    args = get_args()
+    string_args = "--parser_type gat --training_steps 20000 --use_gnn_steps 1000 --gnn_enc_layers 3 --results_suffix _usegnn_1000_1 --eval_steps 500 --test_steps 500 --use_tagger_rnn 0 --use_parser_rnn 0 --parser_rnn_hidden_size 400 --parser_rnn_layers 0 --top_k 1"
+    args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     print('Config:\n\n', json.dumps(config, indent=4))
     print('Args:\n\n', json.dumps(args, indent=4))    
@@ -74,8 +75,7 @@ def main():
                 and not unfrozen \
                 and config['parser_type'] in ['gat', 'gat_unbatched']:
                 unfrozen = model.unfreeze_gnn()
-                new_params = model.init_gnn_biaffines()
-                optimizer.add_param_group({'params': new_params})
+                model.init_gnn_biaffines(optimizer)
                 print_params(model)
                 best_model_state = deepcopy(model.state_dict())
 
