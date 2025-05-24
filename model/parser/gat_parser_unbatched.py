@@ -33,7 +33,6 @@ class GATParserUnbatched(nn.Module):
                                     arc_norm=self.config['arc_norm'],
                                     )
             for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
-            # for _ in range(1)])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)

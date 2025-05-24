@@ -107,6 +107,7 @@ def main():
                                                 steps=current_step,)
                 print(f'val F1 @ {current_step}:\t', json.dumps(val_results, indent=4))
                 val_results_list.append(val_results)
+                print('val_results_list', [el['parser_labeled_results']['F1'] for el in val_results_list])
 
                 parser_f1 = val_results['parser_labeled_results']['F1']
 
@@ -140,6 +141,7 @@ def main():
                     torch.save(deepcopy(model.state_dict()), tmp_model_name)
                     raise RuntimeError('Bricked model!')
                 test_results_list.append(test_results)
+                print('test_results_list', [el['parser_labeled_results']['F1'] for el in test_results_list])
 
     # save best model checkpoint
     if best_model_state is not None and config.get('save_model', False):

@@ -51,7 +51,7 @@ custom_config = {
     'parser_residual': 0,
     'bias_type': 'simple',
     'activation': '',
-    'top_k': 4,
+    'top_k': 1,
     'num_attn_heads': 1,
     'step_bilinear_attn': 0,
     'arc_pred': 'attn',

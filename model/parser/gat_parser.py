@@ -110,7 +110,7 @@ class GATParser(nn.Module):
         float_mask = mask.float()
 
         # Loop over the number of GNN encoder layers.
-        if self.config['current_step'] > self.config['use_gnn_steps']:
+        if self.current_step > self.config['use_gnn_steps'] and self.config['gnn_enc_layers'] > 0:
             for k in range(self.config['gnn_enc_layers']):
                 # Compute a soft adjacency (attention) matrix.
                 attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
