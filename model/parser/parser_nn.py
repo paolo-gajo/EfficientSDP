@@ -647,10 +647,12 @@ def batch_top_k(adj_matrices: List[torch.Tensor], k: int):
         for j, (row_indices, row_values) in enumerate(zip(indices, values)):
             len_r = row_indices.shape[-1]
             # Create edge indices
-            row = torch.stack([torch.full((len_r,), j).to(adj_matrices.device), row_indices], dim=0)
+            tmp = torch.full((len_r,), j).to(adj_matrices.device)
+            row = torch.stack([tmp, row_indices], dim=0)
             m_index_list.append(row)
             # Collect corresponding values
             m_value_list.append(row_values)
+            ...
         
         m_index = torch.cat(m_index_list, dim=1)
         m_index = m_index + shift_m  # Shift indices for batching

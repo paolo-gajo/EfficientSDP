@@ -127,16 +127,21 @@ class GATParser(nn.Module):
                 
                 # Convert the dense soft adjacency matrix to a sparse representation.
                 # dense_to_sparse can handle batched inputs and will adjust node indices.
-                edge_index, edge_attr = batch_top_k(arc_probs, k = self.config['top_k'])
-                edge_index_T, edge_attr_T = batch_top_k(arc_probs.transpose(1, 2), k = self.config['top_k'])
+                edge_attr, edge_index = torch.topk(arc_probs, self.config['top_k'], dim=-1)
+                edge_attr_T, edge_index_T = torch.topk(arc_probs.transpose(1, 2), self.config['top_k'], dim=-1)
+                edge_index = edge_index.reshape(edge_index.shape[0], edge_index.shape[1] * self.config['top_k'])
+                edge_index_T = edge_index_T.reshape(edge_index_T.shape[0], edge_index_T.shape[1] * self.config['top_k'])
+                edge_attr = edge_attr.reshape(edge_attr.shape[0], edge_attr.shape[1] * self.config['top_k'])
+                edge_attr_T = edge_attr_T.reshape(edge_attr_T.shape[0], edge_attr_T.shape[1] * self.config['top_k'])
                 
-                # ----- Update arc representations using GATv2Conv -----
-                # Flatten the batch: (B, N, F) -> (B*N, F)
-                head_arc_flat = head_arc.reshape(batch_size * seq_len, -1)
-                dept_arc_flat = dept_arc.reshape(batch_size * seq_len, -1)
+                batch_head_arc = self.batch_samples(head_arc, edge_index, edge_attr)
+                batch_dept_arc = self.batch_samples(dept_arc, edge_index_T, edge_attr_T)
+                batch_head_tag = self.batch_samples(head_tag, edge_index, edge_attr)
+                batch_dept_tag = self.batch_samples(dept_tag, edge_index_T, edge_attr_T)
                 
                 # Apply two GCN layers on head_arc.
-                head_arc_updated = self.conv1_arc[k](head_arc_flat, edge_index, edge_attr)
+                head_arc = self.conv1_arc[k](batch_head_arc.x, batch_head_arc.edge_index, batch_head_arc.edge_attr)
+                head_arc = self.unbatch_samples(head_arc, batch_head_arc.batch)
                 # head_arc_updated = F.tanh(head_arc_updated)
                 # head_arc_updated = self.dropout_arc(head_arc_updated)
                 # head_arc_updated = self.conv2_arc[k](head_arc_updated, edge_index, edge_attr)
@@ -144,33 +149,25 @@ class GATParser(nn.Module):
                 # dept_arc_flat = (dept_arc_flat + head_arc_updated) / 2
                 
                 # Apply two GCN layers on dept_arc.
-                dept_arc_updated = self.conv2_arc[k](dept_arc_flat, edge_index_T, edge_attr_T)
+                dept_arc = self.conv2_arc[k](batch_dept_arc.x, batch_dept_arc.edge_index, batch_dept_arc.edge_attr)
+                dept_arc = self.unbatch_samples(dept_arc, batch_dept_arc.batch)
                 # dept_arc_updated = F.tanh(dept_arc_updated)
                 # dept_arc_updated = self.dropout_arc(dept_arc_updated)
                 # dept_arc_updated = self.conv2_arc[k](dept_arc_updated, edge_index, edge_attr)
                 
-                # Reshape back to (batch_size, sequence_length, F)
-                head_arc = head_arc_updated.reshape(batch_size, seq_len, -1)
-                dept_arc = dept_arc_updated.reshape(batch_size, seq_len, -1)
+                head_tag = self.conv1_rel[k](batch_head_tag.x, batch_head_tag.edge_index, batch_head_tag.edge_attr)
+                head_tag = self.unbatch_samples(head_tag, batch_head_tag.batch)
+                # head_tag = F.tanh(head_tag)
+                # head_tag = self.dropout_rel(head_tag)
+                # head_tag = self.conv2_rel[k](head_tag, edge_index, edge_attr)
                 
-                # ----- Update relation (tag) representations using GATv2Conv -----
-                head_tag_flat = head_tag.reshape(batch_size * seq_len, -1)
-                dept_tag_flat = dept_tag.reshape(batch_size * seq_len, -1)
+                # dept_tag_flat = (dept_tag_flat + head_tag) / 2
                 
-                head_tag_updated = self.conv1_rel[k](head_tag_flat, edge_index, edge_attr)
-                # head_tag_updated = F.tanh(head_tag_updated)
-                # head_tag_updated = self.dropout_rel(head_tag_updated)
-                # head_tag_updated = self.conv2_rel[k](head_tag_updated, edge_index, edge_attr)
-                
-                # dept_tag_flat = (dept_tag_flat + head_tag_updated) / 2
-                
-                dept_tag_updated = self.conv2_rel[k](dept_tag_flat, edge_index_T, edge_attr_T)
-                # dept_tag_updated = F.tanh(dept_tag_updated)
-                # dept_tag_updated = self.dropout_rel(dept_tag_updated)
-                # dept_tag_updated = self.conv2_rel[k](dept_tag_updated, edge_index, edge_attr)
-                
-                head_tag = head_tag_updated.reshape(batch_size, seq_len, -1)
-                dept_tag = dept_tag_updated.reshape(batch_size, seq_len, -1)
+                dept_tag = self.conv2_rel[k](batch_dept_tag.x, batch_dept_tag.edge_index, batch_dept_tag.edge_attr)
+                dept_tag = self.unbatch_samples(dept_tag, batch_dept_tag.batch)
+                # dept_tag = F.tanh(dept_tag)
+                # dept_tag = self.dropout_rel(dept_tag)
+                # dept_tag = self.conv2_rel[k](dept_tag, edge_index, edge_attr)
             
         # Compute final attended arcs.
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
@@ -187,14 +184,32 @@ class GATParser(nn.Module):
         }
         return output
 
-    def batch_samples(self, x: torch.Tensor, adj: torch.Tensor, batch_size: int):
+    def unbatch_samples(self, x: torch.Tensor, batch_index: torch.Tensor):
+        batch_size = torch.max(batch_index) + 1
+        x_unbatched = []
+        for b in range(batch_size):
+            index_mask = torch.where(batch_index==b)
+            x_filtered = x[index_mask]
+            x_unbatched.append(x_filtered)
+        x_unbatched = torch.stack(x_unbatched)
+        return x_unbatched
+
+    def batch_samples(self, x: torch.Tensor, edge_i: torch.Tensor, edge_a: torch.Tensor = None):
+        batch_size = x.shape[0]
+        seq_len = x.shape[1]
+        k = edge_i.shape[1] // seq_len  # infer K from shape (B, N*K)
+
         data_list = []
         for b in range(batch_size):
-            N = adj[b].shape[-1]
-            edge_index = torch.stack([torch.arange(N).to(self.config['device']), adj[b]], dim = 0)
-            data_list.append(Data(x=x[b], edge_index=edge_index))
-        batch = Batch.from_data_list(data_list)
-        return batch
+            src = torch.arange(seq_len, device=x.device).unsqueeze(1).expand(seq_len, k).flatten()
+            tgt = edge_i[b]  # already flattened to shape [N*K]
+            edge_index = torch.stack([src, tgt], dim=0)
+            if edge_a is not None:
+                edge_attr = edge_a[b].reshape(-1, 1)  # ensure shape [N*K, 1] for edge_dim=1
+                data_list.append(Data(x=x[b], edge_index=edge_index, edge_attr=edge_attr))
+            else:
+                data_list.append(Data(x=x[b], edge_index=edge_index))
+        return Batch.from_data_list(data_list)
     
     @classmethod
     def get_model(cls, config):
