@@ -72,8 +72,8 @@ def compute_uas_las(
                     las_correct += 1
 
     return {
-        "uas": uas_correct / total if total > 0 else None,
-        "las": las_correct / total if total > 0 else None,
+        "uas": round(uas_correct / total, 4) if total > 0 else None,
+        "las": round(las_correct / total, 4) if total > 0 else None,
     }
 
 def evaluate_model(model_output, label_to_class_map, ignore_tags=[], ignore_edges = ['0'], ignore_edge_labels=[]):

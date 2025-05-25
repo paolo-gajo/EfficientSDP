@@ -16,19 +16,25 @@ module load rust gcc arrow
 . .env/bin/activate
 
 declare -a use_gnn_steps_opts=(
-    # 1000
-    -1
+    1000
+    0
     )
 declare -a gnn_enc_layers_opts=(
-    # 3
     0
+    1
+    2
+    3
     )
 declare -a parser_type_opts=(
     # simple
     # gat_unbatched
     gat
     )
+
 top_k=1
+training_steps=20000
+eval_steps=500
+results_suffix=_gat
 
 declare -a commands=()
 for use_gnn_steps in "${use_gnn_steps_opts[@]}"
@@ -39,12 +45,11 @@ do
         do
             cmd="python ./src/train.py
                         --opts --parser_type $parser_type
-                        --training_steps 20000
+                        --training_steps $training_steps 
                         --use_gnn_steps $use_gnn_steps
                         --gnn_enc_layers $gnn_enc_layers
-                        --results_suffix _usegnn_${use_gnn_steps}_${top_k}
-                        --eval_steps 500
-                        --test_steps 500
+                        --results_suffix $results_suffix
+                        --eval_steps $eval_steps
                         --use_tagger_rnn 0
                         --use_parser_rnn 0
                         --parser_rnn_hidden_size 400

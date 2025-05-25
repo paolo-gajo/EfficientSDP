@@ -15,7 +15,7 @@ from model.evaluation import evaluate_model
 def main():
 
     # get config
-    string_args = "--parser_type gat --training_steps 2000 --use_gnn_steps -1 --gnn_enc_layers 1 --results_suffix _usegnn_1000 --eval_steps 500 --test_steps 500 --use_tagger_rnn 0 --use_parser_rnn 0 --parser_rnn_hidden_size 400 --parser_rnn_layers 0 --top_k 4"
+    string_args = ""
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     print('Config:\n\n', json.dumps(config, indent=4))
@@ -70,14 +70,6 @@ def main():
             except StopIteration:
                 train_iter = iter(dataloader['train']) # refill iterator
                 batch = next(train_iter)
-            
-            if current_step > config['use_gnn_steps'] \
-                and not unfrozen \
-                and config['parser_type'] in ['gat', 'gat_unbatched']:
-                unfrozen = model.unfreeze_gnn()
-                model.init_gnn_biaffines(optimizer)
-                print_params(model)
-                best_model_state = deepcopy(model.state_dict())
 
             model.train()
             model.set_mode('train')
@@ -99,15 +91,18 @@ def main():
             pbar.set_description(f"Steps: {current_step}, Loss: {loss.item()}")
 
             if current_step % config['eval_steps'] == 0:
+                print(f'Metrics @ {current_step}:')
                 val_results, _ = run_evaluation(model=model,
                                                 data_loader=dataloader['val'],
                                                 eval_function=evaluate_model,
                                                 config=config,
                                                 label_index_map=config['label_index_map'],
                                                 steps=current_step,)
-                print(f'val F1 @ {current_step}:\t', json.dumps(val_results, indent=4))
+                # print(f'val F1:\t', json.dumps(val_results, indent=4))
                 val_results_list.append(val_results)
-                print('val_results_list', [el['parser_labeled_results']['F1'] for el in val_results_list])
+                print(f'val_F1:', [el['parser_labeled_results']['F1'] for el in val_results_list])
+                print(f'val_las:', [el['uas_las_results']['las'] for el in val_results_list])
+                save_json(val_results_list, os.path.join(config['save_dir'], "val_results_partial.json"))
 
                 parser_f1 = val_results['parser_labeled_results']['F1']
 
@@ -125,14 +120,13 @@ def main():
                         current_step = training_steps
                         break
 
-            if current_step % config['test_steps'] == 0:
                 test_results, _ = run_evaluation(model=model,
                                                 data_loader=dataloader['test'],
                                                 eval_function=evaluate_model,
                                                 config=config,
                                                 label_index_map=config['label_index_map'],
                                                 steps=current_step,)
-                print(f'test F1 @ {current_step}:\t', json.dumps(test_results, indent=4))
+                # print(f'test F1:\t', json.dumps(test_results, indent=4))
                 
                 # check for training failure (model suddenly breaks)
                 tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')
@@ -141,7 +135,18 @@ def main():
                     torch.save(deepcopy(model.state_dict()), tmp_model_name)
                     raise RuntimeError('Bricked model!')
                 test_results_list.append(test_results)
-                print('test_results_list', [el['parser_labeled_results']['F1'] for el in test_results_list])
+                print(f'test_F1:', [el['parser_labeled_results']['F1'] for el in test_results_list])
+                print(f'test_las:', [el['uas_las_results']['las'] for el in test_results_list])
+                save_json(test_results_list, os.path.join(config['save_dir'], "test_results_partial.json"))
+                print('#' * 100)
+            
+            if current_step >= config['use_gnn_steps'] \
+                and not unfrozen \
+                and config['parser_type'] in ['gat', 'gat_unbatched']:
+                unfrozen = model.unfreeze_gnn()
+                model.init_gnn_biaffines(optimizer)
+                print_params(model)
+                best_model_state = deepcopy(model.state_dict())
 
     # save best model checkpoint
     if best_model_state is not None and config.get('save_model', False):
@@ -149,6 +154,8 @@ def main():
         print(f"Model saved at: {config['model_path']}")
 
     # save validation results and configuration details
+    os.remove(os.path.join(config['save_dir'], "val_results_partial.json"))
+    os.remove(os.path.join(config['save_dir'], "test_results_partial.json"))
     save_json(val_results_list, os.path.join(config['save_dir'], "val_results_series.json"))
     save_json(test_results_list, os.path.join(config['save_dir'], "test_results_series.json"))
     save_json(dataloader['train'].dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
