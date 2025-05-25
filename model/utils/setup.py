@@ -81,6 +81,8 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     
     set_seeds(config['seed'])
 
+    config['top_k'] = int(config['top_k'])
+
     return config
 
 def set_seeds(seed):
