@@ -33,21 +33,22 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     augment_type = 'none' if '1' not in aug_string else config['augment_type']
     model_name = model_name if not config['use_abs_step_embeddings'] else 'step-bert'
     parser_type = 'mtrfg' if config['parser_type'] == 'mtrfg' else f"{config['parser_type']}_{config['gnn_enc_layers']}"
-    dir_path = os.path.join(f"{save_dir}{config['results_suffix']}",
-                            f"freeze_encoder_{config['freeze_encoder']}",
-                            f"arc_pred{config['arc_pred']}",
-                            # f"stepmask_{config['use_step_mask']}",
-                            # f"bpos_{config['use_bert_positional_embeddings']}",
-                            f'tagger_rnn_{tagger_rnn_string}',
-                            f"parser_rnn_{parser_rnn_string}_{config['parser_rnn_type']}_l{config['parser_rnn_layers']}_h{config['parser_rnn_hidden_size']}",
-                            # f"laplacian_pe_{config['laplacian_pe']}",
-                            # f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
-                            f"data={config['dataset_name']}",
-                            f"parser_type_{parser_type}_mlp_{config['arc_representation_dim']}",
-                            f"arc_norm_{config['arc_norm']}",
-                            f"use_lora_{config['use_lora']}",
-                            f"tag_embedding_type_{config['tag_embedding_type']}",
-                            f"{model_name}_{get_current_time_string()}_seed_{config['seed']}",
+    dir_path = os.path.join(f"{save_dir}",
+                            f"{config['results_suffix']}",
+                            # f"freeze_encoder_{config['freeze_encoder']}",
+                            # f"arc_pred{config['arc_pred']}",
+                            # # f"stepmask_{config['use_step_mask']}",
+                            # # f"bpos_{config['use_bert_positional_embeddings']}",
+                            # f'tagger_rnn_{tagger_rnn_string}',
+                            # f"parser_rnn_{parser_rnn_string}_{config['parser_rnn_type']}_l{config['parser_rnn_layers']}_h{config['parser_rnn_hidden_size']}",
+                            # # f"laplacian_pe_{config['laplacian_pe']}",
+                            # # f"use_abs_step_embeddings_{config['use_abs_step_embeddings']}",
+                            # f"data={config['dataset_name']}",
+                            # f"parser_type_{parser_type}_mlp_{config['arc_representation_dim']}",
+                            # f"arc_norm_{config['arc_norm']}",
+                            # f"use_lora_{config['use_lora']}",
+                            # f"tag_embedding_type_{config['tag_embedding_type']}",
+                            # f"{model_name}_{get_current_time_string()}_seed_{config['seed']}",
                             )
     if config['dataset_name'] in ['ud202xpos', 'scidtb']:
         config['test_ignore_edge_dep'] = ['punct']

@@ -25,14 +25,16 @@ declare -a dataset_name_options=(
   "ade"
   "conll04"
   "scierc"
-  "yamakata"
+  "erfgc"
+  "scidtb"
+  "ud202xpos"
   )
 declare -a model_name_options=(
   # "answerdotai/ModernBERT-base"
   # "microsoft/deberta-v3-base"
-  "microsoft/deberta-v3-large"
-  # "bert-base-uncased"
-  "bert-large-uncased"
+  # "microsoft/deberta-v3-large"
+  "bert-base-uncased"
+  # "bert-large-uncased"
   )
 declare -a parser_type_options=(
   "simple"

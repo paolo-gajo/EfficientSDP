@@ -2,10 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
-from torch_geometric.utils import dense_to_sparse
 from torch_geometric.data import Data, Batch
 from model.parser.parser_nn import *
-import math
 
 class GATParser(nn.Module):
     def __init__(
@@ -15,9 +13,11 @@ class GATParser(nn.Module):
         arc_representation_dim: int,
         tag_representation_dim: int,
         input_dropout: float = 0.0,
+        gnn_activation = F.tanh,
     ) -> None:
         super().__init__()
         self.config = config
+        self.gnn_activation = gnn_activation
 
         self._dropout = nn.Dropout(input_dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(embedding_dim))
@@ -113,7 +113,6 @@ class GATParser(nn.Module):
                 # Compute a soft adjacency (attention) matrix.
                 attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
                 arc_probs = F.softmax(attended_arcs, dim=-1)
-                # arc_probs = torch.eye(torch.tensor(attended_arcs.shape[-1]), device=attended_arcs.device).expand(attended_arcs.shape[0], -1, -1)
                 
                 # Compute loss as in the original implementation.
                 arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
@@ -127,47 +126,39 @@ class GATParser(nn.Module):
                 # Convert the dense soft adjacency matrix to a sparse representation.
                 # dense_to_sparse can handle batched inputs and will adjust node indices.
                 edge_attr, edge_index = torch.topk(arc_probs, self.config['top_k'], dim=-1)
-                # edge_attr_T, edge_index_T = torch.topk(arc_probs.transpose(1, 2), self.config['top_k'], dim=-1)
                 edge_index = edge_index.reshape(edge_index.shape[0], edge_index.shape[1] * self.config['top_k'])
-                # edge_index_T = edge_index_T.reshape(edge_index_T.shape[0], edge_index_T.shape[1] * self.config['top_k'])
                 edge_attr = edge_attr.reshape(edge_attr.shape[0], edge_attr.shape[1] * self.config['top_k'])
-                # edge_attr_T = edge_attr_T.reshape(edge_attr_T.shape[0], edge_attr_T.shape[1] * self.config['top_k'])
+                edge_attr_T, edge_index_T = torch.topk(arc_probs.transpose(1, 2), self.config['top_k'], dim=-1)
+                edge_index_T = edge_index_T.reshape(edge_index_T.shape[0], edge_index_T.shape[1] * self.config['top_k'])
+                edge_attr_T = edge_attr_T.reshape(edge_attr_T.shape[0], edge_attr_T.shape[1] * self.config['top_k'])
                 
                 batch_head_arc = self.batch_samples(head_arc, edge_index, edge_attr)
-                batch_dept_arc = self.batch_samples(dept_arc, edge_index, edge_attr)
+                batch_dept_arc = self.batch_samples(dept_arc, edge_index_T, edge_attr_T)
                 batch_head_tag = self.batch_samples(head_tag, edge_index, edge_attr)
-                batch_dept_tag = self.batch_samples(dept_tag, edge_index, edge_attr)
+                batch_dept_tag = self.batch_samples(dept_tag, edge_index_T, edge_attr_T)
                 
-                # Apply two GCN layers on head_arc.
+                # update edges
                 head_arc = self.conv1_arc[k](batch_head_arc.x, batch_head_arc.edge_index, batch_head_arc.edge_attr)
                 head_arc = self.unbatch_samples(head_arc, batch_head_arc.batch)
-                head_arc = F.tanh(head_arc)
+                head_arc = self.gnn_activation(head_arc)
                 head_arc = self._dropout(head_arc)
-                # head_arc = self.conv2_arc[k](head_arc, edge_index, edge_attr)
                 
-                # dept_arc_flat = (dept_arc_flat + head_arc) / 2
-                
-                # Apply two GCN layers on dept_arc.
                 dept_arc = self.conv2_arc[k](batch_dept_arc.x, batch_dept_arc.edge_index, batch_dept_arc.edge_attr)
                 dept_arc = self.unbatch_samples(dept_arc, batch_dept_arc.batch)
-                dept_arc = F.tanh(dept_arc)
+                dept_arc = self.gnn_activation(dept_arc)
                 dept_arc = self._dropout(dept_arc)
-                # dept_arc = self.conv2_arc[k](dept_arc, edge_index, edge_attr)
                 
+                # update relations
                 head_tag = self.conv1_rel[k](batch_head_tag.x, batch_head_tag.edge_index, batch_head_tag.edge_attr)
                 head_tag = self.unbatch_samples(head_tag, batch_head_tag.batch)
-                head_tag = F.tanh(head_tag)
+                head_tag = self.gnn_activation(head_tag)
                 head_tag = self._dropout(head_tag)
-                # head_tag = self.conv2_rel[k](head_tag, edge_index, edge_attr)
-                
-                # dept_tag_flat = (dept_tag_flat + head_tag) / 2
-                
+
                 dept_tag = self.conv2_rel[k](batch_dept_tag.x, batch_dept_tag.edge_index, batch_dept_tag.edge_attr)
                 dept_tag = self.unbatch_samples(dept_tag, batch_dept_tag.batch)
-                dept_tag = F.tanh(dept_tag)
+                dept_tag = self.gnn_activation(dept_tag)
                 dept_tag = self._dropout(dept_tag)
-                # dept_tag = self.conv2_rel[k](dept_tag, edge_index, edge_attr)
-            
+                
         # Compute final attended arcs.
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
@@ -213,12 +204,14 @@ class GATParser(nn.Module):
     @classmethod
     def get_model(cls, config):
         embedding_dim = config["encoder_output_dim"]
+        gnn_activation = getattr(F, config['gnn_activation'], lambda x: x)
         model_obj = cls(
             config=config,
             embedding_dim=embedding_dim,
             arc_representation_dim=500,
             tag_representation_dim=100,
-            input_dropout=0.3,
+            input_dropout=config['gnn_dropout'],
+            gnn_activation=gnn_activation,
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj

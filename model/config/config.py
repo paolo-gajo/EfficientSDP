@@ -45,7 +45,10 @@ custom_config = {
     'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
     'bma_init': 'xu', # 'xu', 'norm'
     'arc_norm': 1,
+    # gat
     'gnn_enc_layers': 1,
+    'gnn_dropout': 1,
+    'gnn_activation': 'tanh',
     'use_gnn_steps': -1,
     'current_step': 0,
     'parser_residual': 0,
