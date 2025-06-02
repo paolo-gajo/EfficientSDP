@@ -19,7 +19,7 @@ class SimpleParser(nn.Module):
         arc_representation_dim: int,
         tag_representation_dim: int,
         use_mst_decoding_for_validation: bool = True,
-        dropout: float = 0.0,
+        mlp_dropout: float = 0.3,
     ) -> None:
         super().__init__()
         self.config = config
@@ -52,7 +52,7 @@ class SimpleParser(nn.Module):
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
-        self._dropout = nn.Dropout(dropout)
+        self._dropout = nn.Dropout(mlp_dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
         if self.config['parser_init'] == 'xu':
@@ -302,7 +302,7 @@ class SimpleParser(nn.Module):
             tag_embedder=tag_embedder,
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],
-            dropout=0.3,
+            mlp_dropout=config['mlp_dropout'],
             use_mst_decoding_for_validation=config['use_mst_decoding_for_validation'],
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]

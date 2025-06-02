@@ -43,7 +43,7 @@ declare -a seed=(
 )
 # Define parameter arrays
 declare -a use_gnn_steps_opts=(0)
-declare -a gnn_enc_layers_opts=(
+declare -a gnn_layers_opts=(
     0
     1
     2
@@ -80,7 +80,7 @@ declare -a dataset_name_opts=(
 array_names=(
             seed
             use_gnn_steps_opts
-            gnn_enc_layers_opts
+            gnn_layers_opts
             parser_type_opts
             top_k_opts
             arc_norm_opts
@@ -113,7 +113,7 @@ while IFS= read -r combo; do
                 --results_suffix ${SLURM_ARRAY_JOB_ID}/${SLURM_ARRAY_TASK_ID}
                 --seed ${params[0]}
                 --use_gnn_steps ${params[1]}
-                --gnn_enc_layers ${params[2]}
+                --gnn_layers ${params[2]}
                 --parser_type ${params[3]}
                 --top_k ${params[4]}
                 --arc_norm ${params[5]}

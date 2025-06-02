@@ -224,7 +224,7 @@ class StepParser(torch.nn.Module):
         for group in optimizer.param_groups:
             group["params"] = [p for p in group["params"] if p not in params_to_remove]
         trained_arc_bilinear = self.parser.arc_bilinear[-1]
-        new_layers = [copy.deepcopy(trained_arc_bilinear) for _ in range(self.config['gnn_enc_layers'])]
+        new_layers = [copy.deepcopy(trained_arc_bilinear) for _ in range(self.config['gnn_layers'])]
         new_arc_bilinear: nn.ModuleList = nn.ModuleList(new_layers + [trained_arc_bilinear])
         self.parser.arc_bilinear = new_arc_bilinear
         optimizer.add_param_group({"params": self.parser.arc_bilinear.parameters()})

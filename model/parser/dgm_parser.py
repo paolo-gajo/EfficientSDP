@@ -42,21 +42,21 @@ class DGMParser(nn.Module):
         self.tag_dropout = nn.Dropout(0.2)
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
-        # assert self.config['gnn_enc_layers'] > 0, 'If using GNNParser, must have `gnn_enc_layers` > 0.'
+        # assert self.config['gnn_layers'] > 0, 'If using GNNParser, must have `gnn_layers` > 0.'
         self.arc_bilinear = nn.ModuleList([
             BilinearMatrixAttention(arc_representation_dim,
                                     arc_representation_dim,
                                     use_input_biases=True)
-            for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
+            for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
         # self.arc_bilinear_t = nn.ModuleList([
         #     BilinearMatrixAttention(arc_representation_dim,
         #                             arc_representation_dim,
         #                             use_input_biases=True)
-        #     for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
+        #     for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
-        if self.config['gnn_enc_layers'] > 0:
+        if self.config['gnn_layers'] > 0:
             self.head_gnn = GraphNNUnit(arc_representation_dim, arc_representation_dim)
             self.dept_gnn = GraphNNUnit(arc_representation_dim, arc_representation_dim)
             self.head_rel_gnn = GraphNNUnit(tag_representation_dim, tag_representation_dim)
@@ -144,7 +144,7 @@ class DGMParser(nn.Module):
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
 
-        for k in range(self.config['gnn_enc_layers']):
+        for k in range(self.config['gnn_layers']):
             attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
             # attended_arcs_t = self.arc_bilinear_t[k](head_arc, dept_arc)
             arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)

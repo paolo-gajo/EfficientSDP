@@ -25,12 +25,12 @@ class GCNParser(nn.Module):
 
         self.head_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
-        assert self.config['gnn_enc_layers'] > 0, 'If using GCNParser, must have `gnn_enc_layers` > 0.'
+        assert self.config['gnn_layers'] > 0, 'If using GCNParser, must have `gnn_layers` > 0.'
         self.arc_bilinear = nn.ModuleList([
             BilinearMatrixAttention(arc_representation_dim,
                                     arc_representation_dim,
                                     use_input_biases=True)
-            for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
+            for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
@@ -88,7 +88,7 @@ class GCNParser(nn.Module):
         float_mask = mask.float()
 
         # Loop over the number of GNN encoder layers.
-        for k in range(self.config['gnn_enc_layers']):
+        for k in range(self.config['gnn_layers']):
             # Compute a soft adjacency (attention) matrix.
             attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
             arc_probs = F.softmax(attended_arcs, dim=-1)

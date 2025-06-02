@@ -44,7 +44,7 @@ declare -a arc_norm_options=(
   0
   1
   )
-declare -a gnn_enc_layers_options=(
+declare -a gnn_layers_options=(
   0
   # 1
   # 2
@@ -128,7 +128,7 @@ valid_combinations=()
 for seed in "${seed_values[@]}"; do
   for parser_type in "${parser_type_options[@]}"; do
     for freeze_encoder in "${freeze_encoder_options[@]}"; do
-      for gnn_enc_layers in "${gnn_enc_layers_options[@]}"; do
+      for gnn_layers in "${gnn_layers_options[@]}"; do
         for arc_norm in "${arc_norm_options[@]}"; do
           for use_tagger_rnn in "${use_tagger_rnn_options[@]}"; do
             for parser_rnn_type in "${parser_rnn_type_options[@]}"; do
@@ -146,7 +146,7 @@ for seed in "${seed_values[@]}"; do
                               if [ "$use_tagger_rnn" == 1 ] && [ "$freeze_encoder" == 0 ]; then
                                 continue
                               fi
-                              valid_combinations+=("$seed $use_tagger_rnn $parser_type $freeze_encoder $gnn_enc_layers $arc_norm $parser_rnn_type $model_name $parser_residual $use_lora $dataset_name $parser_rnn_layers $parser_rnn_hidden_size $arc_representation_dim $tag_embedding_type")
+                              valid_combinations+=("$seed $use_tagger_rnn $parser_type $freeze_encoder $gnn_layers $arc_norm $parser_rnn_type $model_name $parser_residual $use_lora $dataset_name $parser_rnn_layers $parser_rnn_hidden_size $arc_representation_dim $tag_embedding_type")
                             done
                           done
                         done
@@ -175,7 +175,7 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
     
     # Parse the combination
     # use_tag_embeddings_in_parser
-    read -r seed use_tagger_rnn parser_type freeze_encoder gnn_enc_layers arc_norm \
+    read -r seed use_tagger_rnn parser_type freeze_encoder gnn_layers arc_norm \
     parser_rnn_type model_name parser_residual \
     use_lora dataset_name parser_rnn_layers parser_rnn_hidden_size arc_representation_dim tag_embedding_type <<< "$current_combination"
     
@@ -185,7 +185,7 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
 --use_tagger_rnn $use_tagger_rnn \
 --parser_type $parser_type \
 --freeze_encoder $freeze_encoder \
---gnn_enc_layers $gnn_enc_layers \
+--gnn_layers $gnn_layers \
 --arc_norm $arc_norm \
 --parser_rnn_type $parser_rnn_type \
 --model_name $model_name \

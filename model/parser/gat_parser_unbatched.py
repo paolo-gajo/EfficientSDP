@@ -32,7 +32,7 @@ class GATParserUnbatched(nn.Module):
                                     bias_type='simple',
                                     arc_norm=self.config['arc_norm'],
                                     )
-            for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
+            for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
@@ -43,13 +43,13 @@ class GATParserUnbatched(nn.Module):
                                     heads=self.config['num_attn_heads'],
                                     concat=False,
                                     edge_dim=1,
-                                    residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+                                    residual=True) for _ in range(self.config['gnn_layers'])]).to(self.config['device'])
         self.conv2_arc = nn.ModuleList([GATv2Conv(arc_representation_dim,
                                     arc_representation_dim,
                                     heads=self.config['num_attn_heads'],
                                     concat=False,
                                     edge_dim=1,
-                                    residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+                                    residual=True) for _ in range(self.config['gnn_layers'])]).to(self.config['device'])
         self.dropout_arc = nn.Dropout(input_dropout)
 
         # Two-layer GCNs for updating relation (tag) representations.
@@ -58,13 +58,13 @@ class GATParserUnbatched(nn.Module):
                                     heads=self.config['num_attn_heads'],
                                     concat=False,
                                     edge_dim=1,
-                                    residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+                                    residual=True) for _ in range(self.config['gnn_layers'])]).to(self.config['device'])
         self.conv2_rel = nn.ModuleList([GATv2Conv(tag_representation_dim,
                                     tag_representation_dim,
                                     heads=self.config['num_attn_heads'],
                                     concat=False,
                                     edge_dim=1,
-                                    residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+                                    residual=True) for _ in range(self.config['gnn_layers'])]).to(self.config['device'])
         self.dropout_rel = nn.Dropout(input_dropout)
 
         self.tag_representation_dim = tag_representation_dim
@@ -110,9 +110,9 @@ class GATParserUnbatched(nn.Module):
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
 
-        if self.current_step > self.config['use_gnn_steps'] and self.config['gnn_enc_layers'] > 0:
+        if self.current_step > self.config['use_gnn_steps'] and self.config['gnn_layers'] > 0:
             # Loop over the number of GNN encoder layers.
-            for k in range(self.config['gnn_enc_layers']):
+            for k in range(self.config['gnn_layers']):
                 # Compute a soft adjacency (attention) matrix.
                 attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
                 arc_probs = F.softmax(attended_arcs, dim=-1)

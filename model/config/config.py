@@ -46,8 +46,9 @@ custom_config = {
     'bma_init': 'xu', # 'xu', 'norm'
     'arc_norm': 1,
     # gat
-    'gnn_enc_layers': 1,
-    'gnn_dropout': 1,
+    'gnn_layers': 1,
+    'mlp_dropout': 0.3,
+    'gnn_dropout': 0,
     'gnn_activation': 'tanh',
     'use_gnn_steps': -1,
     'current_step': 0,
@@ -96,7 +97,6 @@ custom_config = {
     'training': 'steps',
     'training_steps': 10000,
     'eval_steps': 100,
-    'test_steps': 100,
     'eval_samples': 0, # 0 = all samples
     'epochs': 0 ,
     'patience': 0.3,

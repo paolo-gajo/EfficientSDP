@@ -92,12 +92,12 @@ class GNNParser(nn.Module):
                                     bias_type='simple',
                                     arc_norm=self.config['arc_norm'],
                                     )
-            for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
+            for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
-        if self.config['gnn_enc_layers'] > 0:
+        if self.config['gnn_layers'] > 0:
             self.head_gnn = GraphNNUnit(arc_representation_dim, arc_representation_dim)
             self.dept_gnn = GraphNNUnit(arc_representation_dim, arc_representation_dim)
             self.head_rel_gnn = GraphNNUnit(tag_representation_dim,
@@ -179,7 +179,7 @@ class GNNParser(nn.Module):
         _, seq_len, _ = encoded_text_input.size()
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
-        for k in range(self.config['gnn_enc_layers']):
+        for k in range(self.config['gnn_layers']):
             attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) # / self.arc_bilinear[k].norm
             # attended_arcs = attended_arcs - torch.diag(torch.tensor([1e9 for _ in range(attended_arcs.shape[-1])])).to(attended_arcs.device)
             arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)

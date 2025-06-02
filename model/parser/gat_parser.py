@@ -10,17 +10,25 @@ class GATParser(nn.Module):
         self,
         config: dict,
         embedding_dim: int,
+        n_edge_labels: int,
+        tag_embedder: nn.Linear,
         arc_representation_dim: int,
         tag_representation_dim: int,
-        input_dropout: float = 0.0,
+        mlp_dropout: float = 0.0,
+        gnn_dropout: float = 0.0,
         gnn_activation = F.tanh,
     ) -> None:
         super().__init__()
         self.config = config
         self.gnn_activation = gnn_activation
 
-        self._dropout = nn.Dropout(input_dropout)
+        self._mlp_dropout = nn.Dropout(mlp_dropout)
+        self._gnn_dropout = nn.Dropout(gnn_dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(embedding_dim))
+
+        if self.config["tag_embedding_type"] != 'none':
+            self.tag_embedder = tag_embedder
+            self.tag_dropout = nn.Dropout(0.2)
 
         self.head_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
@@ -29,10 +37,10 @@ class GATParser(nn.Module):
                                     arc_representation_dim,
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
-                                    bias_type='simple',
+                                    bias_type=self.config['bias_type'],
                                     arc_norm=self.config['arc_norm'],
                                     )
-            for _ in range(1 + self.config['gnn_enc_layers'])]).to(self.config['device'])
+            for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
@@ -43,13 +51,13 @@ class GATParser(nn.Module):
                                     heads=self.config['num_attn_heads'],
                                     concat=False,
                                     edge_dim=1,
-                                    residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+                                    residual=True) for _ in range(self.config['gnn_layers'])]).to(self.config['device'])
         self.conv2_arc = nn.ModuleList([GATv2Conv(arc_representation_dim,
                                     arc_representation_dim,
                                     heads=self.config['num_attn_heads'],
                                     concat=False,
                                     edge_dim=1,
-                                    residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+                                    residual=True) for _ in range(self.config['gnn_layers'])]).to(self.config['device'])
         
         # Two-layer GATs for updating relation (tag) representations.
         self.conv1_rel = nn.ModuleList([GATv2Conv(tag_representation_dim,
@@ -57,16 +65,16 @@ class GATParser(nn.Module):
                                     heads=self.config['num_attn_heads'],
                                     concat=False,
                                     edge_dim=1,
-                                    residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+                                    residual=True) for _ in range(self.config['gnn_layers'])]).to(self.config['device'])
         self.conv2_rel = nn.ModuleList([GATv2Conv(tag_representation_dim,
                                     tag_representation_dim,
                                     heads=self.config['num_attn_heads'],
                                     concat=False,
                                     edge_dim=1,
-                                    residual=True) for _ in range(self.config['gnn_enc_layers'])]).to(self.config['device'])
+                                    residual=True) for _ in range(self.config['gnn_layers'])]).to(self.config['device'])
         
         self.tag_representation_dim = tag_representation_dim
-        self.n_edge_labels = self.config['n_edge_labels']
+        self.n_edge_labels = n_edge_labels
         
     def forward(
         self,
@@ -80,6 +88,10 @@ class GATParser(nn.Module):
         graph_laplacian: torch.LongTensor = None,
     ) -> dict:
         
+        if self.config["tag_embedding_type"] != 'none':
+            tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
+            encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
+
         batch_size, _, encoding_dim = encoded_text_input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         mask = torch.cat([torch.ones(batch_size, 1, dtype=torch.long, device=self.config['device']), mask], dim=1)
@@ -92,15 +104,15 @@ class GATParser(nn.Module):
         if head_tags is not None:
             head_tags = torch.cat([head_tags.new_zeros(batch_size, 1), head_tags], dim=1)
         
-        encoded_text_input = self._dropout(encoded_text_input)
+        encoded_text_input = self._mlp_dropout(encoded_text_input)
         
         # Compute initial representations.
         # (batch_size, sequence_length, arc_representation_dim)
-        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
-        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
+        head_arc = self._mlp_dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
+        dept_arc = self._mlp_dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
         # (batch_size, sequence_length, tag_representation_dim)
-        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
+        head_tag = self._mlp_dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
+        dept_tag = self._mlp_dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
 
         _, seq_len, _ = encoded_text_input.size()
         gnn_losses = []
@@ -108,8 +120,8 @@ class GATParser(nn.Module):
         float_mask = mask.float()
 
         # Loop over the number of GNN encoder layers.
-        if self.current_step > self.config['use_gnn_steps'] and self.config['gnn_enc_layers'] > 0:
-            for k in range(self.config['gnn_enc_layers']):
+        if self.current_step > self.config['use_gnn_steps'] and self.config['gnn_layers'] > 0:
+            for k in range(self.config['gnn_layers']):
                 # Compute a soft adjacency (attention) matrix.
                 attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
                 arc_probs = F.softmax(attended_arcs, dim=-1)
@@ -141,23 +153,23 @@ class GATParser(nn.Module):
                 head_arc = self.conv1_arc[k](batch_head_arc.x, batch_head_arc.edge_index, batch_head_arc.edge_attr)
                 head_arc = self.unbatch_samples(head_arc, batch_head_arc.batch)
                 head_arc = self.gnn_activation(head_arc)
-                head_arc = self._dropout(head_arc)
+                head_arc = self._gnn_dropout(head_arc)
                 
                 dept_arc = self.conv2_arc[k](batch_dept_arc.x, batch_dept_arc.edge_index, batch_dept_arc.edge_attr)
                 dept_arc = self.unbatch_samples(dept_arc, batch_dept_arc.batch)
                 dept_arc = self.gnn_activation(dept_arc)
-                dept_arc = self._dropout(dept_arc)
+                dept_arc = self._gnn_dropout(dept_arc)
                 
                 # update relations
                 head_tag = self.conv1_rel[k](batch_head_tag.x, batch_head_tag.edge_index, batch_head_tag.edge_attr)
                 head_tag = self.unbatch_samples(head_tag, batch_head_tag.batch)
                 head_tag = self.gnn_activation(head_tag)
-                head_tag = self._dropout(head_tag)
+                head_tag = self._gnn_dropout(head_tag)
 
                 dept_tag = self.conv2_rel[k](batch_dept_tag.x, batch_dept_tag.edge_index, batch_dept_tag.edge_attr)
                 dept_tag = self.unbatch_samples(dept_tag, batch_dept_tag.batch)
                 dept_tag = self.gnn_activation(dept_tag)
-                dept_tag = self._dropout(dept_tag)
+                dept_tag = self._gnn_dropout(dept_tag)
                 
         # Compute final attended arcs.
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
@@ -205,12 +217,31 @@ class GATParser(nn.Module):
     def get_model(cls, config):
         embedding_dim = config["encoder_output_dim"]
         gnn_activation = getattr(F, config['gnn_activation'], lambda x: x)
+        # Determine embedding_dim and tag_embedder
+        if config['tag_embedding_type'] == 'linear':
+            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
+            tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
+            print('Using nn.Linear for tag embeddings!')
+        elif config['tag_embedding_type'] == 'embedding':
+            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
+            tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
+            print('Using nn.Embedding for tag embeddings!')
+        elif config['tag_embedding_type'] == 'none':
+            embedding_dim = config["encoder_output_dim"] # 768
+            tag_embedder = None
+            print('NOT using tag embeddings!')
+        else:
+            raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
+        n_edge_labels = config["n_edge_labels"]
         model_obj = cls(
             config=config,
             embedding_dim=embedding_dim,
+            n_edge_labels=n_edge_labels,
+            tag_embedder=tag_embedder,
             arc_representation_dim=500,
             tag_representation_dim=100,
-            input_dropout=config['gnn_dropout'],
+            mlp_dropout=config['mlp_dropout'],
+            gnn_dropout=config['gnn_dropout'],
             gnn_activation=gnn_activation,
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]

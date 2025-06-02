@@ -32,7 +32,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     save_dir, model_name = config['save_dir'], config['model_name'].replace('/', '-').replace(' ', '')
     augment_type = 'none' if '1' not in aug_string else config['augment_type']
     model_name = model_name if not config['use_abs_step_embeddings'] else 'step-bert'
-    parser_type = 'mtrfg' if config['parser_type'] == 'mtrfg' else f"{config['parser_type']}_{config['gnn_enc_layers']}"
+    parser_type = 'mtrfg' if config['parser_type'] == 'mtrfg' else f"{config['parser_type']}_{config['gnn_layers']}"
     dir_path = os.path.join(f"{save_dir}",
                             f"{config['results_suffix']}",
                             # f"freeze_encoder_{config['freeze_encoder']}",
