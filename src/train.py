@@ -98,7 +98,6 @@ def main():
                                                 config=config,
                                                 label_index_map=config['label_index_map'],
                                                 steps=current_step,)
-                # print(f'val F1:\t', json.dumps(val_results, indent=4))
                 val_results_list.append(val_results)
                 print(f'val_F1:', [el['parser_labeled_results']['F1'] for el in val_results_list])
                 print(f'val_las:', [el['uas_las_results']['las'] for el in val_results_list])
@@ -126,7 +125,6 @@ def main():
                                                 config=config,
                                                 label_index_map=config['label_index_map'],
                                                 steps=current_step,)
-                # print(f'test F1:\t', json.dumps(test_results, indent=4))
                 
                 # check for training failure (model suddenly breaks)
                 tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')

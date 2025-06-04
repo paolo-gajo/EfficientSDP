@@ -1,33 +1,17 @@
 import torch 
 import torch.nn as nn
-from transformers import AutoModel, BertConfig, BertModel
-from model.encoder.bert_custom import BertModelNoPos, BertModelSteps, BertModelLaplacian#, BertModel
+from transformers import AutoModel
 from transformers import BatchEncoding
-from typing import List, Dict, Optional
+from typing import Dict
 import inspect
 
 class Encoder(nn.Module):
 
-    def __init__(self, config, use_lora = False):
+    def __init__(self, config):
         super().__init__()
 
         self.config = config
-        if self.config['use_bert_positional_embeddings']:
-            if self.config['use_abs_step_embeddings']:
-                bert_config = BertConfig()
-                bert_config.max_steps = self.config['max_steps']
-                # bert_config.device = self.config['device']
-                self.encoder = BertModelSteps.from_pretrained(self.config['model_name'], config=bert_config)
-            elif self.config['laplacian_pe'] == 'encoder':
-                bert_config = BertConfig()
-                bert_config.max_steps = self.config['max_steps']
-                # bert_config.device = self.config['device']
-                self.encoder = BertModelLaplacian.from_pretrained(self.config['model_name'], config=bert_config)
-            else:
-                self.encoder = AutoModel.from_pretrained(self.config['model_name'])
-        else:
-            self.encoder = BertModelNoPos.from_pretrained(self.config['model_name'])
-
+        self.encoder = AutoModel.from_pretrained(self.config['model_name'])
         self.encoder_input_keys = [key for key in inspect.signature(self.encoder.forward).parameters.keys()]
 
         if self.config['use_multihead_attention']:
@@ -50,15 +34,8 @@ class Encoder(nn.Module):
         
         if self.config['rep_mode'] == 'words':
             encoded_output = self.merge_subword_representation(outputs, encoded_input)
-            attention_mask = encoded_input['words_mask_custom']
         elif self.config['rep_mode'] == 'tokens':
             encoded_output = outputs.last_hidden_state
-            attention_mask = encoded_input['attention_mask']
-
-        if self.config['use_multihead_attention']:
-            print('Using new MHA after encoder output.')
-            # `attention_mask` here was just the original encoded_input['attention_mask'] although the representation was merged
-            encoded_output, _ = self.mha(encoded_output, encoded_output, encoded_output, key_padding_mask = attention_mask < 0.5 )
 
         return encoded_output
 

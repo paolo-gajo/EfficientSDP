@@ -84,8 +84,6 @@ class GATParser(nn.Module):
         metadata: list = [],
         head_tags: torch.LongTensor = None,
         head_indices: torch.LongTensor = None,
-        step_indices: torch.LongTensor = None,
-        graph_laplacian: torch.LongTensor = None,
     ) -> dict:
         
         if self.config["tag_embedding_type"] != 'none':

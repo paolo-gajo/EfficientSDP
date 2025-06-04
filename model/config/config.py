@@ -41,12 +41,12 @@ custom_config = {
     'tag_embedding_type': 'linear', # 'linear', 'embedding', 'none'
 
     # parser options
-    'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', 'gat_unbatched', 'dgm', 'gnn2'
+    'parser_type': 'gat', # 'simple', 'gat'
     'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
     'bma_init': 'xu', # 'xu', 'norm'
     'arc_norm': 1,
     # gat
-    'gnn_layers': 1,
+    'gnn_layers': 0,
     'mlp_dropout': 0.3,
     'gnn_dropout': 0,
     'gnn_activation': 'tanh',

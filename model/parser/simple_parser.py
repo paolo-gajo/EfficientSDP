@@ -77,8 +77,6 @@ class SimpleParser(nn.Module):
         metadata: List[Dict[str, Any]] = [],
         head_tags: torch.LongTensor = None,
         head_indices: torch.LongTensor = None,
-        step_indices: torch.LongTensor = None,
-        graph_laplacian: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
 
         if self.config["tag_embedding_type"] != 'none':
@@ -246,48 +244,6 @@ class SimpleParser(nn.Module):
                     batch_first=True,
                     bidirectional=True,
                     dropout=0.3,
-                )
-            elif typ == 'rnn':
-                print(f'Using {nn.RNN} as parser encoder!')
-                encoder = nn.RNN(
-                    input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-            elif typ == 'normrnn':
-                print(f'Using {LayerNormRNN} as parser encoder!')
-                encoder = LayerNormRNN(
-                    input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-            elif typ == 'gru':
-                print(f'Using {nn.GRU} as parser encoder!')
-                encoder = nn.GRU(
-                    input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-            elif typ == 'transformer':
-                print(f'Using {nn.TransformerEncoderLayer} as parser encoder!')
-                layer = nn.TransformerEncoderLayer(
-                    d_model=embedding_dim,
-                    nhead=config.get('transformer_n_heads', 8),
-                    dim_feedforward=config.get('transformer_ff_dim', 4 * embedding_dim),
-                    dropout=0.1,
-                )
-                encoder = nn.TransformerEncoder(
-                    layer,
-                    num_layers=config['parser_rnn_layers'],
                 )
             else:
                 print(f'Using {None} as parser encoder!')
