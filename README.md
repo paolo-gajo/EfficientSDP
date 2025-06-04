@@ -15,7 +15,7 @@ The script ``./src/experiments.sh`` can be used to launch ``./src/train.py`` in 
 ./src/experiments.sh
 >> Total combinations: 80
 >> This script should be run as a SLURM array job.
->> Use: sbatch --array=0-79%999 experiments.sh
+>> Use: sbatch --array=0-79 exp_lstm.sh
 >> This will distribute 80 jobs across N GPUs.
 ```
 

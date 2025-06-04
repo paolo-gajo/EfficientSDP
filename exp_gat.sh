@@ -7,7 +7,7 @@
 #SBATCH --output=./.slurm/%A/%a_output.log
 #SBATCH --error=./.slurm/%A/%a_error.log
 #SBATCH --mem=64g
-#SBATCH --array=0-N%999
+#SBATCH --array=0-N
 slurm_dir="./.slurm/$SLURM_ARRAY_JOB_ID"
 mkdir -p $slurm_dir
 echo "Creating directory: $slurm_dir"
@@ -141,6 +141,6 @@ if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
     $command_to_run
 else
     echo "This script should be run as a SLURM array job."
-    echo "Use: sbatch --array=0-$((total_combinations-1))%999 $0"
+    echo "Use: sbatch --array=0-$((total_combinations-1)) $0"
     echo "This will distribute $total_combinations jobs across N GPUs."
 fi
