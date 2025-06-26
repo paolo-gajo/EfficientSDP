@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-from transformers.modeling_outputs import TokenClassifierOutput
+import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from transformers.modeling_outputs import TokenClassifierOutput
 import warnings
 
 class Tagger(nn.Module):
@@ -54,6 +55,22 @@ class Tagger(nn.Module):
             classifier_input_size = encoder_output_size
         
         self.classifier = nn.Linear(classifier_input_size, self.num_tags)
+        
+        self.tag_dropout = nn.Dropout(config['tag_dropout'])
+
+        if config['tag_embedding_type'] == 'linear':
+            self.tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
+            print('Using nn.Linear for tag embeddings!')
+        elif config['tag_embedding_type'] == 'embedding':
+            self.tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
+            print('Using nn.Embedding for tag embeddings!')
+        elif config['tag_embedding_type'] == 'none':
+            self.tag_embedder = None
+            print('NOT using tag embeddings!')
+        else:
+            raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')
+
+
         self.tagger_loss = nn.CrossEntropyLoss(ignore_index=0)
         self.gumbel_softmax = self.config['gumbel_softmax']
         self.apply(self._init_weights)
@@ -118,8 +135,42 @@ class Tagger(nn.Module):
             loss = self.tagger_loss(logits.reshape(-1, self.num_tags), labels.reshape(-1))
         else:  # For testing mode, no loss is computed.
             loss = None
+        output = TokenClassifierOutput(loss=loss, logits=logits)
+        
+        if self.config["tag_embedding_type"] != 'none':
+            output.tag_embeddings = self.make_embeddings(output, labels)
+        
+        return output
 
-        return TokenClassifierOutput(loss=loss, logits=logits)
+    def make_embeddings(self, output, labels):
+        pos_tags_pred_one_hot = self.get_predicted_classes_as_one_hot(output.logits)
+
+        # Ground-truth tags
+        try:
+            pos_tags_gt = torch.nn.functional.one_hot(labels, num_classes=self.config["n_tags"])
+        except:
+            warnings.warn("Ground truth tags are unavailable, using predicted tags for all purposes.")
+            pos_tags_gt = pos_tags_pred_one_hot
+
+        # Use predicted or ground truth tags based on config
+        pos_tags_parser_one_hot = pos_tags_pred_one_hot if self.config["use_pred_tags"] else pos_tags_gt
+        pos_tags_parser_cls_idx = torch.argmax(output.logits, dim=-1) if self.config["use_pred_tags"] else labels
+
+        pos_tags_dict = {
+            'pos_tags_one_hot': pos_tags_parser_one_hot.float(),
+            'pos_tags_labels': pos_tags_parser_cls_idx,
+        }
+
+        if self.config['tag_embedding_type'] == 'linear':
+            pos_tags = pos_tags_dict['pos_tags_one_hot']
+        elif self.config['tag_embedding_type'] == 'embedding':
+            pos_tags = pos_tags_dict['pos_tags_labels']
+        elif self.config['tag_embedding_type'] == 'none':
+            pos_tags = None
+        else:
+            raise ValueError('parameter `tag_embedding_type` can only be == `linear` or `embedding`')
+        embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
+        return embeddings
 
     def softargmax(self, input, beta=100):
         """

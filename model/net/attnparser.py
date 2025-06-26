@@ -10,9 +10,10 @@ import numpy as np
 import warnings
 from typing import Set, Tuple
 from debug.model_debugging import nan_checker, check_param_norm, check_grad_norm
+from debug.viz import save_batch_heatmap, indices_to_adjacency_matrices
 import copy
 
-class StepParser(torch.nn.Module):
+class AttnParser(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -134,6 +135,8 @@ class StepParser(torch.nn.Module):
             step_indices=step_indices,
             graph_laplacian=graph_laplacian,
         )
+        if self.config['debug']:
+            save_batch_heatmap(indices_to_adjacency_matrices(head_indices), 'head_indices_batch.pdf')
 
         decoder_output = self.decoder(
             head_tag = parser_output['head_tag'],

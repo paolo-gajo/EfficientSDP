@@ -39,7 +39,7 @@ class DGMParser(nn.Module):
         if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
 
-        self.tag_dropout = nn.Dropout(0.2)
+        self.tag_dropout = nn.Dropout(config['tag_dropout'])
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
         # assert self.config['gnn_layers'] > 0, 'If using GNNParser, must have `gnn_layers` > 0.'

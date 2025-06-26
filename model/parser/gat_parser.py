@@ -28,7 +28,7 @@ class GATParser(nn.Module):
 
         if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
-            self.tag_dropout = nn.Dropout(0.2)
+            self.tag_dropout = nn.Dropout(config['tag_dropout'])
 
         self.head_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(embedding_dim, arc_representation_dim)
@@ -119,14 +119,14 @@ class GATParser(nn.Module):
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
 
-        # Loop over the number of GNN encoder layers.
+        # loop over the number of GNN encoder layers
         if self.current_step > self.config['use_gnn_steps'] and self.config['gnn_layers'] > 0:
             for k in range(self.config['gnn_layers']):
-                # Compute a soft adjacency (attention) matrix.
+                # compute a soft adjacency attention matrix
                 attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
                 arc_probs = F.softmax(attended_arcs, dim=-1)
                 
-                # Compute loss as in the original implementation.
+                # compute loss as in the original implementation.
                 arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
                 range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
                 length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
@@ -135,8 +135,8 @@ class GATParser(nn.Module):
                 arc_nll = -arc_loss.sum() / valid_positions.float()
                 gnn_losses.append(arc_nll)
                 
-                # Convert the dense soft adjacency matrix to a sparse representation.
-                # dense_to_sparse can handle batched inputs and will adjust node indices.
+                # convert the dense soft adjacency matrix to a sparse representation
+                # dense_to_sparse can handle batched inputs and will adjust node indices
                 edge_attr, edge_index = torch.topk(arc_probs, self.config['top_k'], dim=-1)
                 edge_index = edge_index.reshape(edge_index.shape[0], edge_index.shape[1] * self.config['top_k'])
                 edge_attr = edge_attr.reshape(edge_attr.shape[0], edge_attr.shape[1] * self.config['top_k'])
@@ -171,7 +171,7 @@ class GATParser(nn.Module):
                 dept_tag = self.gnn_activation(dept_tag)
                 dept_tag = self._gnn_dropout(dept_tag)
                 
-        # Compute final attended arcs.
+        # compute final attended arcs
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {

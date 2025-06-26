@@ -4,16 +4,16 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --time=06:00:00
-#SBATCH --output=./.slurm/%A/%a_output.log
-#SBATCH --error=./.slurm/%A/%a_error.log
+#SBATCH --output=./.slurm/%j_output.log
+#SBATCH --error=./.slurm/%j_error.log
 #SBATCH --mem=64g
-#SBATCH --array=0-N
 
-slurm_dir="./.slurm/$SLURM_ARRAY_JOB_ID"
-mkdir -p $slurm_dir
+# slurm_dir="./.slurm/${SLURM_JOB_ID}"
+# echo $slurm_dir
+# mkdir -p $slurm_dir
 echo "Creating directory: $slurm_dir"
 nvidia-smi
-module load rust gcc arrow
+# module load rust gcc arrow
 . .env/bin/activate
 
 # Cartesian product function
@@ -61,10 +61,12 @@ declare -a parser_type_opts=(
     # simple
     )
 declare -a top_k_opts=(
-    1
+    # 1
     # 2
     # 3
-    4
+    # 4
+    8
+    16
     )
 declare -a arc_norm_opts=(
     # 0
@@ -112,13 +114,13 @@ eval_steps=500
 results_suffix=gat
 
 # Convert combinations to commands
+declare -i i=0
 declare -a commands=()
 while IFS= read -r combo; do
     IFS=',' read -ra params <<< "$combo"
-    
     cmd="python ./src/train.py
                 --opts
-                --results_suffix ${SLURM_ARRAY_JOB_ID}/${SLURM_ARRAY_TASK_ID}
+                --results_suffix ${SLURM_JOB_ID}/${i}
                 --seed ${params[0]}
                 --use_gnn_steps ${params[1]}
                 --gnn_layers ${params[2]}
@@ -127,7 +129,7 @@ while IFS= read -r combo; do
                 --arc_norm ${params[5]}
                 --gnn_dropout ${params[6]}
                 --gnn_activation ${params[7]}
-                --dataset ${params[8]}
+                --dataset_name ${params[8]}
                 --parser_rnn_layers ${params[9]}
                 --training_steps $training_steps 
                 --eval_steps $eval_steps
@@ -140,18 +142,17 @@ while IFS= read -r combo; do
     if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]];then
         continue
     fi
-    echo ${cmd}
+    # echo "${cmd}"
     commands+=("$cmd")
+    i+=1
 done <<< "$combinations"
 
 total_combinations=${#commands[@]}
-
-if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
-    command_to_run="${commands[$SLURM_ARRAY_TASK_ID]}"
-    echo "$command_to_run"
-    $command_to_run
-else
-    echo "This script should be run as a SLURM array job."
-    echo "Use: sbatch --array=0-$((total_combinations-1)) $0"
-    echo "This will distribute $total_combinations jobs across N GPUs."
-fi
+echo "Launching $((total_combinations)) jobs"
+declare -i j=0
+for c in "${commands[@]}"; do
+    echo "Combination $j"
+    echo "${c}" | sed -E ':a;N;$!ba;s/[[:space:]]+/ /g'
+    $c
+    j+=1
+done

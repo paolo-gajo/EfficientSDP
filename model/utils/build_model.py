@@ -1,4 +1,4 @@
-from model.stepparser import StepParser
+from model.net import AttnParser
 from model.utils import is_file
 import torch
 from peft import LoraConfig, get_peft_model, TaskType
@@ -10,7 +10,7 @@ def build_model(config, model_start_path = None, verbose = False):
     """
 
     ## get model from config
-    model = StepParser(config)
+    model = AttnParser(config)
 
     ## move to the correct device
     model.to(torch.device(config['device']))

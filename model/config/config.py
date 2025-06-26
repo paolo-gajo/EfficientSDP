@@ -2,7 +2,7 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
-    'dataset_name': 'scidtb',
+    'dataset_name': 'ade',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -12,6 +12,7 @@ custom_config = {
     'test_ignore_edges': ['0'],
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'plot': 0,
+    'debug': 0,
 
     # data options
     'only_use_biggest_graph': {'train': 0, 'val': 0, 'test': 0},
@@ -86,6 +87,7 @@ custom_config = {
     'unfreeze_layers': [],
     'use_encoder_attn': 0,
     'output_edge_scores': 1,
+    'tag_dropout': 0.2,
 
     # training options
     'use_warmup': 0,
