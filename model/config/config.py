@@ -2,7 +2,7 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
-    'dataset_name': 'ade',
+    'dataset_name': 'ud202xpos',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -64,8 +64,16 @@ custom_config = {
     'mhabma': 0,
     'arc_representation_dim': 500,
     'tag_representation_dim': 100,
-    
+
+    # graphrnn
+    'graph_rnn_hidden_graph': 500,
+    'graph_rnn_hidden_edge': 500,
+    'graph_rnn_node_layers': 4,
+    'graph_rnn_edge_layers': 4,
+    'graph_rnn_m': 20,
+
     # model options
+    'model_type': 'attn',
     'freeze_encoder': 1,
     'use_lora': 0,
     'use_pred_tags' : 1, ## this will determine if gold tags are used for train/test/validation or not. 

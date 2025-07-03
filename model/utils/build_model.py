@@ -1,16 +1,19 @@
-from model.net import AttnParser
+from model.net import AttnParser, GenParser
 from model.utils import is_file
 import torch
 from peft import LoraConfig, get_peft_model, TaskType
 from model.utils.train_utils import print_params
 
+MODEL_LIST = {
+    'attn': AttnParser,
+    'gen': GenParser,
+}    
+
 def build_model(config, model_start_path = None, verbose = False):
-    """
-        build and return full architecture from the config
-    """
 
     ## get model from config
-    model = AttnParser(config)
+    model = MODEL_LIST[config['model_type']](config)
+    print(model)
 
     ## move to the correct device
     model.to(torch.device(config['device']))
