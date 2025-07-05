@@ -98,15 +98,8 @@ class SimpleParser(nn.Module):
                                                             total_length=encoded_text_input.size(1))
             else:
                 # Transformer encoding
-                # Transformer expects (seq_len, batch, embed_dim)
-                # Create padding mask: True for positions that should be masked
-                src = encoded_text_input.permute(1, 0, 2)
-                # mask: (batch, seq) -> src_key_padding_mask: (batch, seq)
                 src_key_padding_mask = mask == 0
-                # Apply transformer encoder
-                encoded = self.encoder_h(src, src_key_padding_mask=src_key_padding_mask)
-                # Back to (batch, seq, embed)
-                encoded_text_input = encoded.permute(1, 0, 2)
+                encoded_text_input = self.encoder_h(encoded_text_input, src_key_padding_mask=src_key_padding_mask)
 
         batch_size, _, encoding_dim = encoded_text_input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
@@ -279,14 +272,8 @@ class SimpleParser(nn.Module):
                 )
             elif typ == 'transformer':
                 print(f'Using {nn.TransformerEncoderLayer} as parser encoder!')
-                layer = nn.TransformerEncoderLayer(
-                    d_model=embedding_dim,
-                    nhead=config.get('transformer_n_heads', 8),
-                    dim_feedforward=config.get('transformer_ff_dim', 4 * embedding_dim),
-                    dropout=0.1,
-                )
-                encoder = nn.TransformerEncoder(
-                    layer,
+                encoder = TransformerParserEncoder(
+                    input_dim=embedding_dim,
                     num_layers=config['parser_rnn_layers'],
                 )
             else:
@@ -307,3 +294,37 @@ class SimpleParser(nn.Module):
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj
+
+class TransformerParserEncoder(nn.Module):
+    def __init__(self, input_dim, num_layers=12):
+        super().__init__()
+
+        self.hidden_size   = 768          # d_model
+        self.num_heads     = 12
+        self.intermediate  = 3072         # dim_feedforward
+
+        # Project raw features to the BERT hidden size
+        self.lin_in = nn.Linear(input_dim, self.hidden_size)
+
+        layer = nn.TransformerEncoderLayer(
+            d_model         = self.hidden_size,
+            nhead           = self.num_heads,
+            dim_feedforward = self.intermediate,
+            dropout         = 0.1,
+            activation      = "gelu",
+            layer_norm_eps  = 1e-12,
+            batch_first     = True          # (batch, seq, hidden)
+        )
+
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer = layer,
+            num_layers    = num_layers
+        )
+
+        self.lin_out = nn.Linear(self.hidden_size, input_dim)
+
+    def forward(self, x, src_key_padding_mask):
+        x = self.lin_in(x)          # (B, L, 768)
+        x = self.encoder(x, src_key_padding_mask=src_key_padding_mask)      # (B, L, 768)
+        x = self.lin_out(x)
+        return x

@@ -37,37 +37,38 @@ cartesian_product() {
 }
 declare -a seed=(
     0
-    # 1
-    # 2
-    # 3
-    # 4
+    1
+    2
+    3
+    4
 )
 # Define parameter arrays
 declare -a use_gnn_steps_opts=(0)
 declare -a rnn_layers_opts=(
+    # 0
+    1
+    2
+    3
+    )
+declare -a gnn_layers_opts=(
     0
     # 1
     # 2
     # 3
     )
-declare -a gnn_layers_opts=(
-    0
-    1
-    2
-    3
-    )
 declare -a parser_type_opts=(
-    gat
+    # gat
     # simple
+    transformer
     )
 declare -a top_k_opts=(
     1
     # 2
     # 3
-    4
+    # 4
     )
 declare -a arc_norm_opts=(
-    # 0
+    0
     1
     )
 declare -a gnn_dropout_opts=(
@@ -76,12 +77,12 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-#   "ade"
-#   "conll04"
-#   "scierc"
+  "ade"
+  "conll04"
+  "scierc"
   "erfgc"
-#   "scidtb"
-#   "ud202xpos"
+  "scidtb"
+  "ud202xpos"
   )
 # Generate all combinations
 array_names=(
@@ -109,7 +110,7 @@ combinations=$(cartesian_product array_names)
 # Training parameters
 training_steps=10000
 eval_steps=500
-results_suffix=gat
+results_suffix=transformer
 
 # Convert combinations to commands
 declare -a commands=()

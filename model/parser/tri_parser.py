@@ -46,6 +46,14 @@ class TriParser(nn.Module):
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
+        g_sib_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        g_sib_tail_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        g_cop_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        g_cop_tail_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        g_gp_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        g_gp_tail_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        g_gp_head_tail_ff = nn.Linear(encoder_dim, arc_representation_dim)
+
         self.arc_bilinear = BilinearMatrixAttention(arc_representation_dim,
                                     arc_representation_dim,
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,

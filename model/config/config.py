@@ -34,11 +34,11 @@ custom_config = {
 
     # vanilla options
     'use_tagger_rnn': 1,
-    'use_parser_rnn': 1, # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
+    'use_parser_rnn': 1, 
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 3,
-    'tagger_rnn_type': 'lstm',
-    'parser_rnn_type': 'lstm',
+    'tagger_rnn_type': 'lstm', # 'gru', 'lstm'
+    'parser_rnn_type': 'lstm', # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'tag_embedding_type': 'linear', # 'linear', 'embedding', 'none'
 
     # parser options
@@ -106,7 +106,7 @@ custom_config = {
     'batch_size': 8,
     'training': 'steps',
     'training_steps': 10000,
-    'eval_steps': 100,
+    'eval_steps': 500,
     'eval_samples': 0, # 0 = all samples
     'epochs': 0 ,
     'patience': 0.3,
