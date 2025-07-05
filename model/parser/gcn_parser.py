@@ -33,7 +33,7 @@ class GCNParser(nn.Module):
             for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
-        self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
+        self.dep_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
 
         # Two-layer GCNs for updating arc representations.
         self.conv1_arc = GCNConv(arc_representation_dim, arc_representation_dim)
@@ -80,7 +80,7 @@ class GCNParser(nn.Module):
         dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
         # (batch_size, sequence_length, tag_representation_dim)
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
+        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(encoded_text_input)))
 
         _, seq_len, _ = encoded_text_input.size()
         gnn_losses = []
@@ -129,27 +129,27 @@ class GCNParser(nn.Module):
             
             # ----- Update relation (tag) representations using GCNConv -----
             head_tag_flat = head_tag.reshape(batch_size * seq_len, -1)
-            dept_tag_flat = dept_tag.reshape(batch_size * seq_len, -1)
+            dep_tag_flat = dep_tag.reshape(batch_size * seq_len, -1)
             
             head_tag_updated = self.conv1_rel(head_tag_flat, edge_index, edge_attr)
             head_tag_updated = F.elu(head_tag_updated)
             head_tag_updated = self.dropout_rel(head_tag_updated)
             head_tag_updated = self.conv2_rel(head_tag_updated, edge_index, edge_attr)
             
-            dept_tag_updated = self.conv1_rel(dept_tag_flat, edge_index, edge_attr)
-            dept_tag_updated = F.elu(dept_tag_updated)
-            dept_tag_updated = self.dropout_rel(dept_tag_updated)
-            dept_tag_updated = self.conv2_rel(dept_tag_updated, edge_index, edge_attr)
+            dep_tag_updated = self.conv1_rel(dep_tag_flat, edge_index, edge_attr)
+            dep_tag_updated = F.elu(dep_tag_updated)
+            dep_tag_updated = self.dropout_rel(dep_tag_updated)
+            dep_tag_updated = self.conv2_rel(dep_tag_updated, edge_index, edge_attr)
             
             head_tag = head_tag_updated.reshape(batch_size, seq_len, -1)
-            dept_tag = dept_tag_updated.reshape(batch_size, seq_len, -1)
+            dep_tag = dep_tag_updated.reshape(batch_size, seq_len, -1)
             
         # Compute final attended arcs.
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
-            'dept_tag': dept_tag,
+            'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
             'attended_arcs': attended_arcs,

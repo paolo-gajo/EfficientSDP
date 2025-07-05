@@ -140,7 +140,7 @@ class AttnParser(torch.nn.Module):
 
         decoder_output = self.decoder(
             head_tag = parser_output['head_tag'],
-            dept_tag = parser_output['dept_tag'],
+            dep_tag = parser_output['dep_tag'],
             head_indices = parser_output['head_indices'],
             head_tags = parser_output['head_tags'],
             attended_arcs = parser_output['attended_arcs'],

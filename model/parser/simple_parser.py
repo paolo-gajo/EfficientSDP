@@ -50,7 +50,7 @@ class SimpleParser(nn.Module):
                                     )
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
-        self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
+        self.dep_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
         self._dropout = nn.Dropout(mlp_dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
@@ -126,13 +126,13 @@ class SimpleParser(nn.Module):
         dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
         # shape (batch_size, sequence_length, tag_representation_dim)
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
+        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(encoded_text_input)))
 
         attended_arcs = self.arc_bilinear(head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
-            'dept_tag': dept_tag,
+            'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
             'attended_arcs': attended_arcs,

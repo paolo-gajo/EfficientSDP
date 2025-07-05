@@ -95,7 +95,7 @@ class GNNParser(nn.Module):
             for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
-        self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
+        self.dep_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
         if self.config['gnn_layers'] > 0:
             self.head_gnn = GraphNNUnit(arc_representation_dim, arc_representation_dim)
@@ -169,7 +169,7 @@ class GNNParser(nn.Module):
         dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
         # shape (batch_size, sequence_length, tag_representation_dim)
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
+        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(encoded_text_input)))
 
         # the following is based on 'Graph-based Dependency Parsing with Graph Neural Networks'
         # https://aclanthology.org/P19-1237/
@@ -207,17 +207,17 @@ class GNNParser(nn.Module):
             dept_arc = self.dept_gnn(fx_intermediate, dept_arc)
 
             hr = torch.matmul(arc_probs, head_tag)
-            dr = torch.matmul(arc_probs.transpose(1, 2), dept_tag)
+            dr = torch.matmul(arc_probs.transpose(1, 2), dep_tag)
             fr = hr + dr
             
             head_tag = self.head_rel_gnn(fr, head_tag)
-            dept_tag = self.dept_rel_gnn(fr, dept_tag)
+            dep_tag = self.dept_rel_gnn(fr, dep_tag)
 
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
-            'dept_tag': dept_tag,
+            'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
             'attended_arcs': attended_arcs,

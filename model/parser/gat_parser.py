@@ -43,7 +43,7 @@ class GATParser(nn.Module):
             for _ in range(1 + self.config['gnn_layers'])]).to(self.config['device'])
 
         self.head_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
-        self.dept_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
+        self.dep_tag_feedforward = nn.Linear(embedding_dim, tag_representation_dim)
 
         # Two-layer GATs for updating arc representations.
         self.conv1_arc = nn.ModuleList([GATv2Conv(arc_representation_dim,
@@ -112,7 +112,7 @@ class GATParser(nn.Module):
         dept_arc = self._mlp_dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
         # (batch_size, sequence_length, tag_representation_dim)
         head_tag = self._mlp_dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dept_tag = self._mlp_dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
+        dep_tag = self._mlp_dropout(F.elu(self.dep_tag_feedforward(encoded_text_input)))
 
         _, seq_len, _ = encoded_text_input.size()
         gnn_losses = []
@@ -147,7 +147,7 @@ class GATParser(nn.Module):
                 batch_head_arc = self.batch_samples(head_arc, edge_index, edge_attr)
                 batch_dept_arc = self.batch_samples(dept_arc, edge_index_T, edge_attr_T)
                 batch_head_tag = self.batch_samples(head_tag, edge_index, edge_attr)
-                batch_dept_tag = self.batch_samples(dept_tag, edge_index_T, edge_attr_T)
+                batch_dep_tag = self.batch_samples(dep_tag, edge_index_T, edge_attr_T)
                 
                 # update edges
                 head_arc = self.conv1_arc[k](batch_head_arc.x, batch_head_arc.edge_index, batch_head_arc.edge_attr)
@@ -166,17 +166,17 @@ class GATParser(nn.Module):
                 head_tag = self.gnn_activation(head_tag)
                 head_tag = self._gnn_dropout(head_tag)
 
-                dept_tag = self.conv2_rel[k](batch_dept_tag.x, batch_dept_tag.edge_index, batch_dept_tag.edge_attr)
-                dept_tag = self.unbatch_samples(dept_tag, batch_dept_tag.batch)
-                dept_tag = self.gnn_activation(dept_tag)
-                dept_tag = self._gnn_dropout(dept_tag)
+                dep_tag = self.conv2_rel[k](batch_dep_tag.x, batch_dep_tag.edge_index, batch_dep_tag.edge_attr)
+                dep_tag = self.unbatch_samples(dep_tag, batch_dep_tag.batch)
+                dep_tag = self.gnn_activation(dep_tag)
+                dep_tag = self._gnn_dropout(dep_tag)
                 
         # compute final attended arcs
         attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
-            'dept_tag': dept_tag,
+            'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
             'attended_arcs': attended_arcs,

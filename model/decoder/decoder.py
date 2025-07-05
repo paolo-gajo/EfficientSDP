@@ -19,7 +19,7 @@ class GraphDecoder(nn.Module):
 
     def forward(self,
                 head_tag: torch.Tensor,
-                dept_tag: torch.Tensor,
+                dep_tag: torch.Tensor,
                 head_indices: torch.Tensor,
                 head_tags: torch.Tensor,
                 attended_arcs: torch.Tensor,
@@ -42,14 +42,14 @@ class GraphDecoder(nn.Module):
         if self.training or not self.use_mst_decoding_for_validation:
             predicted_heads, predicted_head_tags = self._greedy_decode(
                 head_tag,
-                dept_tag,
+                dep_tag,
                 attended_arcs,
                 mask
                 )
         else:
             predicted_heads, predicted_head_tags = self._mst_decode(
                 head_tag,
-                dept_tag,
+                dep_tag,
                 attended_arcs,
                 mask,
             )
@@ -66,7 +66,7 @@ class GraphDecoder(nn.Module):
 
         arc_nll, tag_nll = self._construct_loss(
             head_tag=head_tag,
-            dept_tag=dept_tag,
+            dep_tag=dep_tag,
             attended_arcs=attended_arcs,
             head_indices=head_indices,
             head_tags=head_tags,
@@ -90,7 +90,7 @@ class GraphDecoder(nn.Module):
     def _construct_loss(
         self,
         head_tag: torch.Tensor,
-        dept_tag: torch.Tensor,
+        dep_tag: torch.Tensor,
         attended_arcs: torch.Tensor,
         head_indices: torch.Tensor,
         head_tags: torch.Tensor,
@@ -105,7 +105,7 @@ class GraphDecoder(nn.Module):
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
-        dept_tag : ``torch.Tensor``, required
+        dep_tag : ``torch.Tensor``, required
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
@@ -143,7 +143,7 @@ class GraphDecoder(nn.Module):
             normalised_arc_logits = normalised_arc_logits * float_mask
 
         # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self._get_head_tags(head_tag, dept_tag, head_indices)
+        head_tag_logits = self._get_head_tags(head_tag, dep_tag, head_indices)
         normalised_head_tag_logits = masked_log_softmax(head_tag_logits, mask.unsqueeze(-1))
         normalised_head_tag_logits = normalised_head_tag_logits * float_mask.unsqueeze(-1)
 
@@ -192,7 +192,7 @@ class GraphDecoder(nn.Module):
     def _greedy_decode(
         self,
         head_tag: torch.Tensor,
-        dept_tag: torch.Tensor,
+        dep_tag: torch.Tensor,
         attended_arcs: torch.Tensor,
         mask: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -209,7 +209,7 @@ class GraphDecoder(nn.Module):
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
-        dept_tag : ``torch.Tensor``, required
+        dep_tag : ``torch.Tensor``, required
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
@@ -247,7 +247,7 @@ class GraphDecoder(nn.Module):
         # Given the greedily predicted heads, decode their dependency tags.
         # shape (batch_size, sequence_length, num_head_tags)
         head_tag_logits = self._get_head_tags(
-            head_tag, dept_tag, heads
+            head_tag, dep_tag, heads
         )
         _, head_tags = head_tag_logits.max(dim=2)
         return heads, head_tags
@@ -255,7 +255,7 @@ class GraphDecoder(nn.Module):
     def _mst_decode(
         self,
         head_tag: torch.Tensor,
-        dept_tag: torch.Tensor,
+        dep_tag: torch.Tensor,
         attended_arcs: torch.Tensor,
         mask: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -273,7 +273,7 @@ class GraphDecoder(nn.Module):
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
-        dept_tag : ``torch.Tensor``, required
+        dep_tag : ``torch.Tensor``, required
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
@@ -302,10 +302,10 @@ class GraphDecoder(nn.Module):
         ]
         head_tag = head_tag.unsqueeze(2)
         head_tag = head_tag.expand(*expanded_shape).contiguous()
-        dept_tag = dept_tag.unsqueeze(1)
-        dept_tag = dept_tag.expand(*expanded_shape).contiguous()
+        dep_tag = dep_tag.unsqueeze(1)
+        dep_tag = dep_tag.expand(*expanded_shape).contiguous()
         # Shape (batch_size, sequence_length, sequence_length, num_head_tags)
-        pairwise_head_logits = self.tag_bilinear(head_tag, dept_tag)
+        pairwise_head_logits = self.tag_bilinear(head_tag, dep_tag)
 
         # Note that this log_softmax is over the tag dimension, and we don't consider pairs
         # of tags which are invalid (e.g are a pair which includes a padded element) anyway below.
@@ -377,7 +377,7 @@ class GraphDecoder(nn.Module):
     def _get_head_tags(
         self,
         head_tag: torch.Tensor,
-        dept_tag: torch.Tensor,
+        dep_tag: torch.Tensor,
         head_indices: torch.Tensor,
     ) -> torch.Tensor:
         """
@@ -392,7 +392,7 @@ class GraphDecoder(nn.Module):
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
-        dept_tag : ``torch.Tensor``, required
+        dep_tag : ``torch.Tensor``, required
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
@@ -428,7 +428,7 @@ class GraphDecoder(nn.Module):
         )
         # shape (batch_size, sequence_length, num_head_tags)
         head_tag_logits = self.tag_bilinear(
-            selected_head_tag_representations, dept_tag
+            selected_head_tag_representations, dep_tag
         )
         return head_tag_logits
 

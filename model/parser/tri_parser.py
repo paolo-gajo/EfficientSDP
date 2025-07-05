@@ -40,28 +40,26 @@ class TriParser(nn.Module):
         if self.config["tag_embedding_type"] != 'none':
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(config['tag_dropout'])
-        
-        self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
-        self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
-        self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
-        self.dept_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
-        g_sib_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        g_sib_tail_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        g_cop_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        g_cop_tail_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        g_gp_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        g_gp_tail_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        g_gp_head_tail_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        sib_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        sib_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        cop_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        cop_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        gp_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        gp_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        gp_head_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
 
-        self.arc_bilinear = BilinearMatrixAttention(arc_representation_dim,
+        self.tri_sib = TrilinearMatrixAttention(
+                                    arc_representation_dim,
+                                    arc_representation_dim,
                                     arc_representation_dim,
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
                                     arc_norm=self.config['arc_norm'],
                                     )
-
+        self.tri_cop = copy.deepcopy(self.tri_sib)
+        self.tri_gp = copy.deepcopy(self.tri_sib)
 
         self._dropout = nn.Dropout(dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
@@ -115,17 +113,22 @@ class TriParser(nn.Module):
         
         encoded_text_input = self._dropout(encoded_text_input)
             
-        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
-        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
-        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dept_tag = self._dropout(F.elu(self.dept_tag_feedforward(encoded_text_input)))
+        sib_head = self._dropout(F.elu(self.sib_head_ff(encoded_text_input)))
+        sib_dep = self._dropout(F.elu(self.sib_dep_ff(encoded_text_input)))
+        cop_head = self._dropout(F.elu(self.cop_head_ff(encoded_text_input)))
+        cop_dep = self._dropout(F.elu(self.cop_dep_ff(encoded_text_input)))
+        gp_head = self._dropout(F.elu(self.gp_head_ff(encoded_text_input)))
+        gp_dep = self._dropout(F.elu(self.gp_dep_ff(encoded_text_input)))
+        gp_head_dep = self._dropout(F.elu(self.gp_head_dep_ff(encoded_text_input)))
 
 
-        attended_arcs = self.arc_bilinear(head_arc, dept_arc)
-
+        sib = self.tri_sib(sib_head, sib_dep, sib_dep)
+        cop = self.tri_sib(cop_head, cop_dep, cop_head)
+        gp = self.tri_sib(gp_head, gp_head_dep, gp_dep)
+        import pdb; pdb.set_trace()
         output = {
             'head_tag': head_tag,
-            'dept_tag': dept_tag,
+            'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
             'attended_arcs': attended_arcs,# if encoder_attentions is None else encoder_attentions,
