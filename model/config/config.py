@@ -65,6 +65,10 @@ custom_config = {
     'arc_representation_dim': 500,
     'tag_representation_dim': 100,
 
+    # triaffine options
+    'triaffine_arc_norm': 0,
+    'triaffine_activation': '',
+    
     # graphrnn
     'graph_rnn_hidden_graph': 500,
     'graph_rnn_hidden_edge': 500,

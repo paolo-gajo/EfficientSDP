@@ -57,9 +57,9 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     config['test_file_graphs'] = config['test_file_graphs'].format(dataset_name = config['dataset_name'])
 
     # model path
-    if Path(save_path) != Path(main_save_dir):
-        config['model_path'] = os.path.join(config['save_dir'], 'model.pth')
-    else:
+    config['model_path'] = os.path.join(config['save_dir'], 'model.pth')
+    
+    if Path(save_path) == Path(main_save_dir):
         print(f'Save path is the same as main save dir `{main_save_dir}`!')
 
     # get encoder output dimension (aka hidden size)

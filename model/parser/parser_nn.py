@@ -364,143 +364,64 @@ class BilinearMatrixAttention(nn.Module):
 
 
 class TrilinearMatrixAttention(nn.Module):
-    """
-    Computes attention between two matrices using a bilinear attention function.
-    This unified class supports multiple bias types for flexibility.
-
-    # Parameters
-
-    matrix_1_dim : `int`, required
-        The dimension of the matrix `X`. This is `X.size()[-1]` - the length
-        of the vector that will go into the similarity computation.
-    matrix_2_dim : `int`, required
-        The dimension of the matrix `Y`. This is `Y.size()[-1]` - the length
-        of the vector that will go into the similarity computation.
-    activation : `Activation`, optional (default=`linear`)
-        An activation function applied after the similarity calculation.
-    use_input_biases : `bool`, optional (default = `False`)
-        If True, we add biases to the inputs such that the final computation
-        is equivalent to the original bilinear matrix multiplication plus a
-        projection of both inputs.
-    out_features : `int`, optional (default = `1`)
-        The number of output classes.
-    bias_type : `str`, optional (default = "simple")
-        Type of bias to use:
-        - "simple": A single scalar bias (original BilinearMatrixAttention)
-        - "gnn": Separate biases for both matrices (BilinearMatrixAttentionGNN)
-        - "dozat": Bias only for matrix_1 (BilinearMatrixAttentionDozatManning)
-        - "none": No bias
-    """
-
     def __init__(
         self,
         matrix_1_dim: int,
         matrix_2_dim: int,
         matrix_3_dim: int,
+        mode: str,
         activation=None,
-        use_input_biases: bool = False,
-        out_features: int = 1,
-        bias_type: str = 'simple',
         arc_norm: bool = True,
     ) -> None:
         super().__init__()
-        if use_input_biases:
-            matrix_1_dim += 1
-            matrix_2_dim += 1
-            matrix_3_dim += 1
         
-        if out_features == 1:
-            self._weight_matrix = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim))
-        else:
-            self._weight_matrix = nn.Parameter(
-                torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
-            )
+        self.W = nn.Parameter(torch.Tensor(matrix_1_dim, matrix_2_dim, matrix_3_dim))
         
         self.arc_norm = arc_norm
-        self.scale_norm = math.sqrt((matrix_1_dim + matrix_2_dim) / 2) if arc_norm else 1
+        self.scale_norm = math.sqrt((matrix_1_dim + matrix_2_dim + matrix_3_dim) / 3) if arc_norm else 1
         
-        # Set up bias parameters based on the bias_type
-        self.bias_type = bias_type.lower()
-        if self.bias_type == "simple":
-            self._bias = nn.Parameter(torch.Tensor(1))
-            self._bias_1 = None
-            self._bias_2 = None
-            self._bias_3 = None
-        elif self.bias_type == "gnn":
-            self._bias = None
-            self._bias_1 = nn.Parameter(torch.Tensor(matrix_1_dim))
-            self._bias_2 = nn.Parameter(torch.Tensor(matrix_2_dim))
-            self._bias_3 = nn.Parameter(torch.Tensor(matrix_3_dim))
-        elif self.bias_type == "dozat":
-            self._bias = None
-            self._bias_1 = nn.Parameter(torch.Tensor(matrix_1_dim))
-            self._bias_2 = None
-            self._bias_3 = None
-        elif self.bias_type == "none":
-            self._bias = None
-            self._bias_1 = None
-            self._bias_2 = None
-            self._bias_3 = None
-        else:
-            raise ValueError(f"Unsupported bias_type: {bias_type}."
-                           "Choose from 'simple', 'gnn', 'dozat', or 'none'.")
-
+        self.mode = mode
         self.activation = activation or Passthrough()
-        self.use_input_biases = use_input_biases
-        self.out_features = out_features
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.xavier_uniform_(self._weight_matrix)
-        
-        if self._bias is not None:
-            self._bias.data.fill_(0)
-        if self._bias_1 is not None:
-            self._bias_1.data.fill_(0)
-        if self._bias_2 is not None:
-            self._bias_2.data.fill_(0)
-        if self._bias_3 is not None:
-            self._bias_3.data.fill_(0)
+        torch.nn.init.xavier_uniform_(self.W)
 
     def forward(self,
                 matrix_1: torch.Tensor,
                 matrix_2: torch.Tensor,
                 matrix_3: torch.Tensor
                 ) -> torch.Tensor:
-        if self.use_input_biases:
-            bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
-            bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
-            bias3 = matrix_3.new_ones(matrix_3.size()[:-1] + (1,))
 
-            matrix_1 = torch.cat([matrix_1, bias1], dim=-1)
-            matrix_2 = torch.cat([matrix_2, bias2], dim=-1)
-            matrix_3 = torch.cat([matrix_3, bias3], dim=-1)
+        B, S, D = matrix_1.shape
+        square_mask = torch.ones(S, S, dtype=torch.bool, device=matrix_1.device)
+        mask = torch.triu(square_mask, diagonal=1)
 
-        # Handle weight dimensionality
-        weight = self._weight_matrix
-        if weight.dim() == 2:
-            weight = weight.unsqueeze(0)
-            
-        # Compute the core bilinear attention
-        intermediate = torch.matmul(matrix_1.unsqueeze(1), weight)
-        bi = torch.matmul(intermediate, matrix_2.unsqueeze(1).transpose(2, 3))
-        # bi = bi.squeeze(1)
-        tri = torch.matmul(matrix_3, bi)
-        
-        # Apply bias based on the selected bias type
-        if self.bias_type == "simple":
-            result = tri + self._bias
-        elif self.bias_type == "gnn":
-            bias_1 = torch.matmul(matrix_1, self._bias_1.unsqueeze(1))
-            bias_2 = torch.matmul(matrix_2, self._bias_2.unsqueeze(1))
-            result = tri + bias_1 + bias_2
-        elif self.bias_type == "dozat":
-            bias = torch.matmul(matrix_1, self._bias_1.unsqueeze(1))
-            result = tri + bias
-        else:  # "none"
-            result = tri
-        
-        return self.normalize(self.activation(result))
+        if self.mode == 'sib':
+            # j < k so we need the mask to be on the jk dimensions
+            # which means the last 2
+            mask = mask.unsqueeze(0).unsqueeze(0)
+        elif self.mode == 'cop':
+            # i < k so we need the mask to be on the ik dimensions
+            # meaning 0, [1], 2, [3] i.e. the 1st and 3rd
+            mask = mask.unsqueeze(1).unsqueeze(0)
+        else:
+            mask = square_mask
+            mask = mask.unsqueeze(0).unsqueeze(0)
+
+        # matrix_1: head representations
+        # matrix_2: dep representations
+        # matrix_3: head (cop) / dep (sib) / dep-of-dep (gp)
+
+        # delete p with x
+        v1U = torch.einsum('bix,pqr -> biqr', matrix_1, self.W) # shape [B, S, D, D]
+        # delete q with x
+        v1Uv2 = torch.einsum('biqr,bjx -> bijr', v1U, matrix_2) # shape [B, S, S, D]
+        # delete r with x
+        v3v1Uv2 = torch.einsum('bkx,bijr -> bijk', matrix_3, v1Uv2) # shape [B, S, S, S]
+
+        scores = v3v1Uv2.masked_fill(~mask, 0.0)
+        return self.normalize(self.activation(scores))
 
     def normalize(self, adj):
         if self.arc_norm:

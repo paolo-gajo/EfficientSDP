@@ -41,25 +41,47 @@ class TriParser(nn.Module):
             self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(config['tag_dropout'])
 
-        sib_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        sib_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        cop_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        cop_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        gp_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        gp_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
-        gp_head_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        self.sib_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        self.sib_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        self.cop_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        self.cop_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        self.gp_head_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        self.gp_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
+        self.gp_head_dep_ff = nn.Linear(encoder_dim, arc_representation_dim)
 
         self.tri_sib = TrilinearMatrixAttention(
                                     arc_representation_dim,
                                     arc_representation_dim,
                                     arc_representation_dim,
+                                    mode = 'sib',
                                     activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
-                                    use_input_biases=True,
-                                    bias_type='simple',
                                     arc_norm=self.config['arc_norm'],
                                     )
-        self.tri_cop = copy.deepcopy(self.tri_sib)
-        self.tri_gp = copy.deepcopy(self.tri_sib)
+        num_params = sum(p.numel() for p in self.tri_sib.parameters() if p.requires_grad)
+        print(f"Number of parameters self.tri_sib: {num_params}")
+        
+        self.tri_cop = TrilinearMatrixAttention(
+                                    arc_representation_dim,
+                                    arc_representation_dim,
+                                    arc_representation_dim,
+                                    mode = 'cop',
+                                    activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
+                                    arc_norm=self.config['arc_norm'],
+                                    )
+        num_params = sum(p.numel() for p in self.tri_cop.parameters() if p.requires_grad)
+        print(f"Number of parameters self.tri_cop: {num_params}")
+        
+        self.tri_gp = TrilinearMatrixAttention(
+                                    arc_representation_dim,
+                                    arc_representation_dim,
+                                    arc_representation_dim,
+                                    mode = '',
+                                    activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
+                                    arc_norm=self.config['arc_norm'],
+                                    )
+        
+        num_params = sum(p.numel() for p in self.tri_gp.parameters() if p.requires_grad)
+        print(f"Number of parameters self.tri_gp: {num_params}")
 
         self._dropout = nn.Dropout(dropout)
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
@@ -76,10 +98,9 @@ class TriParser(nn.Module):
         metadata: List[Dict[str, Any]] = [],
         head_tags: torch.LongTensor = None,
         head_indices: torch.LongTensor = None,
+        **kwargs,
     ) -> Dict[str, torch.Tensor]:
         
-        pos_tags = pos_tags['pos_tags_one_hot'] if self.config['tag_embedding_type'] == 'linear' else pos_tags['pos_tags_labels']
-
         if self.config["tag_embedding_type"] != 'none':
             tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
@@ -123,9 +144,9 @@ class TriParser(nn.Module):
 
 
         sib = self.tri_sib(sib_head, sib_dep, sib_dep)
-        cop = self.tri_sib(cop_head, cop_dep, cop_head)
-        gp = self.tri_sib(gp_head, gp_head_dep, gp_dep)
-        import pdb; pdb.set_trace()
+        cop = self.tri_cop(cop_head, cop_dep, cop_head)
+        gp = self.tri_gp(gp_head, gp_head_dep, gp_dep)
+        
         output = {
             'head_tag': head_tag,
             'dep_tag': dep_tag,

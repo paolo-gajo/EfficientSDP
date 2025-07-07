@@ -23,7 +23,7 @@ def build_model(config, model_start_path = None, verbose = False):
         model_path = model_start_path
     elif config['model_path']:
         model_path = config['model_path']
-
+ 
     ## let's load the model if path exists! 
     if is_file(model_path):
         model.load_state_dict(torch.load(model_path))
