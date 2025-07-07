@@ -34,7 +34,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"{config['results_suffix']}",
                             )
     
-    if config['dataset_name'] in ['ud202xpos', 'scidtb']:
+    if config['dataset_name'] in ['enewt', 'scidtb']:
         config['test_ignore_edge_dep'] = ['punct']
         config['test_ignore_tag'] = []
         config['test_ignore_edges'] = []

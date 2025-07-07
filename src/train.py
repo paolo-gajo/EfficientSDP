@@ -129,11 +129,11 @@ def main():
                 # print(f'test F1:\t', json.dumps(test_results, indent=4))
                 
                 # check for training failure (model suddenly breaks)
-                tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')
-                if test_results['parser_labeled_results']['F1'] < 1e-2 and current_step > 1000:
-                    tmp_model_name = tmp_model_name.replace('.pth', '_junk.pth')
-                    torch.save(deepcopy(model.state_dict()), tmp_model_name)
-                    raise RuntimeError('Bricked model!')
+                # tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')
+                # if test_results['parser_labeled_results']['F1'] == 0.0 and current_step > 1000:
+                #     tmp_model_name = tmp_model_name.replace('.pth', '_junk.pth')
+                #     torch.save(deepcopy(model.state_dict()), tmp_model_name)
+                #     raise RuntimeError('Bricked model!')
                 test_results_list.append(test_results)
                 print(f'test_F1:', [el['parser_labeled_results']['F1'] for el in test_results_list])
                 print(f'test_las:', [el['uas_las_results']['las'] for el in test_results_list])

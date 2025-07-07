@@ -83,7 +83,7 @@ declare -a dataset_name_opts=(
 #   "scierc"
   "erfgc"
 #   "scidtb"
-#   "ud202xpos"
+#   "enewt"
   )
 # Generate all combinations
 array_names=(
