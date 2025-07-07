@@ -27,7 +27,7 @@ declare -a dataset_name_options=(
   "scierc"
   "erfgc"
   "scidtb"
-  "ud202xpos"
+  "enewt"
   )
 declare -a model_name_options=(
   # "answerdotai/ModernBERT-base"
