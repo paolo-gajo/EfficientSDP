@@ -4,15 +4,32 @@
 """
 from typing import List, Optional, Set, Dict
 
-def filter_get_P_R_F1(gts, preds, ignore_list = []):
+def filter_get_P_R_F1(gts,
+                      preds,
+                      type,
+                      ignore_tag_indices = [],
+                      ignore_edge_indices = [],
+                      ignore_edge_labels = [],
+                      ):
     """
         This function will remove all to be ignored labels
         and get prec, recall, F1
     """
 
     ## removing labels which are to be ignored
-    preds = [pred for pred in preds if pred.split('-')[-1] not in ignore_list]    
-    gts = [gt for gt in gts if gt.split('-')[-1] not in ignore_list]    
+    if type == 'tags':
+        preds = [pred for pred in preds if pred.split('-')[-1] not in ignore_tag_indices] 
+        gts = [gt for gt in gts if gt.split('-')[-1] not in ignore_tag_indices]
+    elif type == 'edges':
+        preds = [pred for pred in preds if pred.split('-')[-1] not in ignore_edge_indices] 
+        gts = [gt for gt in gts if gt.split('-')[-1] not in ignore_edge_indices]
+    elif type == 'edge_labels':
+        # in this case we filter both edges...
+        preds = [pred for pred in preds if pred.split('-')[-1] not in ignore_edge_indices] 
+        gts = [gt for gt in gts if gt.split('-')[-1] not in ignore_edge_indices]
+        # ...and edge_labels
+        preds = [pred for pred in preds if pred.split('-')[-2] not in ignore_edge_labels] 
+        gts = [gt for gt in gts if gt.split('-')[-2] not in ignore_edge_labels]
 
     ## calculating P,R,F1
     num_overlap = len([t for t in preds if t in gts])
@@ -88,8 +105,8 @@ def evaluate_model(model_output, label_to_class_map, ignore_tags=[], ignore_edge
 
     ## get indices of ignored tags/edges
     ignore_tag_indices = [str(label_to_class_map['tag2class'][tag]) for tag in ignore_tags]
-    ignore_edge_indices = [str(label_to_class_map['edgelabel2class'][edge]) for edge in ignore_edge_labels]
-    ignore_head_index = ignore_edges
+    ignore_edge_label_indices = [str(label_to_class_map['edgelabel2class'][edge]) for edge in ignore_edge_labels]
+    ignore_head_indices = ignore_edges
     
     # print('Using original evaluation!')
     tagger_preds = [f'{i}-{j}-{word}-{pred_tag}' for i, elem in enumerate(model_output) for j, (word, pred_tag) in enumerate(zip(elem[token_id_field], elem['pos_tags_pred']))]
@@ -103,14 +120,26 @@ def evaluate_model(model_output, label_to_class_map, ignore_tags=[], ignore_edge
 
     # Calculate metrics
     tagger_results = {}
-    tagger_results['P'], tagger_results['R'], tagger_results['F1'], tagger_results['acc'] = filter_get_P_R_F1(tagger_gts, tagger_preds, ignore_list=ignore_tag_indices)
-    
-    parser_labeled_results = {}
-    parser_labeled_results['P'], parser_labeled_results['R'], parser_labeled_results['F1'], parser_labeled_results['acc'] = filter_get_P_R_F1(parser_labeled_gt, parser_labeled_pred, ignore_list=ignore_edge_indices)
-    
+    tagger_results['P'], tagger_results['R'], tagger_results['F1'], tagger_results['acc'] = filter_get_P_R_F1(tagger_gts,
+                                                                                                            tagger_preds,
+                                                                                                            type='tags',
+                                                                                                            ignore_tag_indices=ignore_tag_indices,
+                                                                                                            )
     parser_unlabeled_results = {}
-    parser_unlabeled_results['P'], parser_unlabeled_results['R'], parser_unlabeled_results['F1'], parser_unlabeled_results['acc'] = filter_get_P_R_F1(parser_unlabeled_gt, parser_unlabeled_pred, ignore_list=ignore_head_index)
-    uas_las_results = compute_uas_las(model_output, ignore_labels=[int(el) for el in ignore_edge_indices], missing_values={"_", None})
+    parser_unlabeled_results['P'], parser_unlabeled_results['R'], parser_unlabeled_results['F1'], parser_unlabeled_results['acc'] = filter_get_P_R_F1(parser_unlabeled_gt,
+                                                                                                            parser_unlabeled_pred,
+                                                                                                            type='edges',
+                                                                                                            ignore_edge_indices = ignore_head_indices,
+                                                                                                            )
+    parser_labeled_results = {}
+    parser_labeled_results['P'], parser_labeled_results['R'], parser_labeled_results['F1'], parser_labeled_results['acc'] = filter_get_P_R_F1(parser_labeled_gt,
+                                                                                                            parser_labeled_pred,
+                                                                                                            type='edge_labels',
+                                                                                                            ignore_edge_indices = ignore_head_indices,
+                                                                                                            ignore_edge_labels = ignore_edge_label_indices,
+                                                                                                            )
+    
+    uas_las_results = compute_uas_las(model_output, ignore_labels=[int(el) for el in ignore_edge_label_indices], missing_values={"_", None})
 
     return {
         'tagger_results': tagger_results,

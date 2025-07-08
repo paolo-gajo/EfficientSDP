@@ -1,4 +1,7 @@
 custom_config = {
+    # 'train_file_graphs': './data/{dataset_name}/train_punct.json',
+    # 'val_file_graphs': './data/{dataset_name}/val_punct.json',
+    # 'test_file_graphs': './data/{dataset_name}/test_punct.json',
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
@@ -8,8 +11,8 @@ custom_config = {
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
     'dataset_max_steps': {'train': 0, 'val': 0, 'test': 0,},
     'gat_conv_heads': 8,
-    'test_ignore_edge_dep': ['root', '-'], ## this will be ignored during evaluation
-    'test_ignore_edges': ['0'],
+    'test_ignore_edge_dep': [], ## this will be ignored during evaluation
+    'test_ignore_edges': [],
     'shuffle': {'train': 1, 'val': 0, 'test': 0},
     'plot': 0,
     'debug': 0,
@@ -80,7 +83,7 @@ custom_config = {
     'model_type': 'attn',
     'freeze_encoder': 1,
     'use_lora': 0,
-    'use_pred_tags' : 1, ## this will determine if gold tags are used for train/test/validation or not. 
+    'use_pred_tags': 1, ## this will determine if gold tags are used for train/test/validation or not 
     'model_name': 'bert-base-uncased',
     # 'model_name': 'microsoft/deberta-v3-base',
     # 'model_name': 'microsoft/deberta-v3-large',

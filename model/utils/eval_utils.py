@@ -144,11 +144,9 @@ def run_evaluation(model, data_loader, eval_function = None, config = None, labe
     mean_inf_time, std_dev = round(np.mean(times), 3), round(np.std(times), 3)
 
     ## let's get model summary
-    data = next(iter(data_loader))
     model_summary = get_model_summary_in_dict(model)
     model_summary['inference time'] = f'{mean_inf_time} +/- {std_dev}'
-    if not config['procedural']:
-        config['test_ignore_edge_dep'] = ['root']
+
     results = eval_function(val_outputs,
                             label_index_map,
                             ignore_tags = config['test_ignore_tag'],

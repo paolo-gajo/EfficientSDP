@@ -13,7 +13,6 @@ def build_model(config, model_start_path = None, verbose = False):
 
     ## get model from config
     model = MODEL_LIST[config['model_type']](config)
-    print(model)
 
     ## move to the correct device
     model.to(torch.device(config['device']))

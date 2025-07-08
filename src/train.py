@@ -19,7 +19,7 @@ def main():
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     print('Config:\n\n', json.dumps(config, indent=4))
-    print('Args:\n\n', json.dumps(args, indent=4))    
+    print('Args:\n\n', json.dumps(args, indent=4))
     print(f"Will save to: {config['save_dir']}")
     
     # save config in advance in case training fails
@@ -36,6 +36,7 @@ def main():
     # set `model_start_path` to restart training
     model_start_path = None
     model = build_model(config, model_start_path=model_start_path, verbose=True)
+    # print(model)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
 

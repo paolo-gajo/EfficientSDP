@@ -34,10 +34,13 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
                             f"{config['results_suffix']}",
                             )
     
-    if config['dataset_name'] in ['enewt', 'scidtb']:
+    if config['dataset_name'] in ['scidtb', 'enewt']:
         config['test_ignore_edge_dep'] = ['punct']
         config['test_ignore_tag'] = []
         config['test_ignore_edges'] = []
+    elif config['dataset_name'] in ['ade', 'conll04', 'scierc', 'erfgc']:
+        config['test_ignore_edge_dep'] = ['root', '-']
+        config['test_ignore_edges'] = ['0']
         
     if config['freeze_encoder']:
         config['learning_rate'] = config['learning_rate_freeze']
