@@ -5,6 +5,7 @@ from transformers import AutoConfig, set_seed
 import os
 import warnings
 from pathlib import Path
+import copy
 
 def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode = 'train') -> Dict:
     for key in custom_config:
@@ -41,14 +42,16 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     elif config['dataset_name'] in ['ade', 'conll04', 'scierc', 'erfgc']:
         config['test_ignore_edge_dep'] = ['root', '-']
         config['test_ignore_edges'] = ['0']
-        
-    if config['freeze_encoder']:
-        config['learning_rate'] = config['learning_rate_freeze']
-    else:
-        config['learning_rate'] = config['learning_rate_encoder']
+    # elif config['dataset_name'] in ['erfgc']:
+    #     config['test_ignore_edge_dep'] = ['root', '-']
+    #     config['test_ignore_edges'] = ['0']
     if 'large' in model_name:
         config['learning_rate'] = config['learning_rate_large']
-
+    elif config['parser_rnn_type'] == 'transformer' or not config['freeze_encoder']:
+        config['learning_rate'] = config['learning_rate_encoder']
+    else:
+        config['learning_rate'] = config['learning_rate_freeze']
+    print(f"Learning rate: {config['learning_rate']}")
     config['save_dir'] = save_path
     print(f'Created dir: {save_path}')
     make_dir(config['save_dir'])
@@ -71,7 +74,6 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
     set_seeds(config['seed'])
 
     config['top_k'] = int(config['top_k'])
-
     return config
 
 def set_seeds(seed):

@@ -18,13 +18,15 @@ def main():
     string_args = ""
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
-    print('Config:\n\n', json.dumps(config, indent=4))
+    # print('Config:\n\n', json.dumps(config, indent=4))
     print('Args:\n\n', json.dumps(args, indent=4))
     print(f"Will save to: {config['save_dir']}")
     
     # save config in advance in case training fails
     summary = {'config': config}
-    save_json(summary, os.path.join(config['save_dir'], 'config.json'))
+    config_path = os.path.join(config['save_dir'], 'config.json')
+    save_json(summary, config_path)
+    print(f"Config saved to: {config_path}")
     cmd_file = os.path.join(config['save_dir'], 'train_command.txt')
     save_python_command(cmd_file, sys.argv)
     reproduce_training_cmd_file = os.path.join(config['save_dir'], 'full_train_reproduce_cmd.txt')

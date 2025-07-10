@@ -37,17 +37,17 @@ cartesian_product() {
 }
 declare -a seed=(
     0
-    1
-    2
-    3
-    4
+    # 1
+    # 2
+    # 3
+    # 4
 )
 # Define parameter arrays
 declare -a use_gnn_steps_opts=(0)
 declare -a rnn_layers_opts=(
     # 0
-    1
-    2
+    # 1
+    # 2
     3
     )
 declare -a gnn_layers_opts=(
@@ -75,7 +75,7 @@ declare -a top_k_opts=(
     # 4
     )
 declare -a arc_norm_opts=(
-    0
+    # 0
     1
     )
 declare -a gnn_dropout_opts=(
@@ -84,7 +84,7 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-  "ade"
+#   "ade"
   "conll04"
   "scierc"
   "erfgc"
@@ -116,9 +116,9 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-training_steps=10000
+training_steps=500
 eval_steps=500
-results_suffix=transformer
+results_suffix=transformer_0
 
 use_tagger_rnn=1
 use_parser_rnn=1
@@ -136,7 +136,7 @@ while IFS= read -r combo; do
         use_pred_tags=1
     fi
     
-    cmd="python ./src/train.py
+    cmd="python -m pdb ./src/train.py
                 --opts
                 --results_suffix ${results_suffix}_${SLURM_ARRAY_JOB_ID}/${SLURM_ARRAY_TASK_ID}
                 --seed ${params[0]}
@@ -147,7 +147,7 @@ while IFS= read -r combo; do
                 --arc_norm ${params[5]}
                 --gnn_dropout ${params[6]}
                 --gnn_activation ${params[7]}
-                --dataset ${params[8]}
+                --dataset_name ${params[8]}
                 --parser_rnn_layers ${params[9]}
                 --parser_rnn_type ${params[10]}
                 --training_steps $training_steps 
@@ -162,16 +162,24 @@ while IFS= read -r combo; do
     if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
         continue
     fi
-    echo ${cmd}
+    # echo ${cmd}
     commands+=("$cmd")
 done <<< "$combinations"
 
 total_combinations=${#commands[@]}
 
-if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
+if [[ -n "$SLURM_ARRAY_TASK_ID" ]]; then
     command_to_run="${commands[$SLURM_ARRAY_TASK_ID]}"
     # echo "$command_to_run"
     $command_to_run
+elif [[ $1 ]]; then
+    for (( i=start; i<=${#commands[@]}; i++ ))
+    do
+        echo "${i+1} of ${#commands[@]}"
+        cmd="${commands[$i]} --results_suffix ${i}"
+        echo "${cmd}"
+        $cmd
+    done
 else
     echo "This script should be run as a SLURM array job."
     echo "Use: sbatch --array=0-$((total_combinations-1)) $0"
