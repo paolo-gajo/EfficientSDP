@@ -69,11 +69,10 @@ class GraphRNN(nn.Module):
         A = torch.zeros(self.M).to(self.config['device'])
         m = min(index, self.M)
         for j in range(m):
-            x = A
+            x = A.unsqueeze(0) # we need x to be a sequence
             lhs = []
-            for l, cell in enumerate(self.edge_rnn):
-                x = cell(x, h_prev[l])
-                lhs.append(x)
+            x = self.edge_rnn(x, h_prev)
+            lhs.append(x)
             s = self.edge_cls(x)
             A[j] = F.sigmoid(s)
             h_prev = torch.stack(lhs)
