@@ -2,7 +2,7 @@
 #SBATCH -J gnn
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:l40:1
+#SBATCH --gres=gpu:1
 #SBATCH --time=06:00:00
 #SBATCH --output=./.slurm/%A/%a_output.log
 #SBATCH --error=./.slurm/%A/%a_error.log
@@ -37,17 +37,17 @@ cartesian_product() {
 }
 declare -a seed=(
     0
-    # 1
-    # 2
-    # 3
-    # 4
+    1
+    2
+    3
+    4
 )
 # Define parameter arrays
 declare -a use_gnn_steps_opts=(0)
 declare -a rnn_layers_opts=(
     # 0
-    # 1
-    # 2
+    1
+    2
     3
     )
 declare -a gnn_layers_opts=(
@@ -75,7 +75,7 @@ declare -a top_k_opts=(
     # 4
     )
 declare -a arc_norm_opts=(
-    # 0
+    0
     1
     )
 declare -a gnn_dropout_opts=(
@@ -84,7 +84,7 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-#   "ade"
+  "ade"
   "conll04"
   "scierc"
   "erfgc"
@@ -116,7 +116,7 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-training_steps=500
+training_steps=10000
 eval_steps=500
 results_suffix=transformer_0
 
@@ -131,12 +131,12 @@ while IFS= read -r combo; do
     IFS=',' read -ra params <<< "$combo"
 
     if [[ "${params[8]}" == "scidtb" || "${params[8]}" == "enewt" ]]; then
-        use_pred_tags=0s
+        use_pred_tags=0
     else
         use_pred_tags=1
     fi
     
-    cmd="python -m pdb ./src/train.py
+    cmd="python ./src/train.py
                 --opts
                 --results_suffix ${results_suffix}_${SLURM_ARRAY_JOB_ID}/${SLURM_ARRAY_TASK_ID}
                 --seed ${params[0]}
@@ -173,9 +173,9 @@ if [[ -n "$SLURM_ARRAY_TASK_ID" ]]; then
     # echo "$command_to_run"
     $command_to_run
 elif [[ $1 ]]; then
-    for (( i=start; i<=${#commands[@]}; i++ ))
+    for (( i=start; i<${#commands[@]}; i++ ))
     do
-        echo "${i+1} of ${#commands[@]}"
+        echo "$((i+1)) of ${#commands[@]}"
         cmd="${commands[$i]} --results_suffix ${i}"
         echo "${cmd}"
         $cmd

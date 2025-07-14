@@ -5,7 +5,7 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/train.json',
     'val_file_graphs': './data/{dataset_name}/val.json',
     'test_file_graphs': './data/{dataset_name}/test.json',
-    'dataset_name': 'enewt',
+    'dataset_name': 'erfgc',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -31,7 +31,7 @@ custom_config = {
     'keep_og_test': 1,
     'augment_type': 'permute', # 'permute', 'random', 'hybrid'
     'adjacency_direction': 'directed', # 'directed', 'mirrored', 'undirected'
-    'results_suffix': '',
+    'save_suffix': '',
     'padding': 1,
     'procedural': 0,
 
@@ -58,7 +58,7 @@ custom_config = {
     'current_step': 0,
     'parser_residual': 0,
     'bias_type': 'simple',
-    'activation': '',
+    'biaffine_activation': None,
     'top_k': 1,
     'num_attn_heads': 1,
     'step_bilinear_attn': 0,
@@ -70,7 +70,7 @@ custom_config = {
 
     # triaffine options
     'triaffine_arc_norm': 0,
-    'triaffine_activation': '',
+    'triaffine_activation': None,
     
     # graphrnn
     'graph_rnn_hidden_graph': 500,
@@ -92,7 +92,7 @@ custom_config = {
     'tagger_lambda': 0.1,
     'parser_lambda': 1,
     'rep_mode': 'words', # either 'words' or 'tokens'
-    'laplacian_pe': '', # 'encoder' or 'parser'
+    'laplacian_pe': None, # 'encoder' or 'parser'
     'use_abs_step_embeddings': 0,
     'learning_rate_encoder': 1e-4,
     'learning_rate_freeze': 1e-3,
@@ -129,7 +129,7 @@ default_cfg = {
     'epochs': 100,
     # 'learning_rate': 0.001,
     'shuffle' : True, 
-    'save_dir': './results',
+    'save_dir': '',
     'model_name': 'bert-base-uncased', ## model name, should be key in hugging face pretrained model zoo
     'batch_size': 8,
     'encoder_output_dim': 768,

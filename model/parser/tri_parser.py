@@ -54,7 +54,7 @@ class TriParser(nn.Module):
                                     arc_representation_dim,
                                     arc_representation_dim,
                                     mode = 'sib',
-                                    activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
+                                    activation = nn.ReLU() if self.config['biaffine_activation'] == 'relu' else None,
                                     arc_norm=self.config['arc_norm'],
                                     )
         num_params = sum(p.numel() for p in self.tri_sib.parameters() if p.requires_grad)
@@ -65,7 +65,7 @@ class TriParser(nn.Module):
                                     arc_representation_dim,
                                     arc_representation_dim,
                                     mode = 'cop',
-                                    activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
+                                    activation = nn.ReLU() if self.config['biaffine_activation'] == 'relu' else None,
                                     arc_norm=self.config['arc_norm'],
                                     )
         num_params = sum(p.numel() for p in self.tri_cop.parameters() if p.requires_grad)
@@ -76,7 +76,7 @@ class TriParser(nn.Module):
                                     arc_representation_dim,
                                     arc_representation_dim,
                                     mode = '',
-                                    activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
+                                    activation = nn.ReLU() if self.config['biaffine_activation'] == 'relu' else None,
                                     arc_norm=self.config['arc_norm'],
                                     )
         

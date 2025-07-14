@@ -5,9 +5,49 @@ from transformers import AutoConfig, set_seed
 import os
 import warnings
 from pathlib import Path
-import copy
 
-def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode = 'train') -> Dict:
+def set_lr(config: Dict):
+    model_name = config['model_name'].replace('/', '-').replace(' ', '')
+    model_name = model_name if not config['use_abs_step_embeddings'] else 'step-bert'
+    if 'large' in model_name:
+        config['learning_rate'] = config['learning_rate_large']
+    elif config['parser_rnn_type'] == 'transformer' or not config['freeze_encoder']:
+        config['learning_rate'] = config['learning_rate_encoder']
+    else:
+        config['learning_rate'] = config['learning_rate_freeze']
+    print(f"Learning rate: {config['learning_rate']}")
+    return config
+
+def set_save_dir(save_dir, save_suffix = '', default_save_dir = './results'):
+    if not save_dir:
+        save_dir = default_save_dir
+        if save_suffix:
+            save_dir = os.path.join(save_dir, save_suffix)
+        else:
+            save_dir = os.path.join(save_dir, get_current_time_string())
+    
+    if not os.path.exists(save_dir):
+        make_dir(save_dir)
+        print(f"Created dir: {save_dir}")
+    else:
+        print('results_dir already exists, is this a re-run?')
+        print('make sure you are not overwriting inadvertedly!')
+    return save_dir
+
+def set_labels(config: Dict):
+    if config['dataset_name'] in ['scidtb', 'enewt']:
+        config['test_ignore_edge_dep'] = ['punct']
+        config['test_ignore_tag'] = []
+        config['test_ignore_edges'] = []
+    elif config['dataset_name'] in ['ade', 'conll04', 'scierc']:
+        config['test_ignore_edge_dep'] = ['root']
+        config['test_ignore_edges'] = ['0']
+    elif config['dataset_name'] in ['erfgc']:
+        config['test_ignore_edge_dep'] = ['root', '-']
+        config['test_ignore_edges'] = ['0']
+    return config
+
+def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}) -> Dict:
     for key in custom_config:
         config[key] = custom_config[key]
     for key in args:
@@ -16,59 +56,16 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}, mode 
         else:
             config[key] = args[key]
 
-    # when we are doing validation or test, we just need to change variables
-    # from command line args
-    if mode == 'validation' or mode == 'test':
-        return config
+    config['save_dir'] = set_save_dir(config['save_dir'], config['save_suffix'], './results')
+    config = set_lr(config)
+    config = set_labels(config)
 
-    # let's set the device correctly
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
-    splits = ['train', 'val', 'test']
-    # correct directory name
-    aug_string = ''.join([str(el) for el in [config[f'augment_{split}'] for split in splits]])
-    k_string = '-'.join([str(el) for el in [config[f'augment_k_{split}'] for split in splits]])
-    keep_og_string = ''.join([str(el) for el in [config[f'keep_og_{split}'] for split in splits]])
-    keep_k_string = f"keep_{keep_og_string}_k_{k_string}"
-    main_save_dir, model_name = config['save_dir'], config['model_name'].replace('/', '-').replace(' ', '')
-    model_name = model_name if not config['use_abs_step_embeddings'] else 'step-bert'
-    save_path = os.path.join(f"{main_save_dir}",
-                            f"{config['results_suffix']}",
-                            )
     
-    if config['dataset_name'] in ['scidtb', 'enewt']:
-        config['test_ignore_edge_dep'] = ['punct']
-        config['test_ignore_tag'] = []
-        config['test_ignore_edges'] = []
-    elif config['dataset_name'] in ['ade', 'conll04', 'scierc', 'erfgc']:
-        config['test_ignore_edge_dep'] = ['root', '-']
-        config['test_ignore_edges'] = ['0']
-    # elif config['dataset_name'] in ['erfgc']:
-    #     config['test_ignore_edge_dep'] = ['root', '-']
-    #     config['test_ignore_edges'] = ['0']
-    if 'large' in model_name:
-        config['learning_rate'] = config['learning_rate_large']
-    elif config['parser_rnn_type'] == 'transformer' or not config['freeze_encoder']:
-        config['learning_rate'] = config['learning_rate_encoder']
-    else:
-        config['learning_rate'] = config['learning_rate_freeze']
-    print(f"Learning rate: {config['learning_rate']}")
-    config['save_dir'] = save_path
-    print(f'Created dir: {save_path}')
-    make_dir(config['save_dir'])
-    config['figures_dir'] = f'./paper/figures_{keep_k_string}'
-    make_dir(config['figures_dir'])
+    for split in ['train', 'val', 'test']:
+        config[f'{split}_file_graphs'] = config[f'{split}_file_graphs'].format(dataset_name = config['dataset_name'])
 
-    config['train_file_graphs'] = config['train_file_graphs'].format(dataset_name = config['dataset_name'])
-    config['val_file_graphs'] = config['val_file_graphs'].format(dataset_name = config['dataset_name'])
-    config['test_file_graphs'] = config['test_file_graphs'].format(dataset_name = config['dataset_name'])
-
-    # model path
     config['model_path'] = os.path.join(config['save_dir'], 'model.pth')
-    
-    if Path(save_path) == Path(main_save_dir):
-        print(f'Save path is the same as main save dir `{main_save_dir}`!')
-
-    # get encoder output dimension (aka hidden size)
     config['encoder_output_dim'] = AutoConfig.from_pretrained(config['model_name']).hidden_size
     
     set_seeds(config['seed'])

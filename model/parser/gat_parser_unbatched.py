@@ -27,7 +27,7 @@ class GATParserUnbatched(nn.Module):
         self.arc_bilinear = nn.ModuleList([
             BilinearMatrixAttention(arc_representation_dim,
                                     arc_representation_dim,
-                                    activation = nn.ReLU() if self.config['activation'] == 'relu' else None,
+                                    activation = nn.ReLU() if self.config['biaffine_activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type='simple',
                                     arc_norm=self.config['arc_norm'],

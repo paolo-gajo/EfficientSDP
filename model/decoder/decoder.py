@@ -423,6 +423,7 @@ class GraphDecoder(nn.Module):
         selected_head_tag_representations = head_tag[
             range_vector, head_indices
         ]
+        
         selected_head_tag_representations = (
             selected_head_tag_representations.contiguous()
         )
