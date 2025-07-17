@@ -81,6 +81,7 @@ custom_config = {
 
     # model options
     'model_type': 'attn', # 'attn' or 'gen'
+    'graph_rnn_pred_type': 'simple',
     'freeze_encoder': 1,
     'use_lora': 0,
     'use_pred_tags': 1, ## this will determine if gold tags are used for train/test/validation or not 

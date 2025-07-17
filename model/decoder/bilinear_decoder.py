@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from typing import List, Dict, Any, Tuple, Set
 import numpy as np
 
-class GraphDecoder(nn.Module):
+class BilinearDecoder(nn.Module):
     def __init__(self,
                  config: Dict,
                  tag_representation_dim: int,
@@ -20,9 +20,9 @@ class GraphDecoder(nn.Module):
     def forward(self,
                 head_tag: torch.Tensor,
                 dep_tag: torch.Tensor,
-                head_indices: torch.Tensor,
-                head_tags: torch.Tensor,
-                attended_arcs: torch.Tensor,
+                head_indices: torch.Tensor, # golds or preds
+                head_tags: torch.Tensor, # golds or preds
+                arc_logits: torch.Tensor,
                 mask: torch.Tensor,
                 metadata: List[Dict[str, Any]] = [],
                 ):
@@ -33,24 +33,24 @@ class GraphDecoder(nn.Module):
         minus_mask = (1 - float_mask) * minus_inf
 
         if not self.config["use_step_mask"]:
-            attended_arcs = (
-                attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
+            arc_logits = (
+                arc_logits + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
             )
         else:
-            attended_arcs = attended_arcs + minus_mask
+            arc_logits = arc_logits + minus_mask
 
         if self.training or not self.use_mst_decoding_for_validation:
             predicted_heads, predicted_head_tags = self._greedy_decode(
                 head_tag,
                 dep_tag,
-                attended_arcs,
+                arc_logits,
                 mask
                 )
         else:
             predicted_heads, predicted_head_tags = self._mst_decode(
                 head_tag,
                 dep_tag,
-                attended_arcs,
+                arc_logits,
                 mask,
             )
 
@@ -67,7 +67,7 @@ class GraphDecoder(nn.Module):
         arc_nll, tag_nll = self._construct_loss(
             head_tag=head_tag,
             dep_tag=dep_tag,
-            attended_arcs=attended_arcs,
+            arc_logits=arc_logits,
             head_indices=head_indices,
             head_tags=head_tags,
             mask=mask,
@@ -91,7 +91,7 @@ class GraphDecoder(nn.Module):
         self,
         head_tag: torch.Tensor,
         dep_tag: torch.Tensor,
-        attended_arcs: torch.Tensor,
+        arc_logits: torch.Tensor,
         head_indices: torch.Tensor,
         head_tags: torch.Tensor,
         mask: torch.Tensor,
@@ -109,7 +109,7 @@ class GraphDecoder(nn.Module):
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
-        attended_arcs : ``torch.Tensor``, required.
+        arc_logits : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
             a distribution over attachments of a given word to all other words.
         head_indices : ``torch.Tensor``, required.
@@ -130,24 +130,25 @@ class GraphDecoder(nn.Module):
             The negative log likelihood from the arc tag loss.
         """
         float_mask = mask.float()
-        batch_size, sequence_length, _ = attended_arcs.size()
+        batch_size, sequence_length, _ = arc_logits.size()
 
         # shape (batch_size, 1)
-        range_vector = get_range_vector(batch_size, get_device_of(attended_arcs)).unsqueeze(1)
+        range_vector = get_range_vector(batch_size, get_device_of(arc_logits)).unsqueeze(1)
         # shape (batch_size, sequence_length, sequence_length)
         if not self.config["use_step_mask"]:
-            normalised_arc_logits = masked_log_softmax(attended_arcs, mask)
+            normalised_arc_logits = masked_log_softmax(arc_logits, mask)
             normalised_arc_logits = (normalised_arc_logits * float_mask.unsqueeze(2) * float_mask.unsqueeze(1))
         else:
-            normalised_arc_logits = masked_log_softmax(attended_arcs, mask)
+            normalised_arc_logits = masked_log_softmax(arc_logits, mask)
             normalised_arc_logits = normalised_arc_logits * float_mask
 
         # shape (batch_size, sequence_length, num_head_tags)
+        # get logits corresponding to gold `head_indices`
         head_tag_logits = self._get_head_tags(head_tag, dep_tag, head_indices)
         normalised_head_tag_logits = masked_log_softmax(head_tag_logits, mask.unsqueeze(-1))
         normalised_head_tag_logits = normalised_head_tag_logits * float_mask.unsqueeze(-1)
 
-        timestep_index = get_range_vector(sequence_length, get_device_of(attended_arcs))
+        timestep_index = get_range_vector(sequence_length, get_device_of(arc_logits))
         dept_index = timestep_index.view(1, sequence_length).expand(batch_size, sequence_length).long()
 
         # shape (batch_size, sequence_length)
@@ -193,7 +194,7 @@ class GraphDecoder(nn.Module):
         self,
         head_tag: torch.Tensor,
         dep_tag: torch.Tensor,
-        attended_arcs: torch.Tensor,
+        arc_logits: torch.Tensor,
         mask: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -213,7 +214,7 @@ class GraphDecoder(nn.Module):
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
-        attended_arcs : ``torch.Tensor``, required.
+        arc_logits : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
             a distribution over attachments of a given word to all other words.
 
@@ -227,36 +228,31 @@ class GraphDecoder(nn.Module):
             dependency tags of the greedily decoded heads of each word.
         """
         # Mask the diagonal, because the head of a word can't be itself.
-        diag_mask = torch.diag(attended_arcs.new(mask.size(1)).fill_(-np.inf))
-        # save_heatmap(attended_arcs[0], filename='attended_arcs_diag.pdf')
-        attended_arcs = attended_arcs + diag_mask
-        # save_heatmap(attended_arcs[0], filename='attended_arcs_nodiag.pdf')
-        # save_heatmap(attended_arcs[0], filename='attended_arcs_2.pdf')
+        diag_mask = torch.diag(arc_logits.new(mask.size(1)).fill_(-np.inf))
+        arc_logits = arc_logits + diag_mask
         # Mask padded tokens, because we only want to consider actual words as heads.
         if mask is not None:
             if not self.config["use_step_mask"]:
                 minus_mask = (1 - mask).byte().unsqueeze(2)
             else:
                 minus_mask = (1 - mask).byte()
-            attended_arcs.masked_fill_(minus_mask.bool(), -np.inf)
-        # save_heatmap(attended_arcs[0], filename='attended_arcs_3.pdf')
+            arc_logits.masked_fill_(minus_mask.bool(), -np.inf)
         # Compute the heads greedily.
         # shape (batch_size, sequence_length)
-        _, heads = attended_arcs.max(dim=2)
+        _, greedy_arcs = arc_logits.max(dim=2)
 
-        # Given the greedily predicted heads, decode their dependency tags.
+        # Given the greedily predicted greedy_arcs, decode their dependency tags.
         # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self._get_head_tags(
-            head_tag, dep_tag, heads
-        )
-        _, head_tags = head_tag_logits.max(dim=2)
-        return heads, head_tags
+        # get logits corresponding to predicted `greedy_arcs`
+        head_tag_logits = self._get_head_tags(head_tag, dep_tag, greedy_arcs)
+        _, greedy_head_tags = head_tag_logits.max(dim=2)
+        return greedy_arcs, greedy_head_tags
 
     def _mst_decode(
         self,
         head_tag: torch.Tensor,
         dep_tag: torch.Tensor,
-        attended_arcs: torch.Tensor,
+        arc_logits: torch.Tensor,
         mask: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -277,7 +273,7 @@ class GraphDecoder(nn.Module):
             A tensor of shape (batch_size, sequence_length, tag_representation_dim),
             which will be used to generate predictions for the dependency tags
             for the given arcs.
-        attended_arcs : ``torch.Tensor``, required.
+        arc_logits : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
             a distribution over attachments of a given word to all other words.
 
@@ -306,7 +302,7 @@ class GraphDecoder(nn.Module):
         dep_tag = dep_tag.expand(*expanded_shape).contiguous()
         # Shape (batch_size, sequence_length, sequence_length, num_head_tags)
         pairwise_head_logits = self.tag_bilinear(head_tag, dep_tag)
-
+        ...
         # Note that this log_softmax is over the tag dimension, and we don't consider pairs
         # of tags which are invalid (e.g are a pair which includes a padded element) anyway below.
         # Shape (batch, num_labels,sequence_length, sequence_length)
@@ -325,10 +321,10 @@ class GraphDecoder(nn.Module):
         normalized_pairwise_head_logits = F.log_softmax(pairwise_head_logits, dim=3).permute(0, 3, 1, 2)
 
         # Shape (batch_size, sequence_length, sequence_length)
-        attended_arcs = self.softmax_multiplier * (
-            attended_arcs - torch.max(attended_arcs, dim=2)[0].unsqueeze(dim=2)
+        arc_logits = self.softmax_multiplier * (
+            arc_logits - torch.max(arc_logits, dim=2)[0].unsqueeze(dim=2)
         )
-        normalized_arc_logits = F.log_softmax(attended_arcs, dim=2).transpose(1, 2)
+        normalized_arc_logits = F.log_softmax(arc_logits, dim=2).transpose(1, 2)
 
         # Shape (batch_size, num_head_tags, sequence_length, sequence_length)
         # This energy tensor expresses the following relation:
@@ -409,9 +405,7 @@ class GraphDecoder(nn.Module):
         """
         batch_size = head_tag.size(0)
         # shape (batch_size,)
-        range_vector = get_range_vector(
-            batch_size, get_device_of(head_tag)
-        ).unsqueeze(1)
+        range_vector = get_range_vector(batch_size, get_device_of(head_tag)).unsqueeze(1)
 
         # This next statement is quite a complex piece of indexing, which you really
         # need to read the docs to understand. See here:
@@ -420,17 +414,11 @@ class GraphDecoder(nn.Module):
         # sequence length dimension for each element in the batch.
 
         # shape (batch_size, sequence_length, tag_representation_dim)
-        selected_head_tag_representations = head_tag[
-            range_vector, head_indices
-        ]
-        
-        selected_head_tag_representations = (
-            selected_head_tag_representations.contiguous()
-        )
+        selected_head_tag_representations = head_tag[range_vector, head_indices]
+        selected_head_tag_representations = selected_head_tag_representations.contiguous()
         # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self.tag_bilinear(
-            selected_head_tag_representations, dep_tag
-        )
+        head_tag_logits = self.tag_bilinear(selected_head_tag_representations, dep_tag)
+        ...
         return head_tag_logits
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:

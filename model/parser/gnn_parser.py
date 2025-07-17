@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 def show_grad(grad):
     # grad has the same shape [B, N, N]
     # you can log its norm, mean, or even the full tensor
-    print(f"attended_arcs.grad ‖·‖₂ = {grad.norm().item():.4f}, mean = {grad.mean().item():.4f}")
+    print(f"arc_logits.grad ‖·‖₂ = {grad.norm().item():.4f}, mean = {grad.mean().item():.4f}")
 
 class GraphNNUnit(nn.Module):
     def __init__(self,
@@ -180,12 +180,12 @@ class GNNParser(nn.Module):
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
         for k in range(self.config['gnn_layers']):
-            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc) # / self.arc_bilinear[k].norm
-            # attended_arcs = attended_arcs - torch.diag(torch.tensor([1e9 for _ in range(attended_arcs.shape[-1])])).to(attended_arcs.device)
-            arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
+            arc_logits = self.arc_bilinear[k](head_arc, dept_arc) # / self.arc_bilinear[k].norm
+            # arc_logits = arc_logits - torch.diag(torch.tensor([1e9 for _ in range(arc_logits.shape[-1])])).to(arc_logits.device)
+            arc_probs = torch.nn.functional.softmax(arc_logits, dim = -1)
             arc_probs = self._dropout(arc_probs)
 
-            arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+            arc_probs_masked = masked_log_softmax(arc_logits, mask) * float_mask.unsqueeze(1)
             range_tensor = torch.arange(batch_size).unsqueeze(1)
             length_tensor = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
             arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
@@ -213,14 +213,14 @@ class GNNParser(nn.Module):
             head_tag = self.head_rel_gnn(fr, head_tag)
             dep_tag = self.dept_rel_gnn(fr, dep_tag)
 
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
+        arc_logits = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
             'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
-            'attended_arcs': attended_arcs,
+            'arc_logits': arc_logits,
             'mask': mask,
             'metadata': metadata,
             'gnn_losses': gnn_losses

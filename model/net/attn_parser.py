@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from model.encoder import Encoder
 from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched
 from model.tagger import Tagger
-from model.decoder import GraphDecoder, masked_log_softmax
+from model.decoder import BilinearDecoder, masked_log_softmax
 import numpy as np
 import warnings
 from typing import Set, Tuple
@@ -33,7 +33,7 @@ class AttnParser(torch.nn.Module):
             self.parser = GATParser.get_model(self.config)
         elif self.config['parser_type'] == 'gat_unbatched':
             self.parser = GATParserUnbatched.get_model(self.config)
-        self.decoder = GraphDecoder(config=config,
+        self.decoder = BilinearDecoder(config=config,
                                     tag_representation_dim=self.parser.tag_representation_dim,
                                     n_edge_labels = self.parser.n_edge_labels)
         self.tokenizer = AutoTokenizer.from_pretrained(self.config["model_name"])
@@ -135,15 +135,13 @@ class AttnParser(torch.nn.Module):
             step_indices=step_indices,
             graph_laplacian=graph_laplacian,
         )
-        if self.config['debug']:
-            save_batch_heatmap(indices_to_adjacency_matrices(head_indices), 'head_indices_batch.pdf')
 
         decoder_output = self.decoder(
             head_tag = parser_output['head_tag'],
             dep_tag = parser_output['dep_tag'],
             head_indices = parser_output['head_indices'],
             head_tags = parser_output['head_tags'],
-            attended_arcs = parser_output['attended_arcs'],
+            arc_logits = parser_output['arc_logits'],
             mask = parser_output['mask'],
             metadata = parser_output['metadata'],
         )
@@ -170,7 +168,7 @@ class AttnParser(torch.nn.Module):
                     tagger_human_readable, decoder_human_readable, model_input, mask
                 )
             if self.config['output_edge_scores']:
-                scores = parser_output['attended_arcs']
+                scores = parser_output['arc_logits']
                 softmax_scores = F.softmax(scores, dim = -1)
                 masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
                 score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)

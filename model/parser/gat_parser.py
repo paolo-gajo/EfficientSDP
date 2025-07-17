@@ -123,11 +123,11 @@ class GATParser(nn.Module):
         if self.current_step > self.config['use_gnn_steps'] and self.config['gnn_layers'] > 0:
             for k in range(self.config['gnn_layers']):
                 # compute a soft adjacency attention matrix
-                attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
-                arc_probs = F.softmax(attended_arcs, dim=-1)
+                arc_logits = self.arc_bilinear[k](head_arc, dept_arc)
+                arc_probs = F.softmax(arc_logits, dim=-1)
                 
                 # compute loss as in the original implementation.
-                arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+                arc_probs_masked = masked_log_softmax(arc_logits, mask) * float_mask.unsqueeze(1)
                 range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
                 length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
                 arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
@@ -172,14 +172,14 @@ class GATParser(nn.Module):
                 dep_tag = self._gnn_dropout(dep_tag)
                 
         # compute final attended arcs
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
+        arc_logits = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
             'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
-            'attended_arcs': attended_arcs,
+            'arc_logits': arc_logits,
             'mask': mask,
             'metadata': metadata,
             'gnn_losses': gnn_losses

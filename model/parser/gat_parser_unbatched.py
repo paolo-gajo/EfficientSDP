@@ -114,11 +114,11 @@ class GATParserUnbatched(nn.Module):
             # Loop over the number of GNN encoder layers.
             for k in range(self.config['gnn_layers']):
                 # Compute a soft adjacency (attention) matrix.
-                attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
-                arc_probs = F.softmax(attended_arcs, dim=-1)
+                arc_logits = self.arc_bilinear[k](head_arc, dept_arc)
+                arc_probs = F.softmax(arc_logits, dim=-1)
                 
                 # Compute loss as in the original implementation.
-                arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+                arc_probs_masked = masked_log_softmax(arc_logits, mask) * float_mask.unsqueeze(1)
                 range_tensor = torch.arange(batch_size, device=self.config['device']).unsqueeze(1)
                 length_tensor = torch.arange(seq_len, device=self.config['device']).unsqueeze(0).expand(batch_size, -1)
                 arc_loss = arc_probs_masked[range_tensor, length_tensor, head_indices]
@@ -186,14 +186,14 @@ class GATParserUnbatched(nn.Module):
             dep_tag = torch.stack(dep_tag_updated, dim=0)
 
         # Compute final attended arcs.
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
+        arc_logits = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
             'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
-            'attended_arcs': attended_arcs,
+            'arc_logits': arc_logits,
             'mask': mask,
             'metadata': metadata,
             'gnn_losses': gnn_losses

@@ -128,14 +128,14 @@ class SimpleParser(nn.Module):
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
         dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(encoded_text_input)))
 
-        attended_arcs = self.arc_bilinear(head_arc, dept_arc)
+        arc_logits = self.arc_bilinear(head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
             'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
-            'attended_arcs': attended_arcs,
+            'arc_logits': arc_logits,
             'mask': mask,
             'metadata': metadata,
             'gnn_losses': [],

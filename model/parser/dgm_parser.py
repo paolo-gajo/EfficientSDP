@@ -145,12 +145,12 @@ class DGMParser(nn.Module):
         float_mask = mask.float()
 
         for k in range(self.config['gnn_layers']):
-            attended_arcs = self.arc_bilinear[k](head_arc, dept_arc)
-            # attended_arcs_t = self.arc_bilinear_t[k](head_arc, dept_arc)
-            arc_probs = torch.nn.functional.softmax(attended_arcs, dim = -1)
-            # arc_probs_t = torch.nn.functional.softmax(attended_arcs_t, dim = -1)
+            arc_logits = self.arc_bilinear[k](head_arc, dept_arc)
+            # arc_logits_t = self.arc_bilinear_t[k](head_arc, dept_arc)
+            arc_probs = torch.nn.functional.softmax(arc_logits, dim = -1)
+            # arc_probs_t = torch.nn.functional.softmax(arc_logits_t, dim = -1)
             # save_heatmap(arc_probs, 'arc_probs.pdf')
-            arc_probs_masked = masked_log_softmax(attended_arcs, mask) * float_mask.unsqueeze(1)
+            arc_probs_masked = masked_log_softmax(arc_logits, mask) * float_mask.unsqueeze(1)
             # save_heatmap(arc_probs_masked, 'arc_probs_masked.pdf')
             
             # range_tensor = torch.arange(batch_size).unsqueeze(1)
@@ -186,14 +186,14 @@ class DGMParser(nn.Module):
             fr_intermediate = torch.matmul(arc_probs, head_tag) + dr
             dep_tag = self.dept_rel_gnn(fr_intermediate, dep_tag)
 
-        attended_arcs = self.arc_bilinear[-1](head_arc, dept_arc)
+        arc_logits = self.arc_bilinear[-1](head_arc, dept_arc)
 
         output = {
             'head_tag': head_tag,
             'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
-            'attended_arcs': attended_arcs,
+            'arc_logits': arc_logits,
             'mask': mask,
             'metadata': metadata,
             'gnn_losses': gnn_losses

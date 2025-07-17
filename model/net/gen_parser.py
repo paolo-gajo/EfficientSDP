@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 from model.encoder import Encoder
-from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched, GraphRNN
+from model.parser import GraphRNNSimple, GraphRNNBilinear
 from model.tagger import Tagger
-from model.decoder import GraphDecoder, masked_log_softmax
+from model.decoder import BilinearDecoder, masked_log_softmax, SimpleDecoder
 import numpy as np
 import warnings
 from typing import Set, Tuple
@@ -19,8 +19,15 @@ class GenParser(torch.nn.Module):
         self.config = config
         self.encoder = Encoder(config)
         self.tagger = Tagger(config)
-        self.parser = GraphRNN(config)
-
+        # the parser also needs to be different based on `graph_rnn_pred_type`
+        if config['graph_rnn_pred_type'] == 'simple':
+            self.parser = GraphRNNSimple(config)
+            self.decoder = SimpleDecoder(config=config)
+        elif config['graph_rnn_pred_type'] == 'bilinear':
+            self.parser = GraphRNNBilinear(config)
+            self.decoder = BilinearDecoder(config=config,
+                                        tag_representation_dim=self.parser.tag_representation_dim,
+                                        n_edge_labels = self.parser.n_edge_labels)
         self.tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
         self.mode = "train"
 
@@ -58,6 +65,16 @@ class GenParser(torch.nn.Module):
         tagger_output = self.tagger(encoder_output, mask=mask, labels=tagger_labels)
 
         parser_output = self.parser(encoder_output, mask=mask)
+
+        decoder_output = self.decoder(
+            head_tag = parser_output['head_tag'],
+            dep_tag = parser_output['dep_tag'],
+            head_indices = parser_output['head_indices'],
+            head_tags = parser_output['head_tags'],
+            arc_logits = parser_output['arc_logits'],
+            mask = parser_output['mask'],
+            metadata = parser_output['metadata'],
+        )
 
         if self.mode in ["train", "validation"]:
             loss = tagger_output.loss * self.config["tagger_lambda"]

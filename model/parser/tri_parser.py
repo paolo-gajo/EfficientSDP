@@ -152,7 +152,7 @@ class TriParser(nn.Module):
             'dep_tag': dep_tag,
             'head_indices': head_indices,
             'head_tags': head_tags,
-            'attended_arcs': attended_arcs,# if encoder_attentions is None else encoder_attentions,
+            'arc_logits': arc_logits,# if encoder_attentions is None else encoder_attentions,
             'mask': mask,
             'metadata': metadata,
             'gnn_losses': [],
