@@ -52,6 +52,8 @@ custom_config = {
     # gat
     'gnn_layers': 1,
     'mlp_dropout': 0.3,
+    'rnn_dropout': 0.3,
+    'rnn_residual': 0,
     'gnn_dropout': 0,
     'gnn_activation': 'tanh',
     'use_gnn_steps': -1,
@@ -81,7 +83,7 @@ custom_config = {
 
     # model options
     'model_type': 'attn', # 'attn' or 'gen'
-    'graph_rnn_pred_type': 'simple',
+    'graph_rnn_pred_type': 'bilinear', # 'simple' or 'bilinear'
     'freeze_encoder': 1,
     'use_lora': 0,
     'use_pred_tags': 1, ## this will determine if gold tags are used for train/test/validation or not 
@@ -114,7 +116,7 @@ custom_config = {
     'batch_size': 8,
     'training': 'steps',
     'training_steps': 10000,
-    'eval_steps': 500,
+    'eval_steps': 100,
     'eval_samples': 0, # 0 = all samples
     'epochs': 0 ,
     'patience': 0.3,

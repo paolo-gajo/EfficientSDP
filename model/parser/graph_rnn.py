@@ -35,6 +35,7 @@ class GraphRNNBilinear(nn.Module):
 
         self.head_tag_feedforward = nn.Linear(self.input_size, self.tag_representation_dim)
         self.dep_tag_feedforward = nn.Linear(self.input_size, self.tag_representation_dim)
+        self._dropout = nn.Dropout(config['tag_dropout'])
 
     def graph_pass(self, seq: torch.Tensor, batch_size: int):
         h_prev = torch.zeros((self.graph_l * (2 if self.bidirectional else 1),
@@ -77,10 +78,15 @@ class GraphRNNBilinear(nn.Module):
 
     def forward(self, input: torch.Tensor,
                 mask: torch.LongTensor,
+                tag_embeddings: torch.Tensor,
                 head_indices: torch.Tensor,
                 head_tags: torch.Tensor,
                 metadata: List[Dict[str, Any]] = [],
                 ):
+        # if self.config["tag_embedding_type"] != 'none':
+        #     # tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
+        #     input = torch.cat([input, tag_embeddings], dim=-1)
+
         # input dim [B, S, D]
         lengths = mask.sum(dim=-1).cpu()
         packed_input = pack_padded_sequence(input,

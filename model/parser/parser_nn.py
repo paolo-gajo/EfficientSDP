@@ -19,7 +19,8 @@ class LayerNormLSTM(nn.Module):
         num_layers: int = 1,
         bidirectional: bool = False,
         dropout: float = 0.0,
-        batch_first: bool = True
+        batch_first: bool = True,
+        rnn_residual: bool = False,
     ):
         super().__init__()
         self.num_layers = num_layers
@@ -28,27 +29,22 @@ class LayerNormLSTM(nn.Module):
         self.num_directions = 2 if bidirectional else 1
         self.batch_first = batch_first
         self.dropout = nn.Dropout(dropout) if dropout > 0 and num_layers > 1 else None
+        self.rnn_residual = rnn_residual
 
-        # Create per-layer LSTM and LayerNorm modules
-        self.layers = nn.ModuleList()
-        self.layer_norms = nn.ModuleList()
+        self.input_proj = nn.Linear(input_size, hidden_size * self.num_directions)
 
-        for layer in range(num_layers):
-            # Input size for this layer
-            layer_in_size = input_size if layer == 0 else hidden_size * self.num_directions
-            # Single-layer LSTM
-            lstm_layer = nn.LSTM(
-                input_size=layer_in_size,
+        self.layers = nn.ModuleList([
+            nn.LSTM(
+                input_size=hidden_size * self.num_directions,
                 hidden_size=hidden_size,
                 num_layers=1,
                 bidirectional=bidirectional,
                 batch_first=batch_first
-            )
-            self.layers.append(lstm_layer)
-        for layer in range(num_layers):
-            # LayerNorm over the full hidden dimension (including directions)
-            self.layer_norms.append(nn.LayerNorm(hidden_size * self.num_directions))
-        # self.layer_norms.append(Passthrough())
+            ) for _ in range(num_layers)
+        ])
+        self.layer_norms = nn.ModuleList([
+            nn.LayerNorm(hidden_size * self.num_directions) for _ in range(num_layers)
+        ])
 
     def forward(self, x, hx: Optional[Tuple[torch.Tensor, torch.Tensor]] = None):
         """
@@ -77,7 +73,7 @@ class LayerNormLSTM(nn.Module):
             h_prev = list(h0_all.view(self.num_layers, self.num_directions, batch, self.hidden_size))
             c_prev = list(c0_all.view(self.num_layers, self.num_directions, batch, self.hidden_size))
 
-        layer_input = x
+        layer_input = self.input_proj(x)
         hidden_states = []
         cell_states = []
 
@@ -92,6 +88,8 @@ class LayerNormLSTM(nn.Module):
             # LSTM forward
             out, (h_n_layer, c_n_layer) = lstm(layer_input, init_state)
             # Apply LayerNorm
+            if self.rnn_residual:
+                out = out + layer_input
             out = ln(out)
             # Apply dropout (except after last layer)
             if self.dropout is not None and layer_idx < self.num_layers - 1:
@@ -139,7 +137,8 @@ class LayerNormRNN(nn.Module):
         nonlinearity: str = 'tanh',
         bidirectional: bool = False,
         dropout: float = 0.0,
-        batch_first: bool = True
+        batch_first: bool = True,
+        rnn_residual: bool = False,
     ):
         super().__init__()
         self.num_layers    = num_layers
@@ -147,28 +146,23 @@ class LayerNormRNN(nn.Module):
         self.bidirectional = bidirectional
         self.num_directions = 2 if bidirectional else 1
         self.batch_first   = batch_first
-
-        # Dropout applied between layers (not after last)
         self.dropout = nn.Dropout(dropout) if dropout > 0 and num_layers > 1 else None
+        self.rnn_residual = rnn_residual
 
-        # Build per-layer RNNs and LayerNorms
-        self.layers = nn.ModuleList()
-        self.layer_norms = nn.ModuleList()
+        self.input_proj = nn.Linear(input_size, hidden_size * self.num_directions)
 
-        for layer in range(num_layers):
-            in_size = input_size if layer == 0 else hidden_size * self.num_directions
-            rnn = nn.RNN(
-                input_size=in_size,
+        self.layers = nn.ModuleList([
+            nn.RNN(
+                input_size=hidden_size * self.num_directions,
                 hidden_size=hidden_size,
                 num_layers=1,
-                nonlinearity=nonlinearity,
                 bidirectional=bidirectional,
                 batch_first=batch_first
-            )
-            self.layers.append(rnn)
-            # LayerNorm over the hidden feature dimension (times directions)
-            self.layer_norms.append(nn.LayerNorm(hidden_size * self.num_directions))
-
+            ) for _ in range(num_layers)
+        ])
+        self.layer_norms = nn.ModuleList([
+            nn.LayerNorm(hidden_size * self.num_directions) for _ in range(num_layers)
+        ])
     def forward(
         self,
         x: torch.Tensor,
@@ -194,7 +188,7 @@ class LayerNormRNN(nn.Module):
             # shape of h0: (num_layers * num_directions, batch, hidden_size)
             h_prev = list(h0.view(self.num_layers, self.num_directions, batch_size, self.hidden_size))
 
-        layer_input = x
+        layer_input = self.input_proj(x)
         final_states = []
 
         # Iterate through layers

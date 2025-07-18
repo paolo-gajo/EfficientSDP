@@ -27,7 +27,7 @@ class GenParser(torch.nn.Module):
             self.parser = GraphRNNBilinear(config)
             self.decoder = BilinearDecoder(config=config,
                                         tag_representation_dim=self.parser.tag_representation_dim,
-                                        n_edge_labels = self.parser.n_edge_labels)
+                                        n_edge_labels = self.config['n_edge_labels'])
         self.tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
         self.mode = "train"
 
@@ -63,8 +63,13 @@ class GenParser(torch.nn.Module):
 
         # Tagging
         tagger_output = self.tagger(encoder_output, mask=mask, labels=tagger_labels)
-
-        parser_output = self.parser(encoder_output, mask=mask)
+        
+        parser_output = self.parser(encoder_output,
+                                    mask=mask,
+                                    tag_embeddings = tagger_output.tag_embeddings,
+                                    head_indices=head_indices,
+                                    head_tags=head_tags,
+                                    )
 
         decoder_output = self.decoder(
             head_tag = parser_output['head_tag'],

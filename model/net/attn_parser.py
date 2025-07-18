@@ -98,37 +98,10 @@ class AttnParser(torch.nn.Module):
         # Tagging
         tagger_output = self.tagger(encoder_output, mask=mask, labels=tagger_labels)
 
-        pos_tags_pred_one_hot = self.tagger.get_predicted_classes_as_one_hot(tagger_output.logits)
-
-        # Ground-truth tags
-        try:
-            pos_tags_gt = torch.nn.functional.one_hot(tagger_labels, num_classes=self.config["n_tags"])
-        except:
-            warnings.warn("Ground truth tags are unavailable, using predicted tags for all purposes.")
-            pos_tags_gt = pos_tags_pred_one_hot
-
-        # Use predicted or ground truth tags based on config
-        pos_tags_parser_one_hot = pos_tags_pred_one_hot if self.config["use_pred_tags"] else pos_tags_gt
-        pos_tags_parser_cls_idx = torch.argmax(tagger_output.logits, dim=-1) if self.config["use_pred_tags"] else tagger_labels
-
-        pos_tags_dict = {
-            'pos_tags_one_hot': pos_tags_parser_one_hot.float(),
-            'pos_tags_labels': pos_tags_parser_cls_idx,
-        }
-
-        if self.config['tag_embedding_type'] == 'linear':
-            pos_tags = pos_tags_dict['pos_tags_one_hot']
-        elif self.config['tag_embedding_type'] == 'embedding':
-            pos_tags = pos_tags_dict['pos_tags_labels']
-        elif self.config['tag_embedding_type'] == 'none':
-            pos_tags = None
-        else:
-            raise ValueError('parameter `tag_embedding_type` can only be == `linear` or `embedding`')
-
         # Parsing
         parser_output = self.parser(
             encoded_text_input=encoder_output,
-            pos_tags=pos_tags,
+            tag_embeddings=tagger_output.tag_embeddings,
             mask=mask,
             head_tags=head_tags,
             head_indices=head_indices,

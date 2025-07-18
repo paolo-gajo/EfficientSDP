@@ -19,7 +19,6 @@ class SimpleParser(nn.Module):
         arc_representation_dim: int,
         tag_representation_dim: int,
         use_mst_decoding_for_validation: bool = True,
-        mlp_dropout: float = 0.3,
     ) -> None:
         super().__init__()
         self.config = config
@@ -52,7 +51,7 @@ class SimpleParser(nn.Module):
         self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
         self.dep_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
 
-        self._dropout = nn.Dropout(mlp_dropout)
+        self._dropout = nn.Dropout(config['mlp_dropout'])
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
         if self.config['parser_init'] == 'xu':
@@ -72,7 +71,7 @@ class SimpleParser(nn.Module):
     def forward(
         self,
         encoded_text_input: torch.FloatTensor,
-        pos_tags: torch.LongTensor,
+        tag_embeddings: torch.LongTensor,
         mask: torch.LongTensor,
         metadata: List[Dict[str, Any]] = [],
         head_tags: torch.LongTensor = None,
@@ -82,7 +81,6 @@ class SimpleParser(nn.Module):
     ) -> Dict[str, torch.Tensor]:
 
         if self.config["tag_embedding_type"] != 'none':
-            tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
             encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
 
         if self.encoder_h is not None:
@@ -201,86 +199,18 @@ class SimpleParser(nn.Module):
         if config['tag_embedding_type'] == 'linear':
             embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
             tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
-            print('Using nn.Linear for tag embeddings!')
         elif config['tag_embedding_type'] == 'embedding':
             embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
             tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
-            print('Using nn.Embedding for tag embeddings!')
         elif config['tag_embedding_type'] == 'none':
             embedding_dim = config["encoder_output_dim"] # 768
             tag_embedder = None
-            print('NOT using tag embeddings!')
         else:
             raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
+        print(f'Using {tag_embedder.__class__} for tag embeddings!')
         n_edge_labels = config["n_edge_labels"]
 
-        # Build encoder
-        encoder = None
-        if config['use_parser_rnn'] \
-        and config['parser_rnn_layers'] > 0 \
-        and config['parser_rnn_hidden_size'] > 0:
-            typ = config['parser_rnn_type']
-            if typ == 'lstm':
-                print(f'Using {nn.LSTM} as parser encoder!')
-                encoder = nn.LSTM(
-                    input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-            elif typ == 'normlstm':
-                print(f'Using {LayerNormLSTM} as parser encoder!')
-                encoder = LayerNormLSTM(
-                    input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-            elif typ == 'rnn':
-                print(f'Using {nn.RNN} as parser encoder!')
-                encoder = nn.RNN(
-                    input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-            elif typ == 'normrnn':
-                print(f'Using {LayerNormRNN} as parser encoder!')
-                encoder = LayerNormRNN(
-                    input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-            elif typ == 'gru':
-                print(f'Using {nn.GRU} as parser encoder!')
-                encoder = nn.GRU(
-                    input_size=embedding_dim,
-                    hidden_size=config["parser_rnn_hidden_size"],
-                    num_layers=config['parser_rnn_layers'],
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-            elif typ == 'transformer':
-                print(f'Using {nn.TransformerEncoderLayer} as parser encoder!')
-                encoder = TransformerParserEncoder(
-                    input_dim=embedding_dim,
-                    num_layers=config['parser_rnn_layers'],
-                )
-            else:
-                print(f'Using {None} as parser encoder!')
-                warnings.warn(f"Unknown parser_rnn_type {typ}, setting encoder to None.")
-                encoder = None
-
+        encoder = get_encoder(config, embedding_dim)
         model_obj = cls(
             config=config,
             encoder=encoder,
@@ -289,11 +219,47 @@ class SimpleParser(nn.Module):
             tag_embedder=tag_embedder,
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],
-            mlp_dropout=config['mlp_dropout'],
             use_mst_decoding_for_validation=config['use_mst_decoding_for_validation'],
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj
+
+def get_encoder(config, embedding_dim):
+    kwargs = {
+        'input_size': embedding_dim,
+        'hidden_size': config["parser_rnn_hidden_size"],
+        'num_layers': config['parser_rnn_layers'],
+        'batch_first': True,
+        'bidirectional': True,
+        'dropout': config['rnn_dropout'],
+    }
+    custom_kwargs = {
+        'rnn_residual': config['rnn_residual'],
+    }
+    if config['use_parser_rnn'] \
+    and config['parser_rnn_layers'] > 0 \
+    and config['parser_rnn_hidden_size'] > 0:
+        parser_rnn_type = config['parser_rnn_type']
+        if parser_rnn_type == 'lstm':
+            encoder = nn.LSTM(**kwargs)
+        elif parser_rnn_type == 'normlstm':
+            encoder = LayerNormLSTM(**kwargs, **custom_kwargs)
+        elif parser_rnn_type == 'rnn':
+            encoder = nn.RNN(**kwargs)
+        elif parser_rnn_type == 'normrnn':
+            encoder = LayerNormRNN(**kwargs, **custom_kwargs)
+        elif parser_rnn_type == 'gru':
+            encoder = nn.GRU(**kwargs)
+        elif parser_rnn_type == 'transformer':
+            encoder = TransformerParserEncoder(
+                input_dim=embedding_dim,
+                num_layers=config['parser_rnn_layers'],
+            )
+        else:
+            warnings.warn(f"Unknown parser_rnn_type {parser_rnn_type}, setting encoder to None.")
+            encoder = None
+    print(f'Using {encoder.__class__} as parser encoder!')
+    return encoder
 
 class TransformerParserEncoder(nn.Module):
     def __init__(self, input_dim, num_layers=12):

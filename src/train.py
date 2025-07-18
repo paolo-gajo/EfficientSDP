@@ -16,6 +16,7 @@ def main():
 
     # get config
     string_args = "" # used for debugging, leave empty for normal behavior
+    # string_args = "--parser_rnn_type normlstm --rnn_residual 1" # used for debugging, leave empty for normal behavior
     # string_args = "--model_type gen" # used for debugging, leave empty for normal behavior
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
