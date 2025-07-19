@@ -1,224 +1,198 @@
 #!/bin/bash
-#SBATCH -J large
+#SBATCH -J gnn
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=12:00:00
-#SBATCH --output=./.slurm/%A_%a_output.log
-#SBATCH --error=./.slurm/%A_%a_error.log
-#SBATCH --mem=64G
-#SBATCH --array=0-N%999
-mkdir -p .slurm
+#SBATCH --time=06:00:00
+#SBATCH --output=./.slurm/%A/%a_output.log
+#SBATCH --error=./.slurm/%A/%a_error.log
+#SBATCH --mem=64g
+#SBATCH --array=0-N
+
+slurm_dir="./.slurm/$SLURM_ARRAY_JOB_ID"
+mkdir -p $slurm_dir
+echo "Creating directory: $slurm_dir"
 nvidia-smi
 module load rust gcc arrow
-source .env/bin/activate
+. .env/bin/activate
 
-# Define all parameter combinations
-declare -a seed_values=(
-  0
-  1
-  2
-  3
-  4
-  )
-declare -a dataset_name_options=(
-  "ade"
-  "conll04"
-  "scierc"
-  "erfgc"
-  "scidtb"
-  "enewt"
-  )
-declare -a model_name_options=(
-  # "answerdotai/ModernBERT-base"
-  # "microsoft/deberta-v3-base"
-  # "microsoft/deberta-v3-large"
-  "bert-base-uncased"
-  # "bert-large-uncased"
-  )
-declare -a parser_type_options=(
-  "simple"
-  # "gnn"
-  )
-declare -a arc_norm_options=(
-  0
-  1
-  )
-declare -a gnn_layers_options=(
-  0
-  # 1
-  # 2
-  # 3
-  )
-declare -a parser_residual_options=(0)
-declare -a freeze_encoder_options=(
-  # 1
-  0
-  )
-declare -a use_lora_options=(
-  0
-  # 1
-  )
-declare -a use_tagger_rnn_options=(  # used to skip invalid combinations, cannot have both 0 and 1
-  0
-  # 1
-  )
-declare -a parser_rnn_type_options=(
-  # "none"
-  # "gru"
-  "lstm"
-  # "normlstm"
-  )
-parser_rnn_layers_options=(
-  0
-  1
-  2
-  3
-  # 4
-  # 5
-  # 6
-  # 7
-  # 8
-  # 9
-  # 10
-  )
-parser_rnn_hidden_size_options=(
-  # 0
-  # 100
-  # 200
-  # 300
-  400
-  )
-arc_representation_dim_options=(
-  # 100
-  # 300
-  500
-  )
-tag_embedding_type_options=(
-  "linear"
-  # "embedding"
-  # "none"
-)
-bias_type='simple'
-
-# Fixed parameters
-training='steps'
-training_steps=10000
-eval_steps=100
-test_steps=100
-
-results_suffix="_ft_base_10k_grad_clipping"
-
-# new norm setting
-# parser_init='xu+norm'
-# bma_init='norm'
-
-# original norm setting
-parser_init='xu'
-bma_init='xu'
-
-use_warmup=0
-warmup_ratio=0.06
-scheduler_type='linear'
-
-use_clip_grad_norm=1
-grad_clip_norm=1.0
-
-valid_combinations=()
-for seed in "${seed_values[@]}"; do
-  for parser_type in "${parser_type_options[@]}"; do
-    for freeze_encoder in "${freeze_encoder_options[@]}"; do
-      for gnn_layers in "${gnn_layers_options[@]}"; do
-        for arc_norm in "${arc_norm_options[@]}"; do
-          for use_tagger_rnn in "${use_tagger_rnn_options[@]}"; do
-            for parser_rnn_type in "${parser_rnn_type_options[@]}"; do
-              for model_name in "${model_name_options[@]}"; do
-                for parser_residual in "${parser_residual_options[@]}"; do
-                  for use_lora in "${use_lora_options[@]}"; do
-                    for dataset_name in "${dataset_name_options[@]}"; do
-                      for parser_rnn_layers in "${parser_rnn_layers_options[@]}"; do
-                        for parser_rnn_hidden_size in "${parser_rnn_hidden_size_options[@]}"; do
-                          for arc_representation_dim in "${arc_representation_dim_options[@]}"; do
-                            for tag_embedding_type in "${tag_embedding_type_options[@]}"; do
-                              if [ "$parser_rnn_layers" -gt 0 ] && [ "$freeze_encoder" == 0 ]; then
-                                continue
-                              fi
-                              if [ "$use_tagger_rnn" == 1 ] && [ "$freeze_encoder" == 0 ]; then
-                                continue
-                              fi
-                              valid_combinations+=("$seed $use_tagger_rnn $parser_type $freeze_encoder $gnn_layers $arc_norm $parser_rnn_type $model_name $parser_residual $use_lora $dataset_name $parser_rnn_layers $parser_rnn_hidden_size $arc_representation_dim $tag_embedding_type")
-                            done
-                          done
-                        done
-                      done
-                    done
-                  done
-                done
-              done
+# Cartesian product function
+cartesian_product() {
+    local result=("")
+    local -n arrays=$1
+    
+    for array_name in "${arrays[@]}"; do
+        local -n current_array=$array_name
+        local new_result=()
+        
+        for existing in "${result[@]}"; do
+            for item in "${current_array[@]}"; do
+                new_result+=("${existing:+$existing,}$item")
             done
-          done
         done
-      done
+        result=("${new_result[@]}")
     done
-  done
-done
+    
+    printf '%s\n' "${result[@]}"
+}
+declare -a seed=(
+    0
+    # 1
+    # 2
+    # 3
+    # 4
+)
+# Define parameter arrays
+declare -a use_gnn_steps_opts=(0)
+declare -a rnn_layers_opts=(
+    0
+    1
+    2
+    3
+    )
+declare -a gnn_layers_opts=(
+    0
+    # 1
+    # 2
+    # 3
+    )
+declare -a parser_type_opts=(
+    # gat
+    simple
+    )
+declare -a parser_rnn_type_opts=(
+    # gru
+    lstm
+    # rnn
+    normlstm
+    # normrnn
+    # transformer
+)
+declare -a top_k_opts=(
+    1
+    # 2
+    # 3
+    # 4
+    )
+declare -a arc_norm_opts=(
+    0
+    1
+    )
+declare -a gnn_dropout_opts=(
+    0
+    # 0.3
+    )
+declare -a gnn_activation_opts=(tanh)
+declare -a dataset_name_opts=(
+#   ade
+#   conll04
+#   scierc
+  erfgc
+#   scidtb
+#   enewt
+  )
 
-# Get the total number of combinations
-total_combinations=${#valid_combinations[@]}
-echo "Total combinations: $total_combinations"
+declare -a rnn_residual=(0 1)
 
-# If SLURM_ARRAY_TASK_ID exists, use it to select the combination
-if [ -n "$SLURM_ARRAY_TASK_ID" ]; then
-  if [ "$SLURM_ARRAY_TASK_ID" -lt "$total_combinations" ]; then
-    # Get the combination for this task
-    current_combination=${valid_combinations[$SLURM_ARRAY_TASK_ID]}
+# Generate all combinations
+array_names=(
+            seed
+            use_gnn_steps_opts
+            gnn_layers_opts
+            parser_type_opts
+            top_k_opts
+            arc_norm_opts
+            gnn_dropout_opts
+            gnn_activation_opts
+            dataset_name_opts
+            rnn_layers_opts
+            parser_rnn_type_opts
+            rnn_residual
+            )
+combinations=$(cartesian_product array_names)
+
+{
+    for array_name in "${array_names[@]}"; do
+        # Access array by name using indirect expansion
+        values="${array_name}[@]"
+        echo "$array_name: ${!values}"
+    done
+} > "${slurm_dir}/hyperparameters.txt"
+
+# Training parameters
+training_steps=10000
+eval_steps=500
+save_suffix=layernorm
+
+use_tagger_rnn=1
+use_parser_rnn=1
+
+use_pred_tags=1
+
+# Convert combinations to commands
+declare -a commands=()
+while IFS= read -r combo; do
+    IFS=',' read -ra params <<< "$combo"
+
+    if [[ "${params[8]}" == "scidtb" || "${params[8]}" == "enewt" ]]; then
+        use_pred_tags=0
+    else
+        use_pred_tags=1
+    fi
+
+    # if [[ "${params[9]}" == 0 && "${params[10]}" != 'lstm' ]]; then
+    #     continue
+    # fi
     
-    # Parse the combination
-    # use_tag_embeddings_in_parser
-    read -r seed use_tagger_rnn parser_type freeze_encoder gnn_layers arc_norm \
-    parser_rnn_type model_name parser_residual \
-    use_lora dataset_name parser_rnn_layers parser_rnn_hidden_size arc_representation_dim tag_embedding_type <<< "$current_combination"
-    
-    # Run the command with these parameters
-    command_to_run="python ./src/train.py --opt \
---seed $seed \
---use_tagger_rnn $use_tagger_rnn \
---parser_type $parser_type \
---freeze_encoder $freeze_encoder \
---gnn_layers $gnn_layers \
---arc_norm $arc_norm \
---parser_rnn_type $parser_rnn_type \
---model_name $model_name \
---parser_residual $parser_residual \
---use_lora $use_lora \
---dataset_name $dataset_name \
---parser_rnn_layers $parser_rnn_layers \
---parser_rnn_hidden_size $parser_rnn_hidden_size \
---arc_representation_dim $arc_representation_dim \
---tag_embedding_type $tag_embedding_type \
---bias_type $bias_type \
---parser_init $parser_init \
---bma_init $bma_init \
---results_suffix $results_suffix \
---training $training \
---training_steps $training_steps \
---eval_steps $eval_steps \
---use_warmup $use_warmup \
---warmup_ratio $warmup_ratio \
---scheduler_type $scheduler_type \
---test_steps $test_steps \
---use_clip_grad_norm $use_clip_grad_norm \
---grad_clip_norm $grad_clip_norm"
-    
-    echo "Running job $SLURM_ARRAY_TASK_ID: $command_to_run"
+    cmd="python ./src/train.py
+                --opts
+                --save_suffix ${save_suffix}_${SLURM_ARRAY_JOB_ID}/${SLURM_ARRAY_TASK_ID}
+                --seed ${params[0]}
+                --use_gnn_steps ${params[1]}
+                --gnn_layers ${params[2]}
+                --parser_type ${params[3]}
+                --top_k ${params[4]}
+                --arc_norm ${params[5]}
+                --gnn_dropout ${params[6]}
+                --gnn_activation ${params[7]}
+                --dataset_name ${params[8]}
+                --parser_rnn_layers ${params[9]}
+                --parser_rnn_type ${params[10]}
+                --rnn_residual ${params[11]}
+                --training_steps $training_steps 
+                --eval_steps $eval_steps
+                --use_tagger_rnn $use_tagger_rnn
+                --use_parser_rnn $use_parser_rnn
+                --parser_rnn_hidden_size 400
+                --use_pred_tags $use_pred_tags
+                --rnn_residual $rnn_residual
+                "
+    if [[ "${params[1]}" -gt 0  && "${params[3]}" == 'simple' ]]; then
+        continue
+    fi
+    if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
+        continue
+    fi
+    # echo ${cmd}
+    commands+=("$cmd")
+done <<< "$combinations"
+
+total_combinations=${#commands[@]}
+
+if [[ -n "$SLURM_ARRAY_TASK_ID" ]]; then
+    command_to_run="${commands[$SLURM_ARRAY_TASK_ID]}"
+    # echo "$command_to_run"
     $command_to_run
-  else
-    echo "Error: SLURM_ARRAY_TASK_ID ($SLURM_ARRAY_TASK_ID) is out of range (0-$((total_combinations-1)))"
-    exit 1
-  fi
+elif [[ $1 ]]; then
+    for (( i=start; i<${#commands[@]}; i++ ))
+    do
+        echo "$((i+1)) of ${#commands[@]}"
+        cmd="${commands[$i]} --save_suffix ${i}"
+        echo "${cmd}"
+        $cmd
+    done
 else
-  # If run manually, print the total number of combinations
-  echo "This script should be run as a SLURM array job."
-  echo "Use: sbatch --array=0-$((total_combinations-1))%999 experiments.sh"
-  echo "This will distribute $total_combinations jobs across N GPUs."
+    echo "This script should be run as a SLURM array job."
+    echo "Use: sbatch --array=0-$((total_combinations-1)) $0"
+    echo "This will distribute $total_combinations jobs across N GPUs."
 fi

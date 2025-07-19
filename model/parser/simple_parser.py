@@ -236,10 +236,10 @@ def get_encoder(config, embedding_dim):
     custom_kwargs = {
         'rnn_residual': config['rnn_residual'],
     }
+    parser_rnn_type = config['parser_rnn_type']
     if config['use_parser_rnn'] \
     and config['parser_rnn_layers'] > 0 \
     and config['parser_rnn_hidden_size'] > 0:
-        parser_rnn_type = config['parser_rnn_type']
         if parser_rnn_type == 'lstm':
             encoder = nn.LSTM(**kwargs)
         elif parser_rnn_type == 'normlstm':
@@ -255,9 +255,9 @@ def get_encoder(config, embedding_dim):
                 input_dim=embedding_dim,
                 num_layers=config['parser_rnn_layers'],
             )
-        else:
-            warnings.warn(f"Unknown parser_rnn_type {parser_rnn_type}, setting encoder to None.")
-            encoder = None
+    else:
+        warnings.warn(f"Unknown parser_rnn_type {parser_rnn_type}, setting encoder to None.")
+        encoder = None
     print(f'Using {encoder.__class__} as parser encoder!')
     return encoder
 
