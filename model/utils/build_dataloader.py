@@ -1,8 +1,8 @@
 from torch.utils.data import DataLoader
-from model.utils.graph_data_utils import GraphCollator, GraphDataset
+from model.utils.data_utils import GraphCollator, GraphDataset
 from transformers import AutoTokenizer
 from model.utils import load_json
-from model.utils.graph_data_utils import get_mappings
+from model.utils.data_utils import get_mappings
 import json
 import re
 

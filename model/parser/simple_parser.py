@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from model.parser.parser_nn import *
+from model.utils.nn_utils import prepend_ones
 from debug import save_heatmap
 import warnings
 import numpy as np
@@ -105,17 +106,7 @@ class SimpleParser(nn.Module):
         # Concatenate the head sentinel onto the sentence representation.
         encoded_text_input = torch.cat([head_sentinel, encoded_text_input], dim=1)
 
-        mask_ones = mask.new_ones(batch_size, 1)
-        mask = torch.cat([mask_ones, mask], dim = 1)
-        
-        if head_indices is not None:
-            head_indices = torch.cat(
-                [head_indices.new_zeros(batch_size, 1), head_indices], dim=1
-            )
-        if head_tags is not None:
-            head_tags = torch.cat(
-                [head_tags.new_zeros(batch_size, 1), head_tags], dim=1
-            )
+        mask, head_indices, head_tags = prepend_ones(batch_size, mask, head_indices, head_tags)
         
         encoded_text_input = self._dropout(encoded_text_input)
             

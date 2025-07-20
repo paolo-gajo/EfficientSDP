@@ -6,7 +6,7 @@ import numpy as np
 import spacy
 import re
 from .sys_utils import write_text
-from model.utils.graph_data_utils import reorder_tensor
+from model.utils.data_utils import reorder_tensor
     
 nlp = spacy.load('en_core_web_md')
 nlp.tokenizer = spacy.tokenizer.Tokenizer(nlp.vocab, suffix_search = re.compile(r'''\.|\,|\;|\(|\)|\$''').search)

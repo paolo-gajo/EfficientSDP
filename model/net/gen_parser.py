@@ -69,6 +69,7 @@ class GenParser(torch.nn.Module):
                                     tag_embeddings = tagger_output.tag_embeddings,
                                     head_indices=head_indices,
                                     head_tags=head_tags,
+                                    mode=self.mode,
                                     )
 
         decoder_output = self.decoder(

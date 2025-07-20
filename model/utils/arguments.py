@@ -22,7 +22,7 @@ def build_dict_from_args(args):
 	return args_new
 
 
-def get_args(string_args = None):
+def get_args(string_args = ''):
 
 	"""
 		This will parse all the arguments and return args

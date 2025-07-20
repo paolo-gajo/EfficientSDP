@@ -116,7 +116,7 @@ custom_config = {
     'batch_size': 8,
     'training': 'steps',
     'training_steps': 10000,
-    'eval_steps': 100,
+    'eval_steps': 500,
     'eval_samples': 0, # 0 = all samples
     'epochs': 0 ,
     'patience': 0.3,

@@ -112,7 +112,7 @@ def save_batch_heatmap(matrices, filename="batch_heatmap.pdf", cmap="viridis", t
     
     # Plot each matrix
     for i in range(N):
-        im = axes[i].imshow(processed_matrices[i], cmap=cmap, aspect="auto")
+        im = axes[i].imshow(processed_matrices[i], cmap=cmap, aspect="auto", interpolation = 'nearest')
         
         # Set title
         if titles and i < len(titles):
