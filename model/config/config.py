@@ -5,7 +5,7 @@ custom_config = {
     'train_file_graphs': './data/{dataset_name}/bio/train.json',
     'val_file_graphs': './data/{dataset_name}/bio/val.json',
     'test_file_graphs': './data/{dataset_name}/bio/test.json',
-    'dataset_name': 'erfgc',
+    'dataset_name': 'ade',
     'word_majority_eval': 0,
     'save_model': 1,
     'data_len': {'train': 0, 'val': 0, 'test': 0,},
@@ -79,7 +79,7 @@ custom_config = {
     'graph_rnn_hidden_edge': 500,
     'graph_rnn_node_layers': 4,
     'graph_rnn_edge_layers': 4,
-    'graph_rnn_m': 20,
+    'graph_rnn_m': 100,
 
     # model options
     'model_type': 'attn', # 'attn' or 'gen'

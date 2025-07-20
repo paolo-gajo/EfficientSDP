@@ -113,7 +113,9 @@ class GraphRNNBilinear(nn.Module):
         h_prev = torch.zeros(self.edge_l, B*S, self.hidden_edge, device=A.device)
         h_prev[0, :, :] = graph_state_tall
         out, h_prev = self.edge_rnn(A, h_prev)
-        A_out = F.sigmoid(self.edge_cls(out))
+        pred = self.edge_cls(out)
+        # pred = F.sigmoid(pred)
+        A_out = pred
         return A_out
     
     def edge_pass_test(self, graph_state: torch.Tensor):
@@ -125,10 +127,10 @@ class GraphRNNBilinear(nn.Module):
         A_out = [x]
         for _ in range(self.M): # produce M edges
             out, h_prev = self.edge_rnn(x, h_prev)
-            logits = self.edge_cls(out)
-            probs = F.sigmoid(logits)
-            x = probs
-            A_out.append(probs)
+            pred = self.edge_cls(out)
+            # pred = F.sigmoid(pred)
+            x = pred
+            A_out.append(pred)
         A_out = torch.cat(A_out, dim = 1)
         return A_out
 
@@ -190,7 +192,7 @@ class GraphRNNBilinear(nn.Module):
             # because we removed the BOS scalars 
             row = A[:, i, :length, 0]
             A_reshaped[:, i, start:i] = row
-        A_reshaped = A_reshaped.transpose(1, 2)
+        # A_reshaped = A_reshaped.transpose(1, 2)
         return A_reshaped
     
 class GraphRNNSimple(nn.Module):

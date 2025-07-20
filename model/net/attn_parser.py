@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from model.encoder import Encoder
 from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched
 from model.tagger import Tagger
-from model.decoder import BilinearDecoder, masked_log_softmax
+from model.decoder import BilinearDecoder, masked_log_softmax, GraphDecoder
 import numpy as np
 import warnings
 from typing import Set, Tuple
@@ -33,7 +33,7 @@ class AttnParser(torch.nn.Module):
             self.parser = GATParser.get_model(self.config)
         elif self.config['parser_type'] == 'gat_unbatched':
             self.parser = GATParserUnbatched.get_model(self.config)
-        self.decoder = BilinearDecoder(config=config,
+        self.decoder = GraphDecoder(config=config,
                                     tag_representation_dim=self.parser.tag_representation_dim,
                                     n_edge_labels = self.parser.n_edge_labels)
         self.tokenizer = AutoTokenizer.from_pretrained(self.config["model_name"])
