@@ -16,7 +16,6 @@ class SimpleParser(nn.Module):
         encoder: nn.LSTM,
         embedding_dim: int,
         n_edge_labels: int,
-        tag_embedder: nn.Linear,
         arc_representation_dim: int,
         tag_representation_dim: int,
         use_mst_decoding_for_validation: bool = True,
@@ -35,7 +34,6 @@ class SimpleParser(nn.Module):
         self.lstm_hidden_size = encoder_dim
 
         if self.config["tag_embedding_type"] != 'none':
-            self.tag_embedder = tag_embedder
             self.tag_dropout = nn.Dropout(config['tag_dropout'])
         
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
@@ -186,19 +184,15 @@ class SimpleParser(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        # Determine embedding_dim and tag_embedder
+        # Determine embedding_dim
         if config['tag_embedding_type'] == 'linear':
             embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
-            tag_embedder = nn.Linear(config["n_tags"], config["tag_representation_dim"])
         elif config['tag_embedding_type'] == 'embedding':
             embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
-            tag_embedder = nn.Embedding(config["n_tags"], config["tag_representation_dim"])
         elif config['tag_embedding_type'] == 'none':
             embedding_dim = config["encoder_output_dim"] # 768
-            tag_embedder = None
         else:
             raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
-        print(f'Using {tag_embedder.__class__} for tag embeddings!')
         n_edge_labels = config["n_edge_labels"]
 
         encoder = get_encoder(config, embedding_dim)
@@ -207,7 +201,6 @@ class SimpleParser(nn.Module):
             encoder=encoder,
             embedding_dim=embedding_dim,
             n_edge_labels=n_edge_labels,
-            tag_embedder=tag_embedder,
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],
             use_mst_decoding_for_validation=config['use_mst_decoding_for_validation'],
