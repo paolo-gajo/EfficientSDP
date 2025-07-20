@@ -70,7 +70,6 @@ class Tagger(nn.Module):
         else:
             raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')
 
-
         self.tagger_loss = nn.CrossEntropyLoss(ignore_index=0)
         self.gumbel_softmax = self.config['gumbel_softmax']
         self.apply(self._init_weights)

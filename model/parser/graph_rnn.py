@@ -10,7 +10,15 @@ class GraphRNNBilinear(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.input_size = config['encoder_output_dim']
+        if config['tag_embedding_type'] == 'linear':
+            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
+        elif config['tag_embedding_type'] == 'embedding':
+            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
+        elif config['tag_embedding_type'] == 'none':
+            embedding_dim = config["encoder_output_dim"] # 768
+        else:
+            raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')    
+        self.input_size = embedding_dim
         self.M = config['graph_rnn_m']
         self.hidden_graph = config['graph_rnn_hidden_graph']
         self.hidden_edge = config['graph_rnn_hidden_edge']
@@ -48,10 +56,9 @@ class GraphRNNBilinear(nn.Module):
                 mode: str,
                 metadata: List[Dict[str, Any]] = [],
                 ):
-        # if self.config["tag_embedding_type"] != 'none':
-        #     # tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
-        #     input = torch.cat([input, tag_embeddings], dim=-1)
         
+        if self.config["tag_embedding_type"] != 'none':
+            input = torch.cat([input, tag_embeddings], dim=-1)
         
         # input dim [B, S, D]
         B, _, D = input.shape
