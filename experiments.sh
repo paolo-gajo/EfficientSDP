@@ -37,8 +37,8 @@ cartesian_product() {
 }
 declare -a seed=(
     0
-    # 1
-    # 2
+    1
+    2
     # 3
     # 4
 )
@@ -52,9 +52,9 @@ declare -a rnn_layers_opts=(
     )
 declare -a gnn_layers_opts=(
     0
-    # 1
-    # 2
-    # 3
+    1
+    2
+    3
     )
 declare -a parser_type_opts=(
     # gat
@@ -64,7 +64,7 @@ declare -a parser_rnn_type_opts=(
     # gru
     lstm
     # rnn
-    normlstm
+    # normlstm
     # normrnn
     # transformer
 )
@@ -92,7 +92,10 @@ declare -a dataset_name_opts=(
     enewt
   )
 
-declare -a rnn_residual=(0 1)
+declare -a rnn_residual=(
+    0
+    # 1
+    )
 
 # Generate all combinations
 array_names=(
@@ -122,7 +125,7 @@ combinations=$(cartesian_product array_names)
 # Training parameters
 training_steps=10000
 eval_steps=500
-save_suffix=layernorm
+save_suffix=gnn
 
 use_tagger_rnn=1
 use_parser_rnn=1
@@ -172,7 +175,7 @@ while IFS= read -r combo; do
     if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
         continue
     fi
-    echo ${cmd}
+    # echo ${cmd}
     commands+=("$cmd")
 done <<< "$combinations"
 
