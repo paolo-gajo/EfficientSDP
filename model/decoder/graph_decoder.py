@@ -167,6 +167,64 @@ class GraphDecoder(nn.Module):
 
         return arc_nll, tag_nll
 
+    def _get_head_tags(
+        self,
+        head_tag: torch.Tensor,
+        dep_tag: torch.Tensor,
+        head_indices: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Decodes the head tags given the head and dept tag representations
+        and a tensor of head indices to compute tags for. Note that these are
+        either gold or predicted heads, depending on whether this function is
+        being called to compute the loss, or if it's being called during inference.
+
+        Parameters
+        ----------
+        head_tag : ``torch.Tensor``, required.
+            A tensor of shape (batch_size, sequence_length, tag_representation_dim),
+            which will be used to generate predictions for the dependency tags
+            for the given arcs.
+        dep_tag : ``torch.Tensor``, required
+            A tensor of shape (batch_size, sequence_length, tag_representation_dim),
+            which will be used to generate predictions for the dependency tags
+            for the given arcs.
+        head_indices : ``torch.Tensor``, required.
+            A tensor of shape (batch_size, sequence_length). The indices of the heads
+            for every word.
+
+        Returns
+        -------
+        head_tag_logits : ``torch.Tensor``
+            A tensor of shape (batch_size, sequence_length, num_head_tags),
+            representing logits for predicting a distribution over tags
+            for each arc.
+        """
+        batch_size = head_tag.size(0)
+        # shape (batch_size,)
+        range_vector = get_range_vector(
+            batch_size, get_device_of(head_tag)
+        ).unsqueeze(1)
+
+        # This next statement is quite a complex piece of indexing, which you really
+        # need to read the docs to understand. See here:
+        # https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.indexing.html#advanced-indexing
+        # In effect, we are selecting the indices corresponding to the heads of each word from the
+        # sequence length dimension for each element in the batch.
+
+        # shape (batch_size, sequence_length, tag_representation_dim)
+        selected_head_tag_representations = head_tag[
+            range_vector, head_indices
+        ]
+        selected_head_tag_representations = (
+            selected_head_tag_representations.contiguous()
+        )
+        # shape (batch_size, sequence_length, num_head_tags)
+        head_tag_logits = self.tag_bilinear(
+            selected_head_tag_representations, dep_tag
+        )
+        return head_tag_logits
+
     def make_output_human_readable(
         self, output_dict: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
@@ -373,64 +431,6 @@ class GraphDecoder(nn.Module):
         return torch.from_numpy(np.stack(heads)), torch.from_numpy(
             np.stack(head_tags)
         )
-
-    def _get_head_tags(
-        self,
-        head_tag: torch.Tensor,
-        dep_tag: torch.Tensor,
-        head_indices: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        Decodes the head tags given the head and dept tag representations
-        and a tensor of head indices to compute tags for. Note that these are
-        either gold or predicted heads, depending on whether this function is
-        being called to compute the loss, or if it's being called during inference.
-
-        Parameters
-        ----------
-        head_tag : ``torch.Tensor``, required.
-            A tensor of shape (batch_size, sequence_length, tag_representation_dim),
-            which will be used to generate predictions for the dependency tags
-            for the given arcs.
-        dep_tag : ``torch.Tensor``, required
-            A tensor of shape (batch_size, sequence_length, tag_representation_dim),
-            which will be used to generate predictions for the dependency tags
-            for the given arcs.
-        head_indices : ``torch.Tensor``, required.
-            A tensor of shape (batch_size, sequence_length). The indices of the heads
-            for every word.
-
-        Returns
-        -------
-        head_tag_logits : ``torch.Tensor``
-            A tensor of shape (batch_size, sequence_length, num_head_tags),
-            representing logits for predicting a distribution over tags
-            for each arc.
-        """
-        batch_size = head_tag.size(0)
-        # shape (batch_size,)
-        range_vector = get_range_vector(
-            batch_size, get_device_of(head_tag)
-        ).unsqueeze(1)
-
-        # This next statement is quite a complex piece of indexing, which you really
-        # need to read the docs to understand. See here:
-        # https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.indexing.html#advanced-indexing
-        # In effect, we are selecting the indices corresponding to the heads of each word from the
-        # sequence length dimension for each element in the batch.
-
-        # shape (batch_size, sequence_length, tag_representation_dim)
-        selected_head_tag_representations = head_tag[
-            range_vector, head_indices
-        ]
-        selected_head_tag_representations = (
-            selected_head_tag_representations.contiguous()
-        )
-        # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self.tag_bilinear(
-            selected_head_tag_representations, dep_tag
-        )
-        return head_tag_logits
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return self._attachment_scores.get_metric(reset)

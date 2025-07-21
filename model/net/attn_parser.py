@@ -156,6 +156,92 @@ class AttnParser(torch.nn.Module):
                     output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
             return output_as_list_of_dicts
 
+    def get_output_as_list_of_dicts_words(
+        self, tagger_output, parser_output, model_input
+    ):
+        """
+        Returns list of dictionaries, each element in the dictionary is
+        1 item in the batch, list has same length as batchsize. The dictionary
+        will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
+        'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
+        should have exactly identical length, during testing, '*_gt' keys() will have empty
+        tensors.
+        """
+        outputs = []
+        batch_size = len(tagger_output)
+
+        for i in range(batch_size):
+            elem_dict = {}
+
+            # find non-masked indices
+            valid_input_indices = (
+                torch.where(model_input["encoded_input"]["words_mask_custom"][i] == 1)[
+                    0
+                ]
+                .cpu()
+                .detach()
+                .numpy()
+                .tolist()
+            )
+
+            input_length = len(valid_input_indices)
+
+            elem_dict["words"] = np.array(model_input["words"][i])[
+                valid_input_indices
+            ].tolist()
+
+            elem_dict["head_tags_gt"] = (
+                model_input["head_tags"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["head_tags_pred"] = [
+                int(el) for el in parser_output["predicted_dependencies"][i]
+            ]
+
+            elem_dict["head_indices_gt"] = (
+                model_input["head_indices"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["head_indices_pred"] = [
+                int(el) for el in parser_output["predicted_heads"][i]
+            ]
+
+            elem_dict["pos_tags_gt"] = (
+                model_input["pos_tags"][i]
+                .cpu()
+                .detach()
+                .numpy()[valid_input_indices]
+                .tolist()
+            )
+            elem_dict["pos_tags_pred"] = tagger_output[i] if self.config['use_pred_tags'] else tagger_output[i][:input_length]
+
+            assert np.all(
+                [len(elem_dict[key]) == input_length for key in elem_dict]
+            ), "Predictions are not same length as input!"
+
+            # append
+            outputs.append(elem_dict)
+
+        return outputs
+
+    def set_mode(self, mode="train"):
+        """
+        This function will determine if loss should be computed or evaluation metrics
+        """
+        assert mode in [
+            "train",
+            "test",
+            "validation",
+        ], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
+        self.tagger.set_mode(mode)
+        self.mode = mode
+
     @property
     def current_step(self):
         return self._current_step
@@ -373,89 +459,3 @@ class AttnParser(torch.nn.Module):
         """Freeze parser if asked for!"""
         for param in self.parser.parameters():
             param.requires_grad = False
-
-    def get_output_as_list_of_dicts_words(
-        self, tagger_output, parser_output, model_input
-    ):
-        """
-        Returns list of dictionaries, each element in the dictionary is
-        1 item in the batch, list has same length as batchsize. The dictionary
-        will contain 7 fields, 'words', 'head_tags_gt', 'head_tags_pred', 'pos_tags_gt',
-        'pos_tags_pred', 'head_indices_gt', 'head_indices_pred'. During evalution, all fields
-        should have exactly identical length, during testing, '*_gt' keys() will have empty
-        tensors.
-        """
-        outputs = []
-        batch_size = len(tagger_output)
-
-        for i in range(batch_size):
-            elem_dict = {}
-
-            # find non-masked indices
-            valid_input_indices = (
-                torch.where(model_input["encoded_input"]["words_mask_custom"][i] == 1)[
-                    0
-                ]
-                .cpu()
-                .detach()
-                .numpy()
-                .tolist()
-            )
-
-            input_length = len(valid_input_indices)
-
-            elem_dict["words"] = np.array(model_input["words"][i])[
-                valid_input_indices
-            ].tolist()
-
-            elem_dict["head_tags_gt"] = (
-                model_input["head_tags"][i]
-                .cpu()
-                .detach()
-                .numpy()[valid_input_indices]
-                .tolist()
-            )
-            elem_dict["head_tags_pred"] = [
-                int(el) for el in parser_output["predicted_dependencies"][i]
-            ]
-
-            elem_dict["head_indices_gt"] = (
-                model_input["head_indices"][i]
-                .cpu()
-                .detach()
-                .numpy()[valid_input_indices]
-                .tolist()
-            )
-            elem_dict["head_indices_pred"] = [
-                int(el) for el in parser_output["predicted_heads"][i]
-            ]
-
-            elem_dict["pos_tags_gt"] = (
-                model_input["pos_tags"][i]
-                .cpu()
-                .detach()
-                .numpy()[valid_input_indices]
-                .tolist()
-            )
-            elem_dict["pos_tags_pred"] = tagger_output[i] if self.config['use_pred_tags'] else tagger_output[i][:input_length]
-
-            assert np.all(
-                [len(elem_dict[key]) == input_length for key in elem_dict]
-            ), "Predictions are not same length as input!"
-
-            # append
-            outputs.append(elem_dict)
-
-        return outputs
-
-    def set_mode(self, mode="train"):
-        """
-        This function will determine if loss should be computed or evaluation metrics
-        """
-        assert mode in [
-            "train",
-            "test",
-            "validation",
-        ], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
-        self.tagger.set_mode(mode)
-        self.mode = mode

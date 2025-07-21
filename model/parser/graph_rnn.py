@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from debug.viz import save_heatmap, save_batch_heatmap
-from model.utils.nn_utils import adj_indices_to_adj_matrix, adjust_for_sentinel
+from model.utils.nn_utils import adjust_for_sentinel
+from model.utils.rnn_utils import adj_indices_to_adj_matrix, make_adj_sequence, reshape_adj
 from model.parser.parser_nn import BilinearMatrixAttention
 from typing import List, Dict, Any
 from torch_geometric.utils import to_dense_adj
@@ -45,7 +46,6 @@ class GraphRNNBilinear(nn.Module):
         self.edge_cls = nn.Linear(self.hidden_edge, 1)
 
         self._head_sentinel = torch.nn.Parameter(torch.randn(self.input_size))
-
         
         self.head_arc_feedforward = nn.Linear(self.hidden_graph * 2 if self.bidirectional else self.hidden_graph,
                                         config['arc_representation_dim'])
@@ -83,7 +83,7 @@ class GraphRNNBilinear(nn.Module):
         B, _, D = input.shape
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(B, 1, D)
         input = torch.cat([head_sentinel, input], dim=1)
-        mask, head_indices, head_tags = adjust_for_sentinel(B, mask, head_indices, head_tags)
+        mask, head_indices, head_tags = adjust_for_sentinel(mask, head_indices, head_tags)
         _, S, _ = input.shape
         lengths = mask.sum(dim=-1).cpu()
         packed_input = pack_padded_sequence(input,
@@ -104,8 +104,7 @@ class GraphRNNBilinear(nn.Module):
 
         # NOTE: maybe we don't need it because masking should already be handled in the decoder 
         # but here we could use lengths to zero out any adjacency predictions made for the padding
-        A_batch = A_batch.reshape(B, S, self.M+1, 1)
-        arc_logits = self.reshape_adj(A_batch)
+        arc_logits = reshape_adj(A=A_batch, M=self.M)
 
         # head_arc = self._dropout(F.elu(self.head_arc_feedforward(graph_state)))
         # dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(graph_state)))
@@ -139,8 +138,7 @@ class GraphRNNBilinear(nn.Module):
         graph_state_tall = graph_state.reshape(B*S, D)
         # A needs to be shape [B, S, M] (like in `edge_pass_test`)
         A_square = adj_indices_to_adj_matrix(head_indices)
-        A = self.make_adj_sequence(A_square)
-        save_batch_heatmap(A[:10, :, :], 'A.pdf')
+        A = make_adj_sequence(A_square, M=self.M)
         A = A.to(self.config['device'])
         h_prev = torch.zeros(self.edge_l, B*S, self.hidden_edge, device=A.device)
         h_prev[0, :, :] = graph_state_tall
@@ -165,67 +163,6 @@ class GraphRNNBilinear(nn.Module):
             A_out.append(pred)
         A_out = torch.cat(A_out, dim = 1)
         return A_out
-
-    def make_adj_sequence(self, adj_square: torch.LongTensor):
-        """
-            Given a batch of square matrices [B, S, S]
-            produce a sequence with B*S elements
-            where each element is a sequence of M elements
-            each with a scalar,
-            where the final shape is then [B*S, M, 1]
-        """
-        B, S, S = adj_square.shape
-        adj_seq = torch.zeros(B, S, self.M + 1, 1)
-        adj_seq[:, :, 0, 0] = 1
-        """
-            I need to put the values of `adj_square` into `adj_seq`
-            which means that for each batch (dim0)
-            and for each element (nodes, dim1) of `adj_square` then i have a sequence
-            of S elements, e.g. 157 head indices for each node.
-
-            I need to put M head indices
-            in the last two dimensions [self.M, 1] of `adj_seq`.
-
-            At the i-th step/node, i have to gather head indices
-            starting from the earliest possible position of the row,
-            i.e. max(0, i-M) and then gather up to that plus min(i, M),
-            (excluding the last position, so slice [:min(i, M)])
-
-            Each single head index needs to be put in the last dimension of `adj_seq`
-            
-            Assuming M=20:
-            At i=0 I don't gather any nodes []
-            At i=15 I gather [0:15], so [0, ..., 14] --> in this case min(i, M) == 15
-            At i=20 I gather [0, ..., 19]
-            At i=27 I gather [7, ..., 26]
-            and for each of the gathered values i need to go and fill the m-th value
-            of `adj_seq`
-        """
-        for i in range(S):
-            start = max(0, i-self.M)
-            row = adj_square[:, i, start:i]
-            length = row.shape[-1]
-            adj_seq[:, i, 1:1+length, 0] = row
-        adj_seq = adj_seq.reshape(B*S, self.M + 1, 1)
-        return adj_seq
-
-    def reshape_adj(self, A):
-        # slice out the BOS scalars
-        A = A[:, :, 1:, :]
-        # A_seq already has the same number of elements
-        # equal to the side of the full adj matrix
-        B, S, Mp1, _ = A.shape
-        A_reshaped = torch.zeros((B, S, S)).to(self.config['device'])
-        for i in range(S):
-            start = max(0, i-self.M)
-            length  = i - start
-            # here we don't slice [1:1+length]
-            # like in `make_adj_sequence`
-            # because we removed the BOS scalars 
-            row = A[:, i, :length, 0]
-            A_reshaped[:, i, start:i] = row
-        # A_reshaped = A_reshaped.transpose(1, 2)
-        return A_reshaped
     
 class GraphRNNSimple(nn.Module):
     ...

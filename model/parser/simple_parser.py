@@ -103,7 +103,7 @@ class SimpleParser(nn.Module):
         # Concatenate the head sentinel onto the sentence representation.
         input = torch.cat([head_sentinel, input], dim=1)
 
-        mask, head_indices, head_tags = adjust_for_sentinel(batch_size, mask, head_indices, head_tags)
+        mask, head_indices, head_tags = adjust_for_sentinel(mask, head_indices, head_tags)
         
         input = self._dropout(input)
             

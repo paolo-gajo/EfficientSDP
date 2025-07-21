@@ -17,7 +17,7 @@ def main():
     # get config
     string_args = "" # used for debugging, leave empty for default behavior
     # string_args = "--model_type attn --dataset_name ade" # used for debugging, leave empty for default behavior
-    # string_args = "--model_type attn --parser_type graph_rnn --graph_rnn_pred_type bilinear --dataset_name erfgc --training_steps 500 --eval_steps 500" # used for debugging, leave empty for default behavior
+    string_args = "--model_type attn --parser_type graph_rnn --graph_rnn_pred_type bilinear --dataset_name ade --training_steps 500 --eval_steps 500" # used for debugging, leave empty for default behavior
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     # print('Config:\n\n', json.dumps(config, indent=4))
@@ -40,7 +40,6 @@ def main():
     # set `model_start_path` to restart training
     model_start_path = None
     model = build_model(config, model_start_path=model_start_path, verbose=True)
-    # print(model)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
 
