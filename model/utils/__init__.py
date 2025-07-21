@@ -22,4 +22,4 @@ from .train_utils import train_epoch, validate_epoch
 from .arguments import get_args
 # from .get_MLM_dataset import download_json_annotation, build_train_dev_list, ann_file_names, ann_url_dict
 from .eval_utils import build_conllu_file_from_recipe_list, run_evaluation, run_inference, get_overall_results
-from .nn_utils import graph_to_edge_index, get_deg_matrix, get_graph_laplacian, edge_index_to_adj_matrix, prepend_ones
+from .nn_utils import graph_to_edge_index, get_deg_matrix, get_graph_laplacian, edge_index_to_adj_matrix, adjust_for_sentinel

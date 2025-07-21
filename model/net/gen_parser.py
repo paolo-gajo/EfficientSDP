@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 from model.encoder import Encoder
-from model.parser import GraphRNNSimple, GraphRNNBilinear
+from model.parser import GraphRNNSimple, GraphRNNBilinear, SimpleParser
 from model.tagger import Tagger
-from model.decoder import BilinearDecoder, masked_log_softmax, SimpleDecoder
+from model.decoder import BilinearDecoder, masked_log_softmax, SimpleDecoder, GraphDecoder
 import numpy as np
 import warnings
 from typing import Set, Tuple
@@ -24,8 +24,8 @@ class GenParser(torch.nn.Module):
             self.parser = GraphRNNSimple(config)
             self.decoder = SimpleDecoder(config=config)
         elif config['graph_rnn_pred_type'] == 'bilinear':
-            self.parser = GraphRNNBilinear(config)
-            self.decoder = BilinearDecoder(config=config,
+            self.parser = SimpleParser.get_model(config)
+            self.decoder = GraphDecoder(config=config,
                                         tag_representation_dim=self.parser.tag_representation_dim,
                                         n_edge_labels = self.config['n_edge_labels'])
         self.tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
@@ -83,7 +83,9 @@ class GenParser(torch.nn.Module):
         )
 
         if self.mode in ["train", "validation"]:
-            loss = tagger_output.loss * self.config["tagger_lambda"]
+            loss = (tagger_output.loss * self.config["tagger_lambda"]
+                    + decoder_output["loss"] * self.config["parser_lambda"]
+                    )
             return loss
         
         elif self.mode == "test":

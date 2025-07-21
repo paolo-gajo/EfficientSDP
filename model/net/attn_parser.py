@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 from model.encoder import Encoder
-from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched
+from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched, GraphRNNBilinear
 from model.tagger import Tagger
 from model.decoder import BilinearDecoder, masked_log_softmax, GraphDecoder
 import numpy as np
@@ -18,25 +18,27 @@ class AttnParser(torch.nn.Module):
         super().__init__()
         self.config = config
         self.encoder = Encoder(config)
-        self.tagger = Tagger(self.config)
+        self.tagger = Tagger(config)
 
         # select the type of parser
-        if self.config['parser_type'] == 'simple':
-            self.parser = SimpleParser.get_model(self.config) # base setting
-        if self.config['parser_type'] == 'triaffine':
-            self.parser = TriParser.get_model(self.config) # triaffine parser
-        elif self.config['parser_type'] == 'gnn':
-            self.parser = GNNParser.get_model(self.config)
-        elif self.config['parser_type'] == 'gcn':
-            self.parser = GCNParser.get_model(self.config)
-        elif self.config['parser_type'] == 'gat':
-            self.parser = GATParser.get_model(self.config)
-        elif self.config['parser_type'] == 'gat_unbatched':
-            self.parser = GATParserUnbatched.get_model(self.config)
+        if config['parser_type'] == 'simple':
+            self.parser = SimpleParser.get_model(config) # base setting
+        if config['parser_type'] == 'triaffine':
+            self.parser = TriParser.get_model(config) # triaffine parser
+        elif config['parser_type'] == 'gnn':
+            self.parser = GNNParser.get_model(config)
+        elif config['parser_type'] == 'gcn':
+            self.parser = GCNParser.get_model(config)
+        elif config['parser_type'] == 'gat':
+            self.parser = GATParser.get_model(config)
+        elif config['parser_type'] == 'gat_unbatched':
+            self.parser = GATParserUnbatched.get_model(config)
+        elif config['parser_type'] == 'graph_rnn':
+            self.parser = GraphRNNBilinear(config)
         self.decoder = GraphDecoder(config=config,
-                                    tag_representation_dim=self.parser.tag_representation_dim,
-                                    n_edge_labels = self.parser.n_edge_labels)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config["model_name"])
+                                    tag_representation_dim=config['tag_representation_dim'],
+                                    n_edge_labels = config['n_edge_labels'])
+        self.tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
         self.mode = "train"
         self.parser.current_step, self._current_step = 0, 0        
 
@@ -100,20 +102,21 @@ class AttnParser(torch.nn.Module):
 
         # Parsing
         parser_output = self.parser(
-            encoded_text_input=encoder_output,
+            input=encoder_output,
             tag_embeddings=tagger_output.tag_embeddings,
             mask=mask,
             head_tags=head_tags,
             head_indices=head_indices,
             step_indices=step_indices,
             graph_laplacian=graph_laplacian,
+            mode=self.mode,
         )
 
         decoder_output = self.decoder(
             head_tag = parser_output['head_tag'],
             dep_tag = parser_output['dep_tag'],
-            head_indices = parser_output['head_indices'],
-            head_tags = parser_output['head_tags'],
+            head_indices = parser_output['head_indices'], # gold adjusted for sentinel
+            head_tags = parser_output['head_tags'], # gold adjusted for sentinel
             arc_logits = parser_output['arc_logits'],
             mask = parser_output['mask'],
             metadata = parser_output['metadata'],

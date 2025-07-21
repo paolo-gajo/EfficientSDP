@@ -79,7 +79,7 @@ custom_config = {
     'graph_rnn_hidden_edge': 500,
     'graph_rnn_node_layers': 4,
     'graph_rnn_edge_layers': 4,
-    'graph_rnn_m': 100,
+    'graph_rnn_m': 20,
 
     # model options
     'model_type': 'attn', # 'attn' or 'gen'

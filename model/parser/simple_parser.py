@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from model.parser.parser_nn import *
-from model.utils.nn_utils import prepend_ones
+from model.utils.nn_utils import adjust_for_sentinel
 from debug import save_heatmap
 import warnings
 import numpy as np
@@ -15,7 +15,6 @@ class SimpleParser(nn.Module):
         config: Dict,
         encoder: nn.LSTM,
         embedding_dim: int,
-        n_edge_labels: int,
         arc_representation_dim: int,
         tag_representation_dim: int,
         use_mst_decoding_for_validation: bool = True,
@@ -65,11 +64,10 @@ class SimpleParser(nn.Module):
             torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
             torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
         self.tag_representation_dim = tag_representation_dim
-        self.n_edge_labels = n_edge_labels
 
     def forward(
         self,
-        encoded_text_input: torch.FloatTensor,
+        input: torch.FloatTensor,
         tag_embeddings: torch.LongTensor,
         mask: torch.LongTensor,
         metadata: List[Dict[str, Any]] = [],
@@ -77,43 +75,44 @@ class SimpleParser(nn.Module):
         head_indices: torch.LongTensor = None,
         step_indices: torch.LongTensor = None,
         graph_laplacian: torch.LongTensor = None,
+        mode: str = None,
     ) -> Dict[str, torch.Tensor]:
 
         if self.config["tag_embedding_type"] != 'none':
-            encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
+            input = torch.cat([input, tag_embeddings], dim=-1)
 
         if self.encoder_h is not None:
             if self.config["parser_rnn_type"] != 'transformer':
                 # existing LSTM/RNN handling
                 lengths = mask.sum(dim=1).cpu()
                 packed_input = pack_padded_sequence(
-                    encoded_text_input, lengths, batch_first=True, enforce_sorted=False
+                    input, lengths, batch_first=True, enforce_sorted=False
                 )
                 packed_output, _ = self.encoder_h(packed_input)
-                encoded_text_input, _ = pad_packed_sequence(packed_output,
+                input, _ = pad_packed_sequence(packed_output,
                                                             batch_first=True,
-                                                            total_length=encoded_text_input.size(1))
+                                                            total_length=input.size(1))
             else:
                 # Transformer encoding
                 src_key_padding_mask = mask == 0
-                encoded_text_input = self.encoder_h(encoded_text_input, src_key_padding_mask=src_key_padding_mask)
+                input = self.encoder_h(input, src_key_padding_mask=src_key_padding_mask)
 
-        batch_size, _, encoding_dim = encoded_text_input.size()
+        batch_size, _, encoding_dim = input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         
         # Concatenate the head sentinel onto the sentence representation.
-        encoded_text_input = torch.cat([head_sentinel, encoded_text_input], dim=1)
+        input = torch.cat([head_sentinel, input], dim=1)
 
-        mask, head_indices, head_tags = prepend_ones(batch_size, mask, head_indices, head_tags)
+        mask, head_indices, head_tags = adjust_for_sentinel(batch_size, mask, head_indices, head_tags)
         
-        encoded_text_input = self._dropout(encoded_text_input)
+        input = self._dropout(input)
             
         # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
-        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
+        head_arc = self._dropout(F.elu(self.head_arc_feedforward(input)))
+        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(input)))
         # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(encoded_text_input)))
+        head_tag = self._dropout(F.elu(self.head_tag_feedforward(input)))
+        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(input)))
 
         arc_logits = self.arc_bilinear(head_arc, dept_arc)
 
@@ -193,14 +192,12 @@ class SimpleParser(nn.Module):
             embedding_dim = config["encoder_output_dim"] # 768
         else:
             raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
-        n_edge_labels = config["n_edge_labels"]
 
         encoder = get_encoder(config, embedding_dim)
         model_obj = cls(
             config=config,
             encoder=encoder,
             embedding_dim=embedding_dim,
-            n_edge_labels=n_edge_labels,
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],
             use_mst_decoding_for_validation=config['use_mst_decoding_for_validation'],

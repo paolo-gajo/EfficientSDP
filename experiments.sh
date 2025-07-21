@@ -84,12 +84,12 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-#   ade
-#   conll04
-#   scierc
-  erfgc
-#   scidtb
-#   enewt
+    ade
+    conll04
+    scierc
+    erfgc
+    scidtb
+    enewt
   )
 
 declare -a rnn_residual=(0 1)
@@ -165,7 +165,6 @@ while IFS= read -r combo; do
                 --use_parser_rnn $use_parser_rnn
                 --parser_rnn_hidden_size 400
                 --use_pred_tags $use_pred_tags
-                --rnn_residual $rnn_residual
                 "
     if [[ "${params[1]}" -gt 0  && "${params[3]}" == 'simple' ]]; then
         continue
@@ -173,7 +172,7 @@ while IFS= read -r combo; do
     if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
         continue
     fi
-    # echo ${cmd}
+    echo ${cmd}
     commands+=("$cmd")
 done <<< "$combinations"
 
