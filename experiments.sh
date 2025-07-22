@@ -37,8 +37,8 @@ cartesian_product() {
 }
 declare -a seed=(
     0
-    # 1
-    # 2
+    1
+    2
     # 3
     # 4
 )
@@ -69,10 +69,10 @@ declare -a parser_rnn_type_opts=(
     # transformer
 )
 declare -a top_k_opts=(
-    1
+    # 1
     # 2
     # 3
-    # 4
+    4
     )
 declare -a arc_norm_opts=(
     0
@@ -84,11 +84,11 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-    # ade
-    # conll04
-    # scierc
-    # erfgc
-    # scidtb
+    ade
+    conll04
+    scierc
+    erfgc
+    scidtb
     enewt
   )
 
@@ -125,7 +125,7 @@ combinations=$(cartesian_product array_names)
 # Training parameters
 training_steps=10000
 eval_steps=500
-save_suffix=gnn_enewt
+save_suffix=gnn_lstm
 
 use_tagger_rnn=1
 use_parser_rnn=1
