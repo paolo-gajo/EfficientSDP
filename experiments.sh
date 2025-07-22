@@ -188,9 +188,9 @@ if [[ -n "$SLURM_ARRAY_TASK_ID" ]]; then
 elif [[ $1 ]]; then
     for (( i=start; i<${#commands[@]}; i++ ))
     do
-        if [[ i -le 20 ]]; then
-            continue
-        fi
+        # if [[ i -le 20 ]]; then
+        #     continue
+        # fi
         echo "$((i+1)) of ${#commands[@]}"
         cmd="${commands[$i]}"
         echo "${cmd}"
