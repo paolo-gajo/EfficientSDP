@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch_geometric.nn import GCNConv
 from torch_geometric.data import Batch, Data
-from model.parser.parser_nn import *
+from model.utils.nn import *
 from model.decoder import masked_log_softmax
 import math
 from debug import save_heatmap
@@ -59,12 +59,8 @@ class GNNParser(nn.Module):
         config: Dict,
         encoder: nn.LSTM,
         embedding_dim: int,
-        n_edge_labels: int,
-        tag_embedder: nn.Linear,
         arc_representation_dim: int,
         tag_representation_dim: int,
-        use_mst_decoding_for_validation: bool = True,
-        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.config = config
@@ -76,10 +72,6 @@ class GNNParser(nn.Module):
         else:
             self.encoder_h = None
             encoder_dim = embedding_dim
-
-        if self.config["tag_embedding_type"] != 'none':
-            self.tag_embedder = tag_embedder
-            self.tag_dropout = nn.Dropout(config['tag_dropout'])
         
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
@@ -107,17 +99,15 @@ class GNNParser(nn.Module):
                                             tag_representation_dim,
                                             use_residual=True)
 
-        self._dropout = nn.Dropout(dropout)
+        self._dropout = nn.Dropout(self.config['mlp_dropout'])
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
-        self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
         self.apply(self._init_weights)
         self.tag_representation_dim = tag_representation_dim
-        self.n_edge_labels = n_edge_labels
 
     def forward(
         self,
-        encoded_text_input: torch.FloatTensor,
-        pos_tags: torch.LongTensor,
+        input: torch.FloatTensor,
+        tag_embeddings: torch.LongTensor,
         mask: torch.LongTensor,
         metadata: List[Dict[str, Any]] = [],
         head_tags: torch.LongTensor = None,
@@ -126,28 +116,27 @@ class GNNParser(nn.Module):
         graph_laplacian: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
 
-        if self.config["tag_embedding_type"] != 'none':
-            tag_embeddings = self.tag_dropout(F.relu(self.tag_embedder(pos_tags)))
-            encoded_text_input = torch.cat([encoded_text_input, tag_embeddings], dim=-1)
+        if tag_embeddings is not None:
+            input = torch.cat([input, tag_embeddings], dim=-1)
 
         if self.encoder_h is not None:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.
             packed_input = pack_padded_sequence(
-                encoded_text_input, lengths, batch_first=True, enforce_sorted=False
+                input, lengths, batch_first=True, enforce_sorted=False
             )
             packed_output, _ = self.encoder_h(packed_input)
             # Unpack the sequence, ensuring the output has the original sequence length.
-            encoded_text_input, _ = pad_packed_sequence(packed_output,
+            input, _ = pad_packed_sequence(packed_output,
                                                         batch_first=True,
-                                                        total_length=encoded_text_input.size(1))
+                                                        total_length=input.size(1))
 
-        batch_size, _, encoding_dim = encoded_text_input.size()
+        batch_size, _, encoding_dim = input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         
         # Concatenate the head sentinel onto the sentence representation.
-        encoded_text_input = torch.cat([head_sentinel, encoded_text_input], dim=1)
+        input = torch.cat([head_sentinel, input], dim=1)
 
         mask_ones = mask.new_ones(batch_size, 1)
         mask = torch.cat([mask_ones, mask], dim = 1)
@@ -161,22 +150,22 @@ class GNNParser(nn.Module):
                 [head_tags.new_zeros(batch_size, 1), head_tags], dim=1
             )
         
-        encoded_text_input = self._dropout(encoded_text_input)
+        input = self._dropout(input)
         
             
         # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
-        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
+        head_arc = self._dropout(F.elu(self.head_arc_feedforward(input)))
+        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(input)))
         # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(encoded_text_input)))
+        head_tag = self._dropout(F.elu(self.head_tag_feedforward(input)))
+        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(input)))
 
         # the following is based on 'Graph-based Dependency Parsing with Graph Neural Networks'
         # https://aclanthology.org/P19-1237/
 
         gnn_losses = []
 
-        _, seq_len, _ = encoded_text_input.size()
+        _, seq_len, _ = input.size()
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()
         for k in range(self.config['gnn_layers']):
@@ -301,12 +290,8 @@ class GNNParser(nn.Module):
             config=config,
             encoder=encoder,
             embedding_dim=embedding_dim,
-            n_edge_labels=n_edge_labels,
-            tag_embedder=tag_embedder,
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],
-            dropout=0.3,
-            use_mst_decoding_for_validation = config['use_mst_decoding_for_validation']
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj

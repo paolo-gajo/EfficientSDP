@@ -3,11 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from debug.viz import save_heatmap, save_batch_heatmap
-from model.utils.nn_utils import adjust_for_sentinel
-from model.utils.rnn_utils import adj_indices_to_adj_matrix, make_adj_sequence, reshape_adj
-from model.parser.parser_nn import BilinearMatrixAttention
+from model.utils.nn import adjust_for_sentinel, BilinearMatrixAttention, adj_indices_to_adj_matrix
+from model.utils.rnn_utils import make_adj_sequence, reshape_adj
 from typing import List, Dict, Any
-from torch_geometric.utils import to_dense_adj
 
 class GraphRNNBilinear(nn.Module):
     def __init__(self, config):
@@ -76,7 +74,7 @@ class GraphRNNBilinear(nn.Module):
                 mode: str = None,
                 ):
         
-        if self.config["tag_embedding_type"] != 'none':
+        if tag_embeddings is not None:
             input = torch.cat([input, tag_embeddings], dim=-1)
         
         # input dim [B, S, D]

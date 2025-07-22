@@ -253,32 +253,36 @@ class AttnParser(torch.nn.Module):
             self.parser.current_step = val
 
     def freeze_gnn(self):
-        for param in self.parser.conv1_arc.parameters():
-            param.requires_grad = False
-        for param in self.parser.conv2_arc.parameters():
-            param.requires_grad = False
-        for param in self.parser.conv1_rel.parameters():
-            param.requires_grad = False
-        for param in self.parser.conv2_rel.parameters():
-            param.requires_grad = False
-        for layer in self.parser.arc_bilinear[:-1]:
-            for param in layer.parameters():
+        if self.config['gnn_layers'] > 0:
+            for param in self.parser.conv1_arc.parameters():
                 param.requires_grad = False
-        print(f"GNN frozen at step {self.current_step}!")
+            for param in self.parser.conv2_arc.parameters():
+                param.requires_grad = False
+            for param in self.parser.conv1_rel.parameters():
+                param.requires_grad = False
+            for param in self.parser.conv2_rel.parameters():
+                param.requires_grad = False
+            for layer in self.parser.arc_bilinear[:-1]:
+                for param in layer.parameters():
+                    param.requires_grad = False
+            print(f"Parser GNN conv layers FROZEN at step {self.current_step}!")
+            print(f"Parser tail bilinear layers FROZEN at step {self.current_step}!")
 
     def unfreeze_gnn(self):
-        for param in self.parser.conv1_arc.parameters():
-            param.requires_grad = True
-        for param in self.parser.conv2_arc.parameters():
-            param.requires_grad = True
-        for param in self.parser.conv1_rel.parameters():
-            param.requires_grad = True
-        for param in self.parser.conv2_rel.parameters():
-            param.requires_grad = True
-        for layer in self.parser.arc_bilinear[:-1]:
-            for param in layer.parameters():
+        if self.config['gnn_layers'] > 0:
+            for param in self.parser.conv1_arc.parameters():
                 param.requires_grad = True
-        print(f"GNN unfrozen at step {self.current_step}!")
+            for param in self.parser.conv2_arc.parameters():
+                param.requires_grad = True
+            for param in self.parser.conv1_rel.parameters():
+                param.requires_grad = True
+            for param in self.parser.conv2_rel.parameters():
+                param.requires_grad = True
+            for layer in self.parser.arc_bilinear[:-1]:
+                for param in layer.parameters():
+                    param.requires_grad = True
+            print(f"Parser GNN conv layers UNFROZEN at step {self.current_step}!")
+            print(f"Parser tail bilinear layers UNFROZEN at step {self.current_step}!")
         return True
     
     def init_gnn_biaffines(self, optimizer):

@@ -1,4 +1,3 @@
-from .parser_nn import *
 from .graph_rnn import *
 from .simple_parser import SimpleParser
 from .tri_parser import TriParser

@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from model.parser.parser_nn import *
-from model.utils.nn_utils import adjust_for_sentinel
+from model.utils.nn import *
+from model.utils.nn import adjust_for_sentinel
+from model.utils.nn import get_encoder
 from debug import save_heatmap
-import warnings
 import numpy as np
 
 class SimpleParser(nn.Module):
@@ -17,7 +17,6 @@ class SimpleParser(nn.Module):
         embedding_dim: int,
         arc_representation_dim: int,
         tag_representation_dim: int,
-        use_mst_decoding_for_validation: bool = True,
     ) -> None:
         super().__init__()
         self.config = config
@@ -31,9 +30,6 @@ class SimpleParser(nn.Module):
             encoder_dim = embedding_dim
         self.lstm_input_size = embedding_dim
         self.lstm_hidden_size = encoder_dim
-
-        if self.config["tag_embedding_type"] != 'none':
-            self.tag_dropout = nn.Dropout(config['tag_dropout'])
         
         self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
         self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
@@ -51,24 +47,13 @@ class SimpleParser(nn.Module):
 
         self._dropout = nn.Dropout(config['mlp_dropout'])
         self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
-        self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
-        if self.config['parser_init'] == 'xu':
-            self.apply(self._init_weights_xavier_uniform)
-        elif self.config['parser_init'] == 'norm':
-            self.apply(self._init_norm)
-        elif self.config['parser_init'] == 'xu+norm':
-            self.apply(self._init_weights_xavier_uniform)
-            torch.nn.init.normal_(self.head_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
-            torch.nn.init.normal_(self.dept_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
-        if self.config['bma_init'] == 'norm':
-            torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
-            torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+        self._run_inits(encoder_dim, arc_representation_dim)
         self.tag_representation_dim = tag_representation_dim
 
     def forward(
         self,
         input: torch.FloatTensor,
-        tag_embeddings: torch.LongTensor,
+        tag_embeddings: torch.Tensor,
         mask: torch.LongTensor,
         metadata: List[Dict[str, Any]] = [],
         head_tags: torch.LongTensor = None,
@@ -78,7 +63,7 @@ class SimpleParser(nn.Module):
         mode: str = None,
     ) -> Dict[str, torch.Tensor]:
 
-        if self.config["tag_embedding_type"] != 'none':
+        if tag_embeddings is not None:
             input = torch.cat([input, tag_embeddings], dim=-1)
 
         if self.encoder_h is not None:
@@ -128,6 +113,19 @@ class SimpleParser(nn.Module):
         }
 
         return output
+
+    def _run_inits(self, encoder_dim, arc_representation_dim):
+        if self.config['parser_init'] == 'xu':
+            self.apply(self._init_weights_xavier_uniform)
+        elif self.config['parser_init'] == 'norm':
+            self.apply(self._init_norm)
+        elif self.config['parser_init'] == 'xu+norm':
+            self.apply(self._init_weights_xavier_uniform)
+            torch.nn.init.normal_(self.head_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+            torch.nn.init.normal_(self.dept_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+        if self.config['bma_init'] == 'norm':
+            torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+            torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
 
     def _init_norm(self, module):
         """
@@ -200,78 +198,7 @@ class SimpleParser(nn.Module):
             embedding_dim=embedding_dim,
             arc_representation_dim=config['arc_representation_dim'],
             tag_representation_dim=config['tag_representation_dim'],
-            use_mst_decoding_for_validation=config['use_mst_decoding_for_validation'],
         )
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj
 
-def get_encoder(config, embedding_dim):
-    kwargs = {
-        'input_size': embedding_dim,
-        'hidden_size': config["parser_rnn_hidden_size"],
-        'num_layers': config['parser_rnn_layers'],
-        'batch_first': True,
-        'bidirectional': True,
-        'dropout': config['rnn_dropout'],
-    }
-    custom_kwargs = {
-        'rnn_residual': config['rnn_residual'],
-    }
-    parser_rnn_type = config['parser_rnn_type']
-    if config['use_parser_rnn'] \
-    and config['parser_rnn_layers'] > 0 \
-    and config['parser_rnn_hidden_size'] > 0:
-        if parser_rnn_type == 'lstm':
-            encoder = nn.LSTM(**kwargs)
-        elif parser_rnn_type == 'normlstm':
-            encoder = LayerNormLSTM(**kwargs, **custom_kwargs)
-        elif parser_rnn_type == 'rnn':
-            encoder = nn.RNN(**kwargs)
-        elif parser_rnn_type == 'normrnn':
-            encoder = LayerNormRNN(**kwargs, **custom_kwargs)
-        elif parser_rnn_type == 'gru':
-            encoder = nn.GRU(**kwargs)
-        elif parser_rnn_type == 'transformer':
-            encoder = TransformerParserEncoder(
-                input_dim=embedding_dim,
-                num_layers=config['parser_rnn_layers'],
-            )
-    else:
-        warnings.warn(f"Unknown parser_rnn_type {parser_rnn_type}, setting encoder to None.")
-        encoder = None
-    print(f'Using {encoder.__class__} as parser encoder!')
-    return encoder
-
-class TransformerParserEncoder(nn.Module):
-    def __init__(self, input_dim, num_layers=12):
-        super().__init__()
-
-        self.hidden_size   = 768          # d_model
-        self.num_heads     = 12
-        self.intermediate  = 3072         # dim_feedforward
-
-        # Project raw features to the BERT hidden size
-        self.lin_in = nn.Linear(input_dim, self.hidden_size)
-
-        layer = nn.TransformerEncoderLayer(
-            d_model         = self.hidden_size,
-            nhead           = self.num_heads,
-            dim_feedforward = self.intermediate,
-            dropout         = 0.1,
-            activation      = "gelu",
-            layer_norm_eps  = 1e-12,
-            batch_first     = True          # (batch, seq, hidden)
-        )
-
-        self.encoder = nn.TransformerEncoder(
-            encoder_layer = layer,
-            num_layers    = num_layers
-        )
-
-        self.lin_out = nn.Linear(self.hidden_size, input_dim)
-
-    def forward(self, x, src_key_padding_mask):
-        x = self.lin_in(x)          # (B, L, 768)
-        x = self.encoder(x, src_key_padding_mask=src_key_padding_mask)      # (B, L, 768)
-        x = self.lin_out(x)
-        return x

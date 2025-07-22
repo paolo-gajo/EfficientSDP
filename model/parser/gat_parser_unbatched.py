@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.data import Data, Batch
-from model.parser.parser_nn import *
+from model.utils.nn import *
 import math
 
 class GATParserUnbatched(nn.Module):
@@ -73,8 +73,8 @@ class GATParserUnbatched(nn.Module):
 
     def forward(
         self,
-        encoded_text_input: torch.FloatTensor,
-        pos_tags: torch.LongTensor,
+        input: torch.FloatTensor,
+        tag_embeddings: torch.LongTensor,
         mask: torch.LongTensor,
         metadata: list = [],
         head_tags: torch.LongTensor = None,
@@ -83,29 +83,29 @@ class GATParserUnbatched(nn.Module):
         graph_laplacian: torch.LongTensor = None,
     ) -> dict:
         
-        batch_size, _, encoding_dim = encoded_text_input.size()
+        batch_size, _, encoding_dim = input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         mask = torch.cat([torch.ones(batch_size, 1, dtype=torch.long, device=self.config['device']), mask], dim=1)
         
         # Concatenate the head sentinel onto the sentence representation.
-        encoded_text_input = torch.cat([head_sentinel, encoded_text_input], dim=1)
+        input = torch.cat([head_sentinel, input], dim=1)
         
         if head_indices is not None:
             head_indices = torch.cat([head_indices.new_zeros(batch_size, 1), head_indices], dim=1)
         if head_tags is not None:
             head_tags = torch.cat([head_tags.new_zeros(batch_size, 1), head_tags], dim=1)
         
-        encoded_text_input = self._dropout(encoded_text_input)
+        input = self._dropout(input)
         
         # Compute initial representations.
         # (batch_size, sequence_length, arc_representation_dim)
-        head_arc = self._dropout(F.elu(self.head_arc_feedforward(encoded_text_input)))
-        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(encoded_text_input)))
+        head_arc = self._dropout(F.elu(self.head_arc_feedforward(input)))
+        dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(input)))
         # (batch_size, sequence_length, tag_representation_dim)
-        head_tag = self._dropout(F.elu(self.head_tag_feedforward(encoded_text_input)))
-        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(encoded_text_input)))
+        head_tag = self._dropout(F.elu(self.head_tag_feedforward(input)))
+        dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(input)))
 
-        _, seq_len, _ = encoded_text_input.size()
+        _, seq_len, _ = input.size()
         gnn_losses = []
         valid_positions = mask.sum() - batch_size
         float_mask = mask.float()

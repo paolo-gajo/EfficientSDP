@@ -33,19 +33,19 @@ class Tagger(nn.Module):
                 self.seq_encoder = nn.LSTM(
                     input_size=encoder_output_size,
                     hidden_size=hidden_size_tagger,
-                    num_layers=1,
+                    num_layers=config['tagger_rnn_layers'],
                     batch_first=True,
                     bidirectional=True,
-                    dropout=0.3,
+                    dropout=config['tagger_dropout'] if config['tagger_rnn_layers'] > 1 else 0,
                 )
             elif tagger_rnn_type == 'gru':
                 self.seq_encoder = nn.GRU(
                     input_size=encoder_output_size,
                     hidden_size=hidden_size_tagger,
-                    num_layers=1,
+                    num_layers=config['tagger_rnn_layers'],
                     batch_first=True,
                     bidirectional=True,
-                    dropout=0.3,
+                    dropout=config['tagger_dropout'] if config['tagger_rnn_layers'] > 1 else 0,
                 )
             else:
                 warnings.warn(f"Tagger RNN type `{tagger_rnn_type}` is neither `gru` nor `lstm`. Setting it to None.")
@@ -106,28 +106,28 @@ class Tagger(nn.Module):
             else:
                 nn.init.xavier_uniform_(module.bias)
 
-    def forward(self, encoder_reps: torch.Tensor, mask: torch.Tensor, labels=None):
+    def forward(self, input: torch.Tensor, mask: torch.Tensor, labels=None):
         """
         Uses encoder representations to predict a tag for each token.
         
         Args:
-            encoder_reps: Tensor of shape (batch_size, seq_len, hidden_size) from the encoder.
+            input: Tensor of shape (batch_size, seq_len, hidden_size) from the encoder.
             mask: Binary mask of shape (batch_size, seq_len) where 1 indicates valid tokens.
             labels: (Optional) Tensor of shape (batch_size, seq_len) containing true tag labels.
         """
         self.labels = labels
-        encoder_reps = self.dropout(encoder_reps)
+        input = self.dropout(input)
         
         if self.config['use_tagger_rnn']:
             # Compute lengths from the binary mask.
             lengths = mask.sum(dim=1).cpu()
             # Pack the padded sequence using the lengths.
-            packed_input = pack_padded_sequence(encoder_reps, lengths, batch_first=True, enforce_sorted=False)
+            packed_input = pack_padded_sequence(input, lengths, batch_first=True, enforce_sorted=False)
             packed_output, _ = self.seq_encoder(packed_input)
             # Unpack the sequence, ensuring the output has the original sequence length.
-            encoder_reps, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=encoder_reps.size(1))
-        
-        logits = self.classifier(encoder_reps)
+            input, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=input.size(1))
+
+        logits = self.classifier(input)
         
         # Compute loss if in training or validation mode.
         if self.mode in ['train', 'validation']:
@@ -138,6 +138,8 @@ class Tagger(nn.Module):
         
         if self.config["tag_embedding_type"] != 'none':
             output.tag_embeddings = self.make_embeddings(output, labels)
+        else:
+            output.tag_embeddings = None
         
         return output
 

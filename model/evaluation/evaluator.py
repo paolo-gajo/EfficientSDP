@@ -43,7 +43,7 @@ def filter_get_P_R_F1(gts,
     union = len(gts)
     accuracy = num_overlap / union if union else 0.0
 
-    return round(precision,4), round(recall, 4), round(f1, 4), round(accuracy, 4)
+    return round(precision, 4), round(recall, 4), round(f1, 4), round(accuracy, 4)
 
 def compute_uas_las(
     model_output: List[Dict],

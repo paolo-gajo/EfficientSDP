@@ -1,21 +1,7 @@
 import torch
-from torch_geometric.utils import to_dense_adj
 from model.utils.io_utils import load_json
-from model.utils.nn_utils import adjust_for_sentinel
+from model.utils.nn import adjust_for_sentinel, adj_indices_to_adj_matrix
 import matplotlib.pyplot as plt
-
-def adj_indices_to_adj_matrix(targets: torch.LongTensor, dep_to_head = False):
-    B, S = targets.shape
-    indices = torch.arange(S).repeat(B, 1).to(targets.device)
-    edge_index = torch.stack([targets, indices])
-    adj_batch_list = []
-    for b in range(B):
-        adj = to_dense_adj(edge_index[:, b, :]).squeeze()
-        adj_batch_list.append(adj)
-    adj_batch = torch.stack(adj_batch_list)
-    if dep_to_head:
-        adj_batch = adj_batch.transpose(1, 2)
-    return adj_batch
 
 def make_adj_sequence(adj_square: torch.LongTensor, M: int = 20):
     B, S, S = adj_square.shape
@@ -55,13 +41,13 @@ def main():
     head_indices = torch.tensor(head_list)
     mask, head_indices, head_tags = adjust_for_sentinel(None, head_indices, None)
     print(head_indices, head_indices.shape)
-    adj_square = adj_indices_to_adj_matrix(head_indices).to(dtype=torch.long)
+    adj_square = adj_indices_to_adj_matrix(head_indices).long()
     print(adj_square, adj_square.shape)
     # adj_square = adj_square[:1, :, :]
     print(adj_square[0, 4, 1])
     adj_seq = make_adj_sequence(adj_square)  # shape (B*S, M+1, 1)
     adj_seq = adj_seq.squeeze(-1)
-    print(adj_seq, adj_seq.shape)
+    print(adj_seq.long(), adj_seq.shape)
 
 if __name__ == "__main__":
     main()

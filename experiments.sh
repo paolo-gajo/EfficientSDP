@@ -37,8 +37,8 @@ cartesian_product() {
 }
 declare -a seed=(
     0
-    1
-    2
+    # 1
+    # 2
     # 3
     # 4
 )
@@ -57,8 +57,8 @@ declare -a gnn_layers_opts=(
     3
     )
 declare -a parser_type_opts=(
-    # gat
-    simple
+    gat
+    # simple
     )
 declare -a parser_rnn_type_opts=(
     # gru
@@ -84,11 +84,11 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-    ade
-    conll04
-    scierc
-    erfgc
-    scidtb
+    # ade
+    # conll04
+    # scierc
+    # erfgc
+    # scidtb
     enewt
   )
 
@@ -125,7 +125,7 @@ combinations=$(cartesian_product array_names)
 # Training parameters
 training_steps=10000
 eval_steps=500
-save_suffix=gnn
+save_suffix=gnn_enewt
 
 use_tagger_rnn=1
 use_parser_rnn=1
@@ -188,8 +188,11 @@ if [[ -n "$SLURM_ARRAY_TASK_ID" ]]; then
 elif [[ $1 ]]; then
     for (( i=start; i<${#commands[@]}; i++ ))
     do
+        if [[ i -le 20 ]]; then
+            continue
+        fi
         echo "$((i+1)) of ${#commands[@]}"
-        cmd="${commands[$i]} --save_suffix ${i}"
+        cmd="${commands[$i]}"
         echo "${cmd}"
         $cmd
     done

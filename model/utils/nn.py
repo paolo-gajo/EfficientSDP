@@ -1,11 +1,47 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch_geometric.utils import to_dense_adj
 from torch.nn.utils.rnn import PackedSequence, pad_packed_sequence, pack_padded_sequence
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Set
+import warnings
 import math
 
 EPS = 1e-10
+
+class TransformerParserEncoder(nn.Module):
+    def __init__(self, input_dim, num_layers=12):
+        super().__init__()
+
+        self.hidden_size   = 768          # d_model
+        self.num_heads     = 12
+        self.intermediate  = 3072         # dim_feedforward
+
+        # Project raw features to the BERT hidden size
+        self.lin_in = nn.Linear(input_dim, self.hidden_size)
+
+        layer = nn.TransformerEncoderLayer(
+            d_model         = self.hidden_size,
+            nhead           = self.num_heads,
+            dim_feedforward = self.intermediate,
+            dropout         = 0.1,
+            activation      = "gelu",
+            layer_norm_eps  = 1e-12,
+            batch_first     = True          # (batch, seq, hidden)
+        )
+
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer = layer,
+            num_layers    = num_layers
+        )
+
+        self.lin_out = nn.Linear(self.hidden_size, input_dim)
+
+    def forward(self, x, src_key_padding_mask):
+        x = self.lin_in(x)          # (B, L, 768)
+        x = self.encoder(x, src_key_padding_mask=src_key_padding_mask)      # (B, L, 768)
+        x = self.lin_out(x)
+        return x
 
 class LayerNormLSTM(nn.Module):
     """
@@ -355,7 +391,6 @@ class BilinearMatrixAttention(nn.Module):
                 return adj / self.scale_norm
         else:
             return adj
-
 
 class TrilinearMatrixAttention(nn.Module):
     def __init__(
@@ -726,3 +761,97 @@ def batch_top_k(adj_matrices: List[torch.Tensor], k: int):
     edge_attr = torch.cat(edge_attr_list, dim=0)
     
     return edge_index, edge_attr
+
+def adjust_for_sentinel(mask, head_indices, head_tags):
+    if mask is not None:
+        mask_ones = mask.new_ones(mask.shape[0], 1)
+        mask = torch.cat([mask_ones, mask], dim = 1)
+    
+    if head_indices is not None:
+        head_indices = torch.cat(
+            [head_indices.new_zeros(head_indices.shape[0], 1), head_indices], dim=1
+        )
+
+    if head_tags is not None:
+        head_tags = torch.cat(
+            [head_tags.new_zeros(head_tags.shape[0], 1), head_tags], dim=1
+        )
+    return mask, head_indices, head_tags
+
+def adj_indices_to_adj_matrix(targets: torch.LongTensor) -> torch.Tensor:
+    """
+    targets : (B, S) – head indices for each token
+    returns : (B, S, S) – dense adjacency matrices with adj[dep, head] = 1
+    """
+    B, S = targets.shape
+    device = targets.device
+
+    dep = torch.arange(S, device=device).expand(B, S)
+    edge_index = torch.stack([dep.reshape(-1), targets.reshape(-1)], dim=0)  # (2, B*S)
+    batch_vec  = torch.arange(B, device=device).repeat_interleave(S)         # (B*S,)
+
+    adj = to_dense_adj(edge_index, batch=batch_vec, max_num_nodes=S)         # (B, S, S)
+    return adj
+
+def graph_to_edge_index(graph: Set[Tuple]):
+    if not (len(graph)) > 0:
+        return torch.empty(0)
+    return torch.tensor(list(graph), dtype=torch.long).T
+
+def edge_index_to_adj_matrix(edge_index: torch.Tensor):
+    if not edge_index.numel() > 0:
+        return edge_index
+    edge_index = edge_index
+    k = torch.max(edge_index) + 1
+    adj = torch.zeros((k, k), dtype=torch.float)
+    adj[edge_index[0], edge_index[1]] = 1
+    return adj
+
+def get_deg_matrix(adj_matrix: torch.Tensor):
+    N = adj_matrix.shape[0]
+    degs = []
+    for i in range(N):
+        degs.append(sum(adj_matrix[i]))
+    deg_matrix = torch.diag(torch.tensor(degs))
+    return deg_matrix
+
+def get_graph_laplacian(deg_m: torch.Tensor, adj_m: torch.Tensor):
+    L = deg_m - adj_m
+    return L
+
+def get_encoder(config, embedding_dim):
+    kwargs = {
+        'input_size': embedding_dim,
+        'hidden_size': config["parser_rnn_hidden_size"],
+        'num_layers': config['parser_rnn_layers'],
+        'batch_first': True,
+        'bidirectional': True,
+        'dropout': config['rnn_dropout'],
+    }
+    custom_kwargs = {
+        'rnn_residual': config['rnn_residual'],
+    }
+    parser_rnn_type = config['parser_rnn_type']
+    if config['use_parser_rnn'] \
+    and config['parser_rnn_layers'] > 0 \
+    and config['parser_rnn_hidden_size'] > 0:
+        if parser_rnn_type == 'lstm':
+            encoder = nn.LSTM(**kwargs)
+        elif parser_rnn_type == 'normlstm':
+            encoder = LayerNormLSTM(**kwargs, **custom_kwargs)
+        elif parser_rnn_type == 'rnn':
+            encoder = nn.RNN(**kwargs)
+        elif parser_rnn_type == 'normrnn':
+            encoder = LayerNormRNN(**kwargs, **custom_kwargs)
+        elif parser_rnn_type == 'gru':
+            encoder = nn.GRU(**kwargs)
+        elif parser_rnn_type == 'transformer':
+            encoder = TransformerParserEncoder(
+                input_dim=embedding_dim,
+                num_layers=config['parser_rnn_layers'],
+            )
+    else:
+        warnings.warn(f"Unknown parser_rnn_type {parser_rnn_type}, setting encoder to None.")
+        encoder = None
+    print(f'Using {encoder.__class__} as parser encoder!')
+    return encoder

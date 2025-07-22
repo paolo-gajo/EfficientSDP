@@ -22,7 +22,7 @@ def set_save_dir(save_dir, save_suffix = '', default_save_dir = './results'):
     if not save_dir:
         save_dir = default_save_dir
         if save_suffix:
-            save_dir = os.path.join(save_dir, save_suffix)
+            save_dir = os.path.join(save_dir, save_suffix, get_current_time_string())
         else:
             save_dir = os.path.join(save_dir, get_current_time_string())
     

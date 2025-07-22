@@ -40,24 +40,28 @@ custom_config = {
     'use_parser_rnn': 1, 
     'parser_rnn_hidden_size': 400,
     'parser_rnn_layers': 3,
+    'tagger_rnn_layers': 1,
     'tagger_rnn_type': 'lstm', # 'gru', 'lstm'
     'parser_rnn_type': 'lstm', # 'gru', 'lstm', 'rnn', 'normlstm', 'normrnn', 'transformer'
     'tag_embedding_type': 'linear', # 'linear', 'embedding', 'none'
+    'tagger_dropout': 0.3,
 
     # parser options
     'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', 'gat_unbatched', 'dgm', 'gnn2'
     'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
     'bma_init': 'xu', # 'xu', 'norm'
     'arc_norm': 1,
+    'mlp_dropout': 0.3,
+
     # gat
     'gnn_layers': 1,
-    'mlp_dropout': 0.3,
     'rnn_dropout': 0.3,
-    'rnn_residual': 0,
     'gnn_dropout': 0,
     'gnn_activation': 'tanh',
+
+    # lstmnorm
+    'rnn_residual': 0,
     'use_gnn_steps': -1,
-    'current_step': 0,
     'parser_residual': 0,
     'bias_type': 'simple',
     'biaffine_activation': None,
@@ -106,6 +110,7 @@ custom_config = {
     'use_encoder_attn': 0,
     'output_edge_scores': 1,
     'tag_dropout': 0.2,
+    'current_step': 0,
 
     # training options
     'use_warmup': 0,

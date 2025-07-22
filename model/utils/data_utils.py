@@ -4,7 +4,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data._utils.collate import default_collate
 from typing import List, Dict, Tuple, Set
 from model.utils.sys_utils import load_json
-from model.utils.nn_utils import graph_to_edge_index, get_deg_matrix, get_graph_laplacian, edge_index_to_adj_matrix
+from model.utils.nn import graph_to_edge_index, get_deg_matrix, get_graph_laplacian, edge_index_to_adj_matrix
 from networkx import DiGraph, all_topological_sorts, from_edgelist
 from itertools import permutations
 import numpy as np
