@@ -2,6 +2,7 @@
 #SBATCH -J gnn
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
+#SBATCH --ntasks-per-node=4
 #SBATCH --gres=gpu:1
 #SBATCH --time=06:00:00
 #SBATCH --output=./.slurm/%A/%a_output.log
@@ -123,8 +124,9 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-training_steps=10000
+training_steps=5000
 eval_steps=500
+
 save_suffix=gnn_lstm
 
 use_tagger_rnn=1
@@ -172,9 +174,10 @@ while IFS= read -r combo; do
     if [[ "${params[1]}" -gt 0  && "${params[3]}" == 'simple' ]]; then
         continue
     fi
-    if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
-        continue
-    fi
+    # if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
+    #     echo here
+    #     continue
+    # fi
     # echo ${cmd}
     commands+=("$cmd")
 done <<< "$combinations"
@@ -188,9 +191,6 @@ if [[ -n "$SLURM_ARRAY_TASK_ID" ]]; then
 elif [[ $1 ]]; then
     for (( i=start; i<${#commands[@]}; i++ ))
     do
-        # if [[ i -le 20 ]]; then
-        #     continue
-        # fi
         echo "$((i+1)) of ${#commands[@]}"
         cmd="${commands[$i]}"
         echo "${cmd}"
