@@ -16,13 +16,11 @@ def save_python_command(file_path, args):
     cmd = 'python3 ' + ' '.join(args) + '\n'
     write_text(file_path, cmd)
 
-def save_reproduce_training_cmd(script_name, config, args, file_path):
+def save_reproduce_training_cmd(script_name, config, file_path):
     """
         Build full training command to get exact same training
     """
-    config_new = deepcopy(config)
-    config_new.update(args)
-    cmd = f'python3 {script_name} --opts ' + ' '.join([f'--{key} {value}' for key, value in config_new.items()]) + '\n'
+    cmd = f'python3 {script_name} --opts ' + ' '.join([f'--{key} {value}' for key, value in config.items()]) + '\n'
     write_text(file_path, cmd)
 
 def dict_as_readable_string(input_dict):

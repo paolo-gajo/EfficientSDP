@@ -21,8 +21,8 @@ def main():
     # string_args = "--model_type attn --parser_type graph_rnn --graph_rnn_pred_type bilinear --dataset_name ade --training_steps 500 --eval_steps 500" # used for debugging, leave empty for default behavior
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
-    # print('Config:\n\n', json.dumps(config, indent=4))
-    print('Args:\n\n', json.dumps(args, indent=4))
+    print('Config:\n\n', json.dumps(config, indent=4))
+    # print('Args:\n\n', json.dumps(args, indent=4))
     print(f"Will save to: {config['save_dir']}")
     
     # save config in advance in case training fails
@@ -33,7 +33,7 @@ def main():
     cmd_file = os.path.join(config['save_dir'], 'train_command.txt')
     save_python_command(cmd_file, sys.argv)
     reproduce_training_cmd_file = os.path.join(config['save_dir'], 'full_train_reproduce_cmd.txt')
-    save_reproduce_training_cmd(sys.argv[0], config, args, reproduce_training_cmd_file)
+    save_reproduce_training_cmd(sys.argv[0], config, reproduce_training_cmd_file)
 
     # data
     dataloader = build_dataloader(config)
