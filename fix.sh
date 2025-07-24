@@ -7,7 +7,8 @@
 #SBATCH --output=./.slurm/%A/%a_output.log
 #SBATCH --error=./.slurm/%A/%a_error.log
 #SBATCH --mem=64g
-#SBATCH --array=0-1
+#SBATCH --array=0-N
+
 slurm_dir=./.slurm/$SLURM_ARRAY_JOB_ID
 mkdir -p $slurm_dir
 echo Creating directory: $slurm_dir

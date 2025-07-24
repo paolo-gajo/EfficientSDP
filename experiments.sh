@@ -37,8 +37,8 @@ cartesian_product() {
 }
 declare -a seed=(
     0
-    # 1
-    # 2
+    1
+    2
     # 3
     # 4
 )
@@ -69,10 +69,10 @@ declare -a parser_rnn_type_opts=(
     # transformer
 )
 declare -a top_k_opts=(
-    1
+    # 1
     # 2
     # 3
-    # 4
+    4
     )
 declare -a arc_norm_opts=(
     0
@@ -84,11 +84,11 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-    # ade
-    # conll04
-    # scierc
-    # erfgc
-    # scidtb
+    ade
+    conll04
+    scierc
+    erfgc
+    scidtb
     enewt
   )
 
@@ -123,9 +123,10 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-training_steps=10000
+training_steps=5000
 eval_steps=500
-save_suffix=gnn_enewt
+
+save_suffix=gnn_lstm
 
 use_tagger_rnn=1
 use_parser_rnn=1
@@ -172,9 +173,10 @@ while IFS= read -r combo; do
     if [[ "${params[1]}" -gt 0  && "${params[3]}" == 'simple' ]]; then
         continue
     fi
-    if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
-        continue
-    fi
+    # if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
+    #     echo here
+    #     continue
+    # fi
     # echo ${cmd}
     commands+=("$cmd")
 done <<< "$combinations"
@@ -188,9 +190,6 @@ if [[ -n "$SLURM_ARRAY_TASK_ID" ]]; then
 elif [[ $1 ]]; then
     for (( i=start; i<${#commands[@]}; i++ ))
     do
-        # if [[ i -le 20 ]]; then
-        #     continue
-        # fi
         echo "$((i+1)) of ${#commands[@]}"
         cmd="${commands[$i]}"
         echo "${cmd}"
