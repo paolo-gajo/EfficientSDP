@@ -345,6 +345,7 @@ class GraphDataset(Dataset):
             encoding = self.tokenizer(sample['words'],
                                         is_split_into_words = True,
                                         return_tensors = 'pt',
+                                        truncation = True,
                                         # padding = 'max_length' if self.padding else False,
                                         )
             word_ids = torch.as_tensor([elem if elem is not None else -100 for elem in encoding.word_ids()])

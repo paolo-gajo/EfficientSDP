@@ -35,16 +35,18 @@ def set_save_dir(save_dir, save_suffix = '', default_save_dir = './results'):
     return save_dir
 
 def set_labels(config: Dict):
-    if config['dataset_name'] in ['scidtb', 'enewt']:
-        config['test_ignore_edge_dep'] = ['punct']
+    if config['dataset_name'] in ['scidtb', 'enewt', 'UD_Arabic-PADT', 'UD_Chinese-GSD', 'UD_Italian-ISDT', 'UD_Japanese-GSD', 'UD_Spanish-AnCora', 'UD_Wolof-WTB',]:
         config['test_ignore_tag'] = []
         config['test_ignore_edges'] = []
+        config['test_ignore_edge_dep'] = ['punct']
     elif config['dataset_name'] in ['ade', 'conll04', 'scierc']:
+        config['test_ignore_tag'] = ['O', 'no_label']
+        config['test_ignore_edges'] = ['0']
         config['test_ignore_edge_dep'] = ['root']
-        config['test_ignore_edges'] = ['0']
     elif config['dataset_name'] in ['erfgc']:
-        config['test_ignore_edge_dep'] = ['root', '-']
+        config['test_ignore_tag'] = ['O', 'no_label']
         config['test_ignore_edges'] = ['0']
+        config['test_ignore_edge_dep'] = ['root', '-']
     return config
 
 def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}) -> Dict:

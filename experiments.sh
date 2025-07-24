@@ -39,8 +39,8 @@ declare -a seed=(
     0
     1
     2
-    # 3
-    # 4
+    3
+    4
 )
 # Define parameter arrays
 declare -a use_gnn_steps_opts=(0)
@@ -52,9 +52,9 @@ declare -a rnn_layers_opts=(
     )
 declare -a gnn_layers_opts=(
     0
-    1
-    2
-    3
+    # 1
+    # 2
+    # 3
     )
 declare -a parser_type_opts=(
     gat
@@ -69,10 +69,10 @@ declare -a parser_rnn_type_opts=(
     # transformer
 )
 declare -a top_k_opts=(
-    # 1
+    1
     # 2
     # 3
-    4
+    # 4
     )
 declare -a arc_norm_opts=(
     0
@@ -84,12 +84,18 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-    ade
-    conll04
-    scierc
-    erfgc
-    scidtb
-    enewt
+    # ade
+    # conll04
+    # scierc
+    # erfgc
+    # scidtb
+    # enewt
+    UD_Arabic-PADT
+    UD_Chinese-GSD
+    UD_Italian-ISDT
+    UD_Japanese-GSD
+    UD_Spanish-AnCora
+    UD_Wolof-WTB
   )
 
 declare -a rnn_residual=(
@@ -123,10 +129,10 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-training_steps=5000
+training_steps=2000
 eval_steps=500
 
-save_suffix=gnn_lstm
+save_suffix=multilingual
 
 use_tagger_rnn=1
 use_parser_rnn=1
