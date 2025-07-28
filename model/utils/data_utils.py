@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import math
+from sklearn.model_selection import train_test_split
 
 def check_io(func):
     def wrapper(self, G, order_idx, *args, **kwargs):
@@ -68,6 +69,34 @@ def check_io(func):
     return wrapper
 
 class GraphDataset(Dataset):
+    def __init__(self, data):
+        # data = self.preprocess(data)
+        self.processed_data = self.split(data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def preprocess(self, data):
+        data_processed = []
+        for sample in data:
+            data_processed.append({
+
+            })
+        ...
+
+    def split(self, data):
+        train_data, intermediate = train_test_split(data, test_size=0.3)
+        val_data, test_data = train_test_split(intermediate, test_size=0.5)
+        return {
+            'train': train_data,
+            'val': val_data,
+            'test': test_data,
+        }
+
+class TextGraphDataset(Dataset):
     def __init__(self,
                  data: List[Dict[str, str]] = None,
                  config: Dict = None,
@@ -586,6 +615,10 @@ def is_tensorizable(L):
         raise NotImplementedError('Not a list, tensor, set, or dict-like.')
 
 class GraphCollator:
+    def __init__(self):
+        pass
+
+class TextGraphCollator:
     def __init__(self, config, keys_to_filter = ['words', 'step_graph', 'edge_index', 'adj_m', 'deg_m', 'graph_laplacian'], truncate_to_longest = True):
         self.keys_to_filter = keys_to_filter
         self.truncate_to_longest = truncate_to_longest
@@ -611,7 +644,6 @@ class GraphCollator:
             for key, value in batch[i]['encoded_input'].items():
                 batch[i]['encoded_input'][key] = batch[i]['encoded_input'][key][:max]
         return batch
-
 
     def get_trunc_len(self, batch):
         max = 0
