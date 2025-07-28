@@ -92,8 +92,8 @@ custom_config = {
     'freeze_encoder': 1,
     'use_lora': 0,
     'use_pred_tags': 1, ## this will determine if gold tags are used for train/test/validation or not 
-    # 'model_name': 'bert-base-uncased',
-    'model_name': 'bert-base-multilingual-cased',
+    'model_name': 'bert-base-uncased',
+    # 'model_name': 'bert-base-multilingual-cased',
     # 'model_name': 'microsoft/deberta-v3-base',
     # 'model_name': 'microsoft/deberta-v3-large',
     # 'model_name': 'google-bert/bert-large-uncased',

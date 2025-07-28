@@ -11,6 +11,8 @@ from model.utils.io_utils import save_json
 from model.utils.train_utils import get_scheduler, print_params
 from model.config import default_cfg, custom_config
 from model.evaluation import evaluate_model
+from debug.model_debugging import check_grad_norm, check_param_norm, nan_checker, collect_parser_layer_grads
+import pandas as pd
 
 def main():
 
@@ -29,7 +31,7 @@ def main():
     summary = {'config': config}
     config_path = os.path.join(config['save_dir'], 'config.json')
     save_json(summary, config_path)
-    print(f"Config saved to: {config_path}")
+    print(f"Config saved to: {config_path}")    
     cmd_file = os.path.join(config['save_dir'], 'train_command.txt')
     save_python_command(cmd_file, sys.argv)
     reproduce_training_cmd_file = os.path.join(config['save_dir'], 'full_train_reproduce_cmd.txt')
@@ -67,6 +69,8 @@ def main():
     unfrozen = False
     train_iter = iter(dataloader['train'])  # create an initial iterator
 
+    grad_norm_parser = []
+
     with tqdm(total=training_steps, desc="Training Steps") as pbar:
         while current_step < training_steps:
             model.current_step = current_step
@@ -85,6 +89,9 @@ def main():
                 continue
 
             loss.backward()
+
+            collect_parser_layer_grads(model, grad_norm_parser)
+
             if config['use_clip_grad_norm']:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=config['grad_clip_norm'])
             
@@ -151,6 +158,9 @@ def main():
                 unfrozen = model.unfreeze_gnn()
                 model.init_gnn_biaffines(optimizer)
                 best_model_state = deepcopy(model.state_dict())
+
+    df_grad = pd.DataFrame(grad_norm_parser)
+    df_grad.to_json(os.path.join(config['save_dir'], f"./grads_{config['training_steps']}_{config['dataset_name']}.json"))
 
     # save best model checkpoint
     if best_model_state is not None and config.get('save_model', False):
