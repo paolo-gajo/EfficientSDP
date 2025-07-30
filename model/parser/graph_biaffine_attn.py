@@ -2,7 +2,6 @@ from typing import Dict, Any, List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from model.utils.nn import *
 from model.utils.nn import adjust_for_sentinel
 from model.utils.nn import get_encoder
@@ -13,86 +12,42 @@ class GraphBiaffineAttention(nn.Module):
     def __init__(
         self,
         config: Dict,
-        encoder: nn.LSTM,
-        embedding_dim: int,
-        arc_representation_dim: int,
-        tag_representation_dim: int,
     ) -> None:
         super().__init__()
         self.config = config
-        if config['use_parser_rnn'] \
-        and config['parser_rnn_layers'] > 0 \
-        and config['parser_rnn_hidden_size'] > 0:
-            self.encoder_h = encoder
-            encoder_dim = self.config["parser_rnn_hidden_size"] * 2 if self.config['parser_rnn_type'] != 'transformer' else embedding_dim
-        else:
-            self.encoder_h = None
-            encoder_dim = embedding_dim
-        self.lstm_input_size = embedding_dim
-        self.lstm_hidden_size = encoder_dim
-        
-        self.head_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
-        self.dept_arc_feedforward = nn.Linear(encoder_dim, arc_representation_dim)
 
-        self.arc_bilinear = BilinearMatrixAttention(arc_representation_dim,
-                                    arc_representation_dim,
+        self.head_arc_feedforward = nn.Linear(config['feat_dim'], config['arc_representation_dim'])
+        self.dept_arc_feedforward = nn.Linear(config['feat_dim'], config['arc_representation_dim'])
+
+        self.arc_bilinear = BilinearMatrixAttention(config['arc_representation_dim'],
+                                    config['arc_representation_dim'],
                                     activation = nn.ReLU() if self.config['biaffine_activation'] == 'relu' else None,
                                     use_input_biases=True,
                                     bias_type=self.config['bias_type'],
                                     arc_norm=self.config['arc_norm'],
                                     )
 
-        self.head_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
-        self.dep_tag_feedforward = nn.Linear(encoder_dim, tag_representation_dim)
+        self.head_tag_feedforward = nn.Linear(config['feat_dim'], config['tag_representation_dim'])
+        self.dep_tag_feedforward = nn.Linear(config['feat_dim'], config['tag_representation_dim'])
 
         self._dropout = nn.Dropout(config['mlp_dropout'])
-        self._head_sentinel = torch.nn.Parameter(torch.randn(encoder_dim))
-        self._run_inits(encoder_dim, arc_representation_dim)
-        self.tag_representation_dim = tag_representation_dim
+        self._head_sentinel = torch.nn.Parameter(torch.randn(config['feat_dim']))
+        self._run_inits(config['feat_dim'], config['arc_representation_dim'])
+        self.tag_representation_dim = config['tag_representation_dim']
 
     def forward(
         self,
         input: torch.FloatTensor,
-        tag_embeddings: torch.Tensor,
         mask: torch.LongTensor,
-        metadata: List[Dict[str, Any]] = [],
-        head_tags: torch.LongTensor = None,
-        head_indices: torch.LongTensor = None,
-        step_indices: torch.LongTensor = None,
-        graph_laplacian: torch.LongTensor = None,
-        mode: str = None,
     ) -> Dict[str, torch.Tensor]:
-
-        if tag_embeddings is not None:
-            input = torch.cat([input, tag_embeddings], dim=-1)
-
-        if self.encoder_h is not None:
-            if self.config["parser_rnn_type"] != 'transformer':
-                # existing LSTM/RNN handling
-                lengths = mask.sum(dim=1).cpu()
-                packed_input = pack_padded_sequence(
-                    input, lengths, batch_first=True, enforce_sorted=False
-                )
-                packed_output, _ = self.encoder_h(packed_input)
-                input, _ = pad_packed_sequence(packed_output,
-                                                            batch_first=True,
-                                                            total_length=input.size(1))
-            else:
-                # Transformer encoding
-                src_key_padding_mask = mask == 0
-                input = self.encoder_h(input, src_key_padding_mask=src_key_padding_mask)
 
         batch_size, _, encoding_dim = input.size()
         head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
         
-        # Concatenate the head sentinel onto the sentence representation.
         input = torch.cat([head_sentinel, input], dim=1)
-
-        mask, head_indices, head_tags = adjust_for_sentinel(mask, head_indices, head_tags)
-        
         input = self._dropout(input)
             
-        # shape (batch_size, sequence_length, arc_representation_dim)
+        # shape (batch_size, sequence_length, config['arc_representation_dim'])
         head_arc = self._dropout(F.elu(self.head_arc_feedforward(input)))
         dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(input)))
         # shape (batch_size, sequence_length, tag_representation_dim)
@@ -104,28 +59,24 @@ class GraphBiaffineAttention(nn.Module):
         output = {
             'head_tag': head_tag,
             'dep_tag': dep_tag,
-            'head_indices': head_indices,
-            'head_tags': head_tags,
             'arc_logits': arc_logits,
             'mask': mask,
-            'metadata': metadata,
-            'gnn_losses': [],
         }
 
         return output
 
-    def _run_inits(self, encoder_dim, arc_representation_dim):
+    def _run_inits(self, encoder_dim, config):
         if self.config['parser_init'] == 'xu':
             self.apply(self._init_weights_xavier_uniform)
         elif self.config['parser_init'] == 'norm':
             self.apply(self._init_norm)
         elif self.config['parser_init'] == 'xu+norm':
             self.apply(self._init_weights_xavier_uniform)
-            torch.nn.init.normal_(self.head_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
-            torch.nn.init.normal_(self.dept_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+            torch.nn.init.normal_(self.head_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + config['arc_representation_dim'])))
+            torch.nn.init.normal_(self.dept_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + config['arc_representation_dim'])))
         if self.config['bma_init'] == 'norm':
-            torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
-            torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (encoder_dim + arc_representation_dim)))
+            torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (encoder_dim + config['arc_representation_dim'])))
+            torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (encoder_dim + config['arc_representation_dim'])))
 
     def _init_norm(self, module):
         """
@@ -181,24 +132,7 @@ class GraphBiaffineAttention(nn.Module):
 
     @classmethod
     def get_model(cls, config):
-        # Determine embedding_dim
-        if config['tag_embedding_type'] == 'linear':
-            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
-        elif config['tag_embedding_type'] == 'embedding':
-            embedding_dim = config["encoder_output_dim"] + config["tag_representation_dim"] # 768 + 100 = 868
-        elif config['tag_embedding_type'] == 'none':
-            embedding_dim = config["encoder_output_dim"] # 768
-        else:
-            raise ValueError('Parameter `tag_embedding_type` can only be == `linear` or `embedding` or `none`!')            
-
-        encoder = get_encoder(config, embedding_dim)
-        model_obj = cls(
-            config=config,
-            encoder=encoder,
-            embedding_dim=embedding_dim,
-            arc_representation_dim=config['arc_representation_dim'],
-            tag_representation_dim=config['tag_representation_dim'],
-        )
+        model_obj = cls(config=config)
         model_obj.softmax_multiplier = config["softmax_scaling_coeff"]
         return model_obj
 

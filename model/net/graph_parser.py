@@ -2,13 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoTokenizer
-from model.encoder import Encoder
-from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched, GraphRNNBilinear, GraphBiaffineAttention
+from model.parser import GraphBiaffineAttention
 from torch_geometric.nn import GATv2Conv
-from model.tagger import Tagger
+from torch_geometric.utils import unbatch, to_dense_adj
 from model.decoder import BilinearDecoder, masked_log_softmax, GraphDecoder
 import numpy as np
-import warnings
 from typing import Set, Tuple
 from debug.model_debugging import nan_checker, check_param_norm, check_grad_norm
 from debug.viz import save_batch_heatmap, indices_to_adjacency_matrices
@@ -19,8 +17,8 @@ class GraphParser(torch.nn.Module):
         super().__init__()
         self.config = config
         self.encoder = GATv2Conv(
-            config['arc_representation_dim'],
-            config['arc_representation_dim'],
+            config['feat_dim'],
+            config['feat_dim'],
             heads=self.config['num_attn_heads'],
             concat=False,
             edge_dim=config['edge_dim'],
@@ -37,37 +35,39 @@ class GraphParser(torch.nn.Module):
     def forward(self, model_input):
 
         # Run encoder to get token/word representations
-        encoder_output = self.encoder(x = model_input['x'],
-                                      edge_index = model_input['edge_index'],
-                                      edge_attr = model_input['edge_attr'],
+        encoder_output = self.encoder(x = model_input['x'].to(self.config['device']),
+                                      edge_index = model_input['edge_index'].to(self.config['device']),
+                                      edge_attr = model_input['edge_attr'].to(self.config['device']),
                                       )
+        x = list(unbatch(encoder_output, model_input.batch))
+        x, mask = self.pad_inputs(x)
+        graphs = model_input.to_data_list()
+        head_indices = [to_dense_adj(el.edge_index, max_num_nodes=el.num_nodes) for el in graphs]
+        head_tags = [torch.argmax(el.edge_attr, dim = -1) + 1 for el in graphs]
 
+        # # adjust shapes for sentinel 
+        # if mask is not None:
+        #     mask_ones = mask.new_ones(mask.shape[0], 1)
+        #     mask = torch.cat([mask_ones, mask], dim = 1)
+        
+        # if head_indices is not None:
+        #     head_indices = torch.cat(
+        #         [head_indices.new_zeros(head_indices.shape[0], 1), head_indices], dim=1
+        #     )
 
-        tagger_labels = model_input["pos_tags"]
-        mask = model_input["words_mask_custom"]
-        head_indices = model_input["head_indices"]
-        head_tags = model_input["head_tags"]
+        # if head_tags is not None:
+        #     head_tags = torch.cat(
+        #         [head_tags.new_zeros(head_tags.shape[0], 1), head_tags], dim=1
+        # )
 
-        # Use appropriate tags based on mode
-        # NOTE: step graph settings are WIP
         if self.mode in ["train", "validation"]:
             head_tags, head_indices = head_tags, head_indices
         elif self.mode == "test":
             head_tags, head_indices = None, None
 
-        # Tagging
-        tagger_output = self.tagger(encoder_output, mask=mask, labels=tagger_labels)
-
-        # Parsing
         parser_output = self.parser(
-            input=encoder_output,
-            tag_embeddings=tagger_output.tag_embeddings,
+            input=x,
             mask=mask,
-            head_tags=head_tags,
-            head_indices=head_indices,
-            step_indices=step_indices,
-            graph_laplacian=graph_laplacian,
-            mode=self.mode,
         )
 
         decoder_output = self.decoder(
@@ -77,42 +77,34 @@ class GraphParser(torch.nn.Module):
             head_tags = parser_output['head_tags'], # gold adjusted for sentinel
             arc_logits = parser_output['arc_logits'],
             mask = parser_output['mask'],
-            metadata = parser_output['metadata'],
         )
 
         gnn_losses = parser_output.get('gnn_losses', [])
         decoder_mask = decoder_output['mask']
         # Calculate loss or return predictions
         if self.mode in ["train", "validation"]:
-            loss = (tagger_output.loss * self.config["tagger_lambda"]
-                    + decoder_output["loss"] * self.config["parser_lambda"]
-                    )
+            loss = decoder_output["loss"] * self.config["parser_lambda"]
             if len(gnn_losses) > 0:
                 loss += sum(gnn_losses)/len(gnn_losses) * self.config["parser_lambda"]
             return loss
         elif self.mode == "test":
-            tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, mask)
             decoder_human_readable = self.decoder.make_output_human_readable(decoder_output)
-            if self.config["rep_mode"] == "words":
-                output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(
-                    tagger_human_readable, decoder_human_readable, model_input
-                )
-            elif self.config["rep_mode"] == "tokens":
-                output_as_list_of_dicts = self.get_output_as_list_of_dicts_tokens(
-                    tagger_human_readable, decoder_human_readable, model_input, mask
-                )
-            if self.config['output_edge_scores']:
-                scores = parser_output['arc_logits']
-                softmax_scores = F.softmax(scores, dim = -1)
-                masked_log_softmax_scores = masked_log_softmax(scores, decoder_mask.float())
-                score_var = torch.var(scores.view(scores.shape[0], -1), dim=1, unbiased=False)
-                softmax_score_var = torch.var(softmax_scores.view(softmax_scores.shape[0], -1), dim=1, unbiased=False)
-                masked_log_softmax_score_var = torch.var(masked_log_softmax_scores.view(masked_log_softmax_scores.shape[0], -1), dim=1, unbiased=False)
-                for i in range(len(output_as_list_of_dicts)):
-                    output_as_list_of_dicts[i]['attn_scores_var'] = score_var.tolist()[i]
-                    output_as_list_of_dicts[i]['attn_scores_softmax_var'] = softmax_score_var.tolist()[i]
-                    output_as_list_of_dicts[i]['attn_scores_masked_log_softmax_var'] = masked_log_softmax_score_var.tolist()[i]
+            output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(
+                tagger_human_readable, decoder_human_readable, model_input
+            )
             return output_as_list_of_dicts
+
+    def pad_inputs(self, input: torch.Tensor):
+        L = max([el.shape[0] for el in input])
+        mask = []
+        for b in range(len(input)):
+            pad = torch.zeros((L - input[b].shape[0], input[b].shape[1])).to(input[b].device)
+            ones = torch.ones(input[b].shape[0], input[b].shape[1]).to(input[b].device)
+            mask.append(torch.concat([ones, pad]))
+            input[b] = torch.concat([input[b], pad])
+        input = torch.stack(input)
+        mask = torch.stack(mask)
+        return input, mask
 
     def get_output_as_list_of_dicts_words(
         self, tagger_output, parser_output, model_input
@@ -197,7 +189,6 @@ class GraphParser(torch.nn.Module):
             "test",
             "validation",
         ], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
-        self.tagger.set_mode(mode)
         self.mode = mode
 
     @property

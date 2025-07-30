@@ -239,7 +239,6 @@ class AttnParser(torch.nn.Module):
             "test",
             "validation",
         ], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
-        self.tagger.set_mode(mode)
         self.mode = mode
 
     @property

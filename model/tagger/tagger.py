@@ -73,13 +73,6 @@ class Tagger(nn.Module):
         self.tagger_loss = nn.CrossEntropyLoss(ignore_index=0)
         self.gumbel_softmax = self.config['gumbel_softmax']
         self.apply(self._init_weights)
-        self.mode = 'train'
-
-    def set_mode(self, mode='train'):
-        """
-        Set mode for training, validation, or testing.
-        """
-        self.mode = mode
 
     def _init_weights(self, module):
         """
@@ -129,11 +122,9 @@ class Tagger(nn.Module):
 
         logits = self.classifier(input)
         
-        # Compute loss if in training or validation mode.
-        if self.mode in ['train', 'validation']:
-            loss = self.tagger_loss(logits.reshape(-1, self.num_tags), labels.reshape(-1))
-        else:  # For testing mode, no loss is computed.
-            loss = None
+        # calculating loss during evluation is useless
+        # but this saves extra `mode` logic for the tagger
+        loss = self.tagger_loss(logits.reshape(-1, self.num_tags), labels.reshape(-1))
         output = TokenClassifierOutput(loss=loss, logits=logits)
         
         if self.config["tag_embedding_type"] != 'none':

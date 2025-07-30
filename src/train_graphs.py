@@ -15,7 +15,7 @@ from model.evaluation import evaluate_model
 def main():
 
     # get config
-    string_args = "--dataset_name qm9" # used for debugging, leave empty for default behavior
+    string_args = "--model_type graph --dataset_name qm9" # used for debugging, leave empty for default behavior
     # string_args = "--seed 2 --use_gnn_steps 0 --gnn_layers 0 --parser_type gat --top_k 1 --arc_norm 1 --gnn_dropout 0 --gnn_activation tanh --dataset_name enewt --parser_rnn_layers 0 --parser_rnn_type lstm --rnn_residual 0 --training_steps 100 --eval_steps 100 --use_tagger_rnn 1 --use_parser_rnn 1 --parser_rnn_hidden_size 400 --use_pred_tags 1" # used for debugging, leave empty for default behavior
     # string_args = "--model_type attn --dataset_name ade" # used for debugging, leave empty for default behavior
     # string_args = "--model_type attn --parser_type graph_rnn --graph_rnn_pred_type bilinear --dataset_name ade --training_steps 500 --eval_steps 500" # used for debugging, leave empty for default behavior

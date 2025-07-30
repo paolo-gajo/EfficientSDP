@@ -29,7 +29,7 @@ def build_model(config, model_start_path = None, verbose = False):
         model.load_state_dict(torch.load(model_path))
         
     ## freeze encoder if asked for
-    if config['freeze_encoder']:
+    if config['freeze_encoder'] and config['model_type'] != 'graph':
         model.encoder.freeze_encoder()
 
     ## freeze tagger if asked for

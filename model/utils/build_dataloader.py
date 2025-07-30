@@ -1,12 +1,13 @@
 from torch.utils.data import DataLoader
+import torch_geometric as pyg
 from model.utils.data_utils import TextGraphCollator, TextGraphDataset, GraphDataset
 from transformers import AutoTokenizer
 from model.utils import load_json
 from model.utils.data_utils import get_mappings
-from torch_geometric.datasets import QM9
+from torch_geometric.datasets import QM9, TUDataset
 import json
 import re
-
+from sklearn.model_selection import train_test_split
 
 DATASET_MAPPING = {"ade": "nlp",
 "conll04": "nlp",
@@ -25,35 +26,29 @@ DATASET_MAPPING = {"ade": "nlp",
 }
 
 GRAPH_DATASETS = {
-    'qm9': QM9(root='data/QM9')
+    'qm9': QM9(root='data/QM9'),
+    'reddit': TUDataset(root='data', name='REDDIT-BINARY')
 }
 
 def build_graph_dataloader(config):
     data = GRAPH_DATASETS[config['dataset_name']]
-    dataset = GraphDataset(data)
-    graph_collator = ...
-    train_loader = DataLoader(dataset.processed_data['train'],
+    config['feat_dim'] = data[0].x.shape[-1]
+    config['edge_dim'] = data[0].edge_attr.shape[-1]
+    config['n_edge_labels'] = 1
+    data_train, intermediate = train_test_split(list(data), test_size=0.3, random_state=config['seed'])
+    data_val, data_test = train_test_split(intermediate, test_size=0.5, random_state=config['seed'])
+    dataset_train = GraphDataset(data_train)
+    dataset_val = GraphDataset(data_val)
+    dataset_test = GraphDataset(data_test)
+    train_loader = pyg.loader.DataLoader(dataset_train,
                                 batch_size=config['batch_size'],
-                                # collate_fn=graph_collator.collate,
-                                shuffle = False)
-    val_loader = DataLoader(dataset.processed_data['val'],
+                                shuffle = True)
+    val_loader = pyg.loader.DataLoader(dataset_val,
                                 batch_size=config['batch_size'],
-                                # collate_fn=graph_collator.collate,
                                 shuffle = False)
-    test_loader = DataLoader(dataset.processed_data['test'],
+    test_loader = pyg.loader.DataLoader(dataset_test,
                                 batch_size=config['batch_size'],
-                                # collate_fn=graph_collator.collate,
                                 shuffle = False)
-    sample = dataset[0]
-    config['edge_dim'] = sample.x.shape[-1]
-    print(f'# graphs: {len(dataset)}')
-    print(sample)
-    print("Node features shape:", sample.x.shape)   # e.g., [num_atoms, 11]
-    print("Node features:", sample.x)
-    print("Atomic positions:", sample.pos)          # [num_atoms, 3]
-    print("Edge index:", sample.edge_index)         # Bonds
-    print("Edge features:", sample.edge_attr)       # Bond types, bond lengths etc.
-    print("Targets (y):", sample.y) # 19 molecular properties
 
     return {
         'train': train_loader,

@@ -16,7 +16,16 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import math
-from sklearn.model_selection import train_test_split
+
+class GraphDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
 
 def check_io(func):
     def wrapper(self, G, order_idx, *args, **kwargs):
@@ -67,34 +76,6 @@ def check_io(func):
         return G_perm
     
     return wrapper
-
-class GraphDataset(Dataset):
-    def __init__(self, data):
-        # data = self.preprocess(data)
-        self.processed_data = self.split(data)
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        return self.data[idx]
-
-    def preprocess(self, data):
-        data_processed = []
-        for sample in data:
-            data_processed.append({
-
-            })
-        ...
-
-    def split(self, data):
-        train_data, intermediate = train_test_split(data, test_size=0.3)
-        val_data, test_data = train_test_split(intermediate, test_size=0.5)
-        return {
-            'train': train_data,
-            'val': val_data,
-            'test': test_data,
-        }
 
 class TextGraphDataset(Dataset):
     def __init__(self,
