@@ -168,6 +168,7 @@ def evaluate_model_nlp(model,
     }
 
 def evaluate_model_graph(model, data_loader, eps=1e-8):
+    times = []
     device = model.config['device']
     tp = torch.tensor(0., device=device)
     fp = torch.tensor(0., device=device)
@@ -177,8 +178,11 @@ def evaluate_model_graph(model, data_loader, eps=1e-8):
     model.eval()
 
     with torch.no_grad():
-        for inp_data in data_loader:
+        for inp_data in tqdm(data_loader):
+            st_time = time.time()
             out = model(inp_data)
+            tot_time = round((time.time() - st_time) / data_loader.batch_size, 3)
+            times.append(tot_time)
             preds = out['adj_m_pred'].to(torch.bool)      # (B, N, N)
             golds = out['adj_m_gold'].to(torch.bool)      # (B, N, N)
             node_mask = out['mask'].to(torch.bool)        # (B, N), 1s then 0s
@@ -195,5 +199,16 @@ def evaluate_model_graph(model, data_loader, eps=1e-8):
     precision = tp / (tp + fp + eps)
     recall    = tp / (tp + fn + eps)
     f1        = 2 * precision * recall / (precision + recall + eps)
-    return f1.item()
+    parser_labeled_results = {
+        'P': precision.item(),
+        'R': recall.item(),
+        'F1': f1.item(),
+    }
+    return {
+        'tagger_results': {},
+        'parser_labeled_results': parser_labeled_results,
+        'parser_unlabeled_results': {},
+        'uas_las_results': {},
+        'times': times,
+    }
 

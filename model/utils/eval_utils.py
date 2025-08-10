@@ -36,16 +36,13 @@ def run_evaluation(model, data_loader, config = None, label_index_map = None, ep
         results = eval_function(model,
                                 data_loader,
                                 )
-
-    mean_inf_time, std_dev = round(np.mean(results['times']), 3), round(np.std(results['times']), 3)
+    times = results.pop('times')
+    mean_inf_time, std_dev = round(np.mean(times), 3), round(np.std(times), 3)
     model_summary = get_model_summary_in_dict(model)
     model_summary['inference time'] = f'{mean_inf_time} +/- {std_dev}'
 
     results['epoch'] = epoch
     results['steps'] = steps
-    ## let's add results to the benchmark
-    model_summary['labeled precision'] = round(results['parser_labeled_results']['P'], 3)
-    model_summary['unlabeled precision'] = round(results['parser_unlabeled_results']['P'], 3)
     model_summary['model_name'] = config['model_name']
 
     return results, model_summary

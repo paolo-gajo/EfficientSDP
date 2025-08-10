@@ -17,13 +17,20 @@ class LGI(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.encoder = GATv2Conv(
-            config['feat_dim'],
-            config['feat_dim'],
-            heads=self.config['num_attn_heads'],
-            concat=False,
-            edge_dim=config['edge_dim'],
-            residual=True)
+        layers = []
+
+        for i in range(self.config['lgi_enc_layers']):
+            in_dim = self.config['feat_dim'] if i == 0 else self.config['encoder_output_dim']
+            layers.append(GATv2Conv(
+                in_channels=in_dim,
+                out_channels=self.config['encoder_output_dim'],
+                heads=self.config['num_attn_heads'],
+                concat=False,
+                edge_dim=self.config['edge_dim'],
+                residual=True)
+            )
+
+        self.encoder = nn.ModuleList(layers)
 
         self.parser = GraphBiaffineAttention(config)
         self.decoder = GraphDecoder(config=config,
@@ -36,13 +43,19 @@ class LGI(torch.nn.Module):
     def forward(self, model_input):
         graphs = model_input.to_data_list()
 
-        # get new node representations
-        encoder_output = self.encoder(x = model_input['x'].to(self.config['device']),
-                                      edge_index = model_input['edge_index'].to(self.config['device']),
-                                      edge_attr = model_input['edge_attr'].to(self.config['device']),
-                                      )
-        # unbatch encoder output
-        x = list(unbatch(encoder_output, model_input.batch))
+        # Get the initial features and graph structure
+        x = model_input.x.to(self.config['device'])
+        edge_index = model_input.edge_index.to(self.config['device'])
+        edge_attr = model_input.edge_attr.to(self.config['device'])
+
+        for i, layer in enumerate(self.encoder):
+            x = layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
+            if i < len(self.encoder) - 1:
+                x = F.relu(x)
+                # You might also add dropout here
+                # x = F.dropout(x, p=0.5, training=self.training)
+
+        x = list(unbatch(x, model_input.batch))
         x, mask = pad_inputs(x)
         
         # get square adjacency matrices from edge indices

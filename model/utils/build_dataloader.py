@@ -4,7 +4,7 @@ from model.utils.data_utils import TextGraphCollator, TextGraphDataset, GraphDat
 from transformers import AutoTokenizer
 from model.utils import load_json
 from model.utils.data_utils import get_mappings
-from torch_geometric.datasets import QM9, TUDataset
+from torch_geometric.datasets import QM9, TUDataset, AQSOL, MalNetTiny
 import json
 import re
 from sklearn.model_selection import train_test_split
@@ -27,16 +27,28 @@ DATASET_MAPPING = {"ade": "nlp",
 
 GRAPH_DATASETS = {
     'qm9': QM9(root='data/QM9'),
-    'reddit': TUDataset(root='data', name='REDDIT-BINARY')
+    'reddit': TUDataset(root='data', name='REDDIT-BINARY'),
+    'aqsol': AQSOL(root='data/AQSOL'),
+    'malnettiny': MalNetTiny(root='data/MalNetTiny')
 }
 
 def build_graph_dataloader(config):
     data = GRAPH_DATASETS[config['dataset_name']]
+
     config['feat_dim'] = data[0].x.shape[-1]
-    config['edge_dim'] = data[0].edge_attr.shape[-1]
+
+    # check if edge attributes exist before trying to access their shape
+    if data[0].edge_attr is not None:
+        config['edge_dim'] = data[0].edge_attr.shape[-1]
+    else:
+        # set a default value if no edge features are present
+        config['edge_dim'] = 0
+
     config['n_edge_labels'] = 1
+
     data_train, intermediate = train_test_split(list(data), test_size=0.3, random_state=config['seed'])
     data_val, data_test = train_test_split(intermediate, test_size=0.5, random_state=config['seed'])
+    
     dataset_train = GraphDataset(data_train)
     dataset_val = GraphDataset(data_val)
     if config['eval_samples']:

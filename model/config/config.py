@@ -86,6 +86,9 @@ custom_config = {
     'graph_rnn_edge_layers': 4,
     'graph_rnn_m': 20,
 
+    # lgi options
+    'lgi_enc_layers': 3,
+
     # model options
     'task_type': 'nlp', # 'nlp' or 'graph'
     'model_type': 'attn', # 'attn' or 'gen'

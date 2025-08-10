@@ -14,15 +14,12 @@ from model.config import default_cfg, custom_config
 def main():
 
     # get config
-    # string_args = "" # used for debugging, leave empty for default behavior
-    string_args = "--task_type graph --model_type graph --dataset_name qm9 --train_steps 5000 --eval_steps 5000 --eval_samples 100" # used for debugging, leave empty for default behavior
-    # string_args = "--seed 2 --use_gnn_steps 0 --gnn_layers 0 --parser_type gat --top_k 1 --arc_norm 1 --gnn_dropout 0 --gnn_activation tanh --dataset_name enewt --parser_rnn_layers 0 --parser_rnn_type lstm --rnn_residual 0 --train_steps 100 --eval_steps 100 --use_tagger_rnn 1 --use_parser_rnn 1 --parser_rnn_hidden_size 400 --use_pred_tags 1" # used for debugging, leave empty for default behavior
-    # string_args = "--model_type attn --dataset_name ade" # used for debugging, leave empty for default behavior
-    # string_args = "--model_type attn --parser_type graph_rnn --graph_rnn_pred_type bilinear --dataset_name ade --train_steps 500 --eval_steps 500" # used for debugging, leave empty for default behavior
+    string_args = "" # used for debugging, leave empty for default behavior
+    # string_args = "--task_type graph --model_type graph --dataset_name qm9 --epochs 1 --eval_steps 10000 --eval_samples 0 --batch_size 64 --learning_rate 0.01 --arc_norm 0 --arc_representation_dim 200 --encoder_output_dim 200 --lgi_enc_layers 1"
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
-    print('Config:\n\n', json.dumps(config, indent=4))
-    # print('Args:\n\n', json.dumps(args, indent=4))
+    # print('Config:\n\n', json.dumps(config, indent=4))
+    print('Args:\n\n', json.dumps(args, indent=4))
     print(f"Will save to: {config['save_dir']}")
     
     # save config in advance in case training fails
@@ -59,9 +56,11 @@ def main():
     # we can either train for a number of epochs or steps
     num_epochs = config.get('epochs', 0)
     if num_epochs:
-        train_steps = len(dataloader['train'].dataset) * num_epochs
+        train_steps = len(dataloader['train'].dataset) * num_epochs // config['batch_size']
     else:
         train_steps = config.get('train_steps', 10000)
+    config['eval_steps'] = min(train_steps, config['eval_steps'])
+
     patience = config.get('patience', 0.3)
     current_step = 0
     unfrozen = False
@@ -104,8 +103,8 @@ def main():
                                                 steps=current_step,)
                 # print(f'val F1:\t', json.dumps(val_results, indent=4))
                 val_results_list.append(val_results)
-                print(f'val_F1:', [el['parser_labeled_results']['F1'] for el in val_results_list])
-                print(f'val_las:', [el['uas_las_results']['las'] for el in val_results_list])
+                print(f'val_F1:', [el['parser_labeled_results'].get('F1', None) for el in val_results_list])
+                print(f'val_las:', [el['uas_las_results'].get('las', None) for el in val_results_list])
                 save_json(val_results_list, os.path.join(config['save_dir'], "val_results_partial.json"))
 
                 parser_f1 = val_results['parser_labeled_results']['F1']
@@ -127,19 +126,12 @@ def main():
                 test_results, _ = run_evaluation(model=model,
                                                 data_loader=dataloader['test'],
                                                 config=config,
-                                                label_index_map=config['label_index_map'],
+                                                label_index_map=config.get('label_index_map', {}),
                                                 steps=current_step,)
-                # print(f'test F1:\t', json.dumps(test_results, indent=4))
-                
-                # check for training failure (model suddenly breaks)
-                # tmp_model_name = config['model_path'].replace('.pth', f'_{current_step}.pth')
-                # if test_results['parser_labeled_results']['F1'] == 0.0 and current_step > 1000:
-                #     tmp_model_name = tmp_model_name.replace('.pth', '_junk.pth')
-                #     torch.save(deepcopy(model.state_dict()), tmp_model_name)
-                #     raise RuntimeError('Bricked model!')
+
                 test_results_list.append(test_results)
-                print(f'test_F1:', [el['parser_labeled_results']['F1'] for el in test_results_list])
-                print(f'test_las:', [el['uas_las_results']['las'] for el in test_results_list])
+                print(f'test_F1:', [el['parser_labeled_results'].get('F1', None) for el in test_results_list])
+                print(f'test_las:', [el['uas_las_results'].get('las', None) for el in test_results_list])
                 save_json(test_results_list, os.path.join(config['save_dir'], "test_results_partial.json"))
                 print('#' * 100)
             
@@ -161,20 +153,21 @@ def main():
     os.remove(os.path.join(config['save_dir'], "test_results_partial.json"))
     save_json(val_results_list, os.path.join(config['save_dir'], "val_results_series.json"))
     save_json(test_results_list, os.path.join(config['save_dir'], "test_results_series.json"))
-    save_json(dataloader['train'].dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
+    if hasattr(dataloader['train'].dataset, 'label_index_map'):
+        save_json(dataloader['train'].dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
 
     # final evaluation on validation and test sets
     if config.get('save_model', False):
         model.load_state_dict(best_model_state)
         val_results, benchmark_metrics = run_evaluation(
-            model, dataloader['val'], config, config['label_index_map']
+            model, dataloader['val'], config, config.get('label_index_map', {}),
         )
         save_json(val_results, os.path.join(config['save_dir'], f"val_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'val_results_benchmark.json'))
         print('Validation results:', val_results)
 
         test_results, benchmark_metrics = run_evaluation(
-            model, dataloader['test'], config, config['label_index_map']
+            model, dataloader['test'], config, config.get('label_index_map', {}),
         )
         save_json(test_results, os.path.join(config['save_dir'], f"test_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'test_results_benchmark.json'))

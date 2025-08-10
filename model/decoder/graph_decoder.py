@@ -49,7 +49,7 @@ class GraphDecoder(nn.Module):
         
         # evaluation
         else:
-            probs=F.sigmoid(arc_logits)
+            probs=torch.sigmoid(arc_logits)
             adj_m = (probs >= 0.5).to(torch.int)
             adj_m_labels = None
             loss = None
@@ -75,84 +75,29 @@ class GraphDecoder(nn.Module):
         adj_m: torch.Tensor,
         adj_m_labels: torch.Tensor,
         mask: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        
-        batch_size, sequence_length, _ = arc_logits.size()
-        mask = (mask.float() + tiny_value_of_dtype(arc_logits.dtype)).log()
-        probs = torch.sigmoid(arc_logits)
-        arc_loss = F.binary_cross_entropy(probs, adj_m.float())
-        tag_loss = ...
+    ):
+        # arc_logits: (B, N, N), adj_m: (B, N, N), mask: (B, N)
+
+        # Pairwise mask for valid node pairs
+        pair_mask = (mask.unsqueeze(1) * mask.unsqueeze(2)).float()  # (B,N,N)
+
+        eye = torch.eye(arc_logits.size(1), device=arc_logits.device).unsqueeze(0)
+        pair_mask = pair_mask * (1 - eye)
+
+        # Compute per-edge BCE with logits and then mask
+        per_edge_loss = F.binary_cross_entropy_with_logits(
+            arc_logits, adj_m.float(), reduction='none'
+        )  # (B,N,N)
+
+        per_edge_loss = per_edge_loss * pair_mask
+
+        # Safe average over valid entries
+        denom = pair_mask.sum().clamp_min(1.0)
+        arc_loss = per_edge_loss.sum() / denom
+
+        # TODO: implement tag loss if you supervise labels
+        tag_loss = torch.tensor(0.0, device=arc_logits.device)
+
         return arc_loss, tag_loss
 
-    def _greedy_decode(
-        self,
-        head_tag: torch.Tensor,
-        dep_tag: torch.Tensor,
-        arc_logits: torch.Tensor,
-        mask: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Decodes the head and head tag predictions by decoding the unlabeled arcs
-        independently for each word and then again, predicting the head tags of
-        these greedily chosen arcs independently. Note that this method of decoding
-        is not guaranteed to produce trees (i.e. there maybe be multiple roots,
-        or cycles when deptren are attached to their parents).
-
-        Parameters
-        ----------
-        head_tag : ``torch.Tensor``, required.
-            A tensor of shape (batch_size, sequence_length, tag_representation_dim),
-            which will be used to generate predictions for the dependency tags
-            for the given arcs.
-        dep_tag : ``torch.Tensor``, required
-            A tensor of shape (batch_size, sequence_length, tag_representation_dim),
-            which will be used to generate predictions for the dependency tags
-            for the given arcs.
-        arc_logits : ``torch.Tensor``, required.
-            A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
-            a distribution over attachments of a given word to all other words.
-
-        Returns
-        -------
-        heads : ``torch.Tensor``
-            A tensor of shape (batch_size, sequence_length) representing the
-            greedily decoded heads of each word.
-        head_tags : ``torch.Tensor``
-            A tensor of shape (batch_size, sequence_length) representing the
-            dependency tags of the greedily decoded heads of each word.
-        """
-        # Mask the diagonal, because the head of a word can't be itself.
-        diag_mask = torch.diag(arc_logits.new(mask.size(1)).fill_(-np.inf))
-        arc_logits = arc_logits + diag_mask
-        # Mask padded tokens, because we only want to consider actual words as heads.
-        if mask is not None:
-            minus_mask = (1 - mask).byte().unsqueeze(2)
-            arc_logits.masked_fill_(minus_mask.bool(), -np.inf)
-        # Compute the heads greedily.
-        # shape (batch_size, sequence_length)
-        _, heads = arc_logits.max(dim=2)
-
-        # Given the greedily predicted heads, decode their dependency tags.
-        # shape (batch_size, sequence_length, num_head_tags)
-        head_tag_logits = self._get_head_tags(
-            head_tag, dep_tag, heads
-        )
-        _, head_tags = head_tag_logits.max(dim=2)
-        return heads, head_tags
-
-def tiny_value_of_dtype(dtype: torch.dtype):
-    """
-    Returns a moderately tiny value for a given PyTorch data type that is used to avoid numerical
-    issues such as division by zero.
-    This is different from `info_value_of_dtype(dtype).tiny` because it causes some NaN bugs.
-    Only supports floating point dtypes.
-    """
-    if not dtype.is_floating_point:
-        raise TypeError("Only supports floating point dtypes.")
-    if dtype == torch.float or dtype == torch.double:
-        return 1e-13
-    elif dtype == torch.half:
-        return 1e-4
-    else:
-        raise TypeError("Does not support dtype " + str(dtype))
 

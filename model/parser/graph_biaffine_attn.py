@@ -16,8 +16,8 @@ class GraphBiaffineAttention(nn.Module):
         super().__init__()
         self.config = config
 
-        self.head_arc_feedforward = nn.Linear(config['feat_dim'], config['arc_representation_dim'])
-        self.dept_arc_feedforward = nn.Linear(config['feat_dim'], config['arc_representation_dim'])
+        self.head_arc_feedforward = nn.Linear(config['encoder_output_dim'], config['arc_representation_dim'])
+        self.dept_arc_feedforward = nn.Linear(config['encoder_output_dim'], config['arc_representation_dim'])
 
         self.arc_bilinear = BilinearMatrixAttention(config['arc_representation_dim'],
                                     config['arc_representation_dim'],
@@ -27,11 +27,11 @@ class GraphBiaffineAttention(nn.Module):
                                     arc_norm=self.config['arc_norm'],
                                     )
 
-        self.head_tag_feedforward = nn.Linear(config['feat_dim'], config['tag_representation_dim'])
-        self.dep_tag_feedforward = nn.Linear(config['feat_dim'], config['tag_representation_dim'])
+        self.head_tag_feedforward = nn.Linear(config['encoder_output_dim'], config['tag_representation_dim'])
+        self.dep_tag_feedforward = nn.Linear(config['encoder_output_dim'], config['tag_representation_dim'])
 
         self._dropout = nn.Dropout(config['mlp_dropout'])
-        self._run_inits(config['feat_dim'], config['arc_representation_dim'])
+        self._run_inits(config)
         self.tag_representation_dim = config['tag_representation_dim']
 
     def forward(
@@ -60,18 +60,18 @@ class GraphBiaffineAttention(nn.Module):
 
         return output
 
-    def _run_inits(self, encoder_dim, config):
+    def _run_inits(self, config):
         if self.config['parser_init'] == 'xu':
             self.apply(self._init_weights_xavier_uniform)
         elif self.config['parser_init'] == 'norm':
             self.apply(self._init_norm)
         elif self.config['parser_init'] == 'xu+norm':
             self.apply(self._init_weights_xavier_uniform)
-            torch.nn.init.normal_(self.head_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + config['arc_representation_dim'])))
-            torch.nn.init.normal_(self.dept_arc_feedforward.weight, std=np.sqrt(2 / (encoder_dim + config['arc_representation_dim'])))
+            torch.nn.init.normal_(self.head_arc_feedforward.weight, std=np.sqrt(2 / (config['feat_dim'] + config['arc_representation_dim'])))
+            torch.nn.init.normal_(self.dept_arc_feedforward.weight, std=np.sqrt(2 / (config['feat_dim'] + config['arc_representation_dim'])))
         if self.config['bma_init'] == 'norm':
-            torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (encoder_dim + config['arc_representation_dim'])))
-            torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (encoder_dim + config['arc_representation_dim'])))
+            torch.nn.init.normal_(self.arc_bilinear._weight_matrix, std=np.sqrt(2 / (config['feat_dim'] + config['arc_representation_dim'])))
+            torch.nn.init.normal_(self.arc_bilinear._bias, std=np.sqrt(2 / (config['feat_dim'] + config['arc_representation_dim'])))
 
     def _init_norm(self, module):
         """
