@@ -40,11 +40,11 @@ def validate_epoch(model, data_loader):
 
     return round(np.mean(losses), 3)
 
-def get_scheduler(optimizer, warmup_steps: int, training_steps: int, scheduler_type: str = None, use_warmup: bool = False):
+def get_scheduler(optimizer, warmup_steps: int, train_steps: int, scheduler_type: str = None, use_warmup: bool = False):
     if use_warmup:
         if scheduler_type == 'linear':
             return get_linear_schedule_with_warmup(optimizer=optimizer,
                                                         num_warmup_steps=warmup_steps,
-                                                        num_training_steps=training_steps,)
+                                                        num_train_steps=train_steps,)
     else:
         return None

@@ -7,10 +7,48 @@ import spacy
 import re
 from .sys_utils import write_text
 from model.utils.data_utils import reorder_tensor
-    
+from model.evaluation.evaluator import evaluate_model_nlp, evaluate_model_graph
 nlp = spacy.load('en_core_web_md')
 nlp.tokenizer = spacy.tokenizer.Tokenizer(nlp.vocab, suffix_search = re.compile(r'''\.|\,|\;|\(|\)|\$''').search)
 
+EVAL_LIST = {
+    'nlp': evaluate_model_nlp,
+    'graph': evaluate_model_graph,
+}
+
+def run_evaluation(model, data_loader, config = None, label_index_map = None, epoch = None, steps = None):
+    assert config is not None, "No config file to run evaluation."
+    
+    model.eval()
+    model.set_mode('test') ## this tells the model that we are testing it, so it will return us precision instead of loss
+
+    eval_function = EVAL_LIST[config['task_type']]
+
+    if config['task_type'] == 'nlp':
+        results = eval_function(model,
+                                data_loader,
+                                label_index_map,
+                                ignore_tags = config['test_ignore_tag'],
+                                ignore_edges = config['test_ignore_edges'],
+                                ignore_edge_labels = config['test_ignore_edge_dep'],
+                                )
+    elif config['task_type'] == 'graph':
+        results = eval_function(model,
+                                data_loader,
+                                )
+
+    mean_inf_time, std_dev = round(np.mean(results['times']), 3), round(np.std(results['times']), 3)
+    model_summary = get_model_summary_in_dict(model)
+    model_summary['inference time'] = f'{mean_inf_time} +/- {std_dev}'
+
+    results['epoch'] = epoch
+    results['steps'] = steps
+    ## let's add results to the benchmark
+    model_summary['labeled precision'] = round(results['parser_labeled_results']['P'], 3)
+    model_summary['unlabeled precision'] = round(results['parser_unlabeled_results']['P'], 3)
+    model_summary['model_name'] = config['model_name']
+
+    return results, model_summary
 
 def consolidate_all_runs(all_data):
     """
@@ -101,8 +139,11 @@ def get_model_summary_in_dict(model):
     ## number of learnable params
     total_model_params = sum(p.numel() for p in model.parameters())
     learnable_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
+    if hasattr(model, 'tagger'):
+        tagger_params = sum(p.numel() for p in model.tagger.parameters())
+    else:
+        tagger_params = 0
     encoder_params = sum(p.numel() for p in model.encoder.parameters())
-    tagger_params = sum(p.numel() for p in model.tagger.parameters())
     parser_params = sum(p.numel() for p in model.parser.parameters())
 
     mem_dict = {
@@ -115,52 +156,6 @@ def get_model_summary_in_dict(model):
                 }
 
     return mem_dict
-
-def run_evaluation(model, data_loader, eval_function = None, config = None, label_index_map = None, epoch = None, steps = None):
-    
-    assert eval_function is not None, "No evaluation function."
-    assert config is not None, "No config file to run evaluation."
-    
-    model.eval()
-    model.set_mode('test') ## this tells the model that we are testing it, so it will return us precision instead of loss
-    val_outputs = []
-
-    ## if label index map is not provided, it's wrong! 
-    if not label_index_map:
-        warnings.warn(f'No label to index map provided for evaluation, building a new map from train file.')
-        label_index_map = data_loader.dataset.label_index_map
-
-    ## let's time it and find average time
-    times = []
-    with torch.no_grad():
-        with tqdm(data_loader, position=0, leave = False) as pbar:
-            for inp_data in tqdm(data_loader, position=0, leave = False):
-                st_time = time.time()
-                val_outputs.extend(model(inp_data))
-                tot_time = round((time.time() - st_time) / data_loader.batch_size, 3)
-                pbar.set_description(f"Batch inference time is {tot_time} seconds", refresh = True)
-                times.append(tot_time)
-
-    mean_inf_time, std_dev = round(np.mean(times), 3), round(np.std(times), 3)
-
-    ## let's get model summary
-    model_summary = get_model_summary_in_dict(model)
-    model_summary['inference time'] = f'{mean_inf_time} +/- {std_dev}'
-
-    results = eval_function(val_outputs,
-                            label_index_map,
-                            ignore_tags = config['test_ignore_tag'],
-                            ignore_edges = config['test_ignore_edges'],
-                            ignore_edge_labels = config['test_ignore_edge_dep'],
-                            )
-    results['epoch'] = epoch
-    results['steps'] = steps
-    ## let's add results to the benchmark
-    model_summary['labeled precision'] = round(results['parser_labeled_results']['P'], 3)
-    model_summary['unlabeled precision'] = round(results['parser_unlabeled_results']['P'], 3)
-    model_summary['model_name'] = config['model_name']
-
-    return results, model_summary
 
 
 def get_index_label_map(label_index_map):

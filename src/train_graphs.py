@@ -10,15 +10,15 @@ from model.utils.sys_utils import save_python_command, save_reproduce_training_c
 from model.utils.io_utils import save_json
 from model.utils.train_utils import get_scheduler, print_params
 from model.config import default_cfg, custom_config
-from model.evaluation import evaluate_model
 
 def main():
 
     # get config
-    string_args = "--model_type graph --dataset_name qm9" # used for debugging, leave empty for default behavior
-    # string_args = "--seed 2 --use_gnn_steps 0 --gnn_layers 0 --parser_type gat --top_k 1 --arc_norm 1 --gnn_dropout 0 --gnn_activation tanh --dataset_name enewt --parser_rnn_layers 0 --parser_rnn_type lstm --rnn_residual 0 --training_steps 100 --eval_steps 100 --use_tagger_rnn 1 --use_parser_rnn 1 --parser_rnn_hidden_size 400 --use_pred_tags 1" # used for debugging, leave empty for default behavior
+    # string_args = "" # used for debugging, leave empty for default behavior
+    string_args = "--task_type graph --model_type graph --dataset_name qm9 --train_steps 5000 --eval_steps 5000 --eval_samples 100" # used for debugging, leave empty for default behavior
+    # string_args = "--seed 2 --use_gnn_steps 0 --gnn_layers 0 --parser_type gat --top_k 1 --arc_norm 1 --gnn_dropout 0 --gnn_activation tanh --dataset_name enewt --parser_rnn_layers 0 --parser_rnn_type lstm --rnn_residual 0 --train_steps 100 --eval_steps 100 --use_tagger_rnn 1 --use_parser_rnn 1 --parser_rnn_hidden_size 400 --use_pred_tags 1" # used for debugging, leave empty for default behavior
     # string_args = "--model_type attn --dataset_name ade" # used for debugging, leave empty for default behavior
-    # string_args = "--model_type attn --parser_type graph_rnn --graph_rnn_pred_type bilinear --dataset_name ade --training_steps 500 --eval_steps 500" # used for debugging, leave empty for default behavior
+    # string_args = "--model_type attn --parser_type graph_rnn --graph_rnn_pred_type bilinear --dataset_name ade --train_steps 500 --eval_steps 500" # used for debugging, leave empty for default behavior
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     print('Config:\n\n', json.dumps(config, indent=4))
@@ -45,8 +45,8 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
 
     scheduler = get_scheduler(optimizer=optimizer,
-                            warmup_steps=int(config['training_steps'] * config['warmup_ratio']),
-                            training_steps=config['training_steps'],
+                            warmup_steps=int(config['train_steps'] * config['warmup_ratio']),
+                            train_steps=config['train_steps'],
                             scheduler_type=config['scheduler_type'],
                             use_warmup=config['use_warmup'])
 
@@ -59,16 +59,16 @@ def main():
     # we can either train for a number of epochs or steps
     num_epochs = config.get('epochs', 0)
     if num_epochs:
-        training_steps = len(dataloader['train'].dataset) * num_epochs
+        train_steps = len(dataloader['train'].dataset) * num_epochs
     else:
-        training_steps = config.get('training_steps', 10000)
+        train_steps = config.get('train_steps', 10000)
     patience = config.get('patience', 0.3)
     current_step = 0
     unfrozen = False
     train_iter = iter(dataloader['train'])  # create an initial iterator
 
-    with tqdm(total=training_steps, desc="Training Steps") as pbar:
-        while current_step < training_steps:
+    with tqdm(total=train_steps, desc="Training Steps") as pbar:
+        while current_step < train_steps:
             model.current_step = current_step
             try:
                 batch = next(train_iter)
@@ -99,9 +99,8 @@ def main():
                 print(f'Metrics @ {current_step}:')
                 val_results, _ = run_evaluation(model=model,
                                                 data_loader=dataloader['val'],
-                                                eval_function=evaluate_model,
                                                 config=config,
-                                                label_index_map=config['label_index_map'],
+                                                label_index_map=config.get('label_index_map', {}),
                                                 steps=current_step,)
                 # print(f'val F1:\t', json.dumps(val_results, indent=4))
                 val_results_list.append(val_results)
@@ -120,14 +119,13 @@ def main():
                     else:
                         patience_counter += 1
 
-                    if patience_counter * config['eval_steps'] >= training_steps * patience:
+                    if patience_counter * config['eval_steps'] >= train_steps * patience:
                         print("Early stopping triggered.")
-                        current_step = training_steps
+                        current_step = train_steps
                         break
 
                 test_results, _ = run_evaluation(model=model,
                                                 data_loader=dataloader['test'],
-                                                eval_function=evaluate_model,
                                                 config=config,
                                                 label_index_map=config['label_index_map'],
                                                 steps=current_step,)
@@ -147,7 +145,8 @@ def main():
             
             if current_step >= config['use_gnn_steps'] \
                 and not unfrozen \
-                and config['parser_type'] in ['gat', 'gat_unbatched']:
+                and config['parser_type'] in ['gat', 'gat_unbatched'] \
+                and config['model_type'] == 'attn':
                 unfrozen = model.unfreeze_gnn()
                 model.init_gnn_biaffines(optimizer)
                 best_model_state = deepcopy(model.state_dict())
@@ -168,14 +167,14 @@ def main():
     if config.get('save_model', False):
         model.load_state_dict(best_model_state)
         val_results, benchmark_metrics = run_evaluation(
-            model, dataloader['val'], evaluate_model, config, config['label_index_map']
+            model, dataloader['val'], config, config['label_index_map']
         )
         save_json(val_results, os.path.join(config['save_dir'], f"val_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'val_results_benchmark.json'))
         print('Validation results:', val_results)
 
         test_results, benchmark_metrics = run_evaluation(
-            model, dataloader['test'], evaluate_model, config, config['label_index_map']
+            model, dataloader['test'], config, config['label_index_map']
         )
         save_json(test_results, os.path.join(config['save_dir'], f"test_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'test_results_benchmark.json'))

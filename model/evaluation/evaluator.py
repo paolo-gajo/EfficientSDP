@@ -1,8 +1,10 @@
-"""
-    This is a basic evaluation function that'd give evaluation of tagger and
-    parser. For parser, it provides labeled and unlabeled evalution.
-"""
 from typing import List, Optional, Set, Dict
+import torch
+from tqdm.auto import tqdm
+import warnings
+import time
+from torch_geometric.utils import unbatch, to_dense_adj
+from model.utils.nn import pad_inputs, square_pad_3d, square_pad_4d
 
 def filter_get_P_R_F1(gts,
                       preds,
@@ -93,19 +95,36 @@ def compute_uas_las(
         "las": round(las_correct / total, 4) if total > 0 else None,
     }
 
-def evaluate_model(model_output, label_to_class_map, ignore_tags=[], ignore_edges = ['0'], ignore_edge_labels=[]):
-    """
-        model_output: This is output of get_output_as_list_of_dicts() function, which contains
-        information about both, ground truth and predictions. Must be a list.
-        use_word_level: If True and we're in token mode, evaluation will be done at the word level
-                        using the tokenizer's word_ids instead of at the token level.
-    """
+def evaluate_model_nlp(model,
+                       data_loader,
+                       model_output,
+                       label_index_map,
+                       ignore_tags=[],
+                       ignore_edges = ['0'],
+                       ignore_edge_labels=[],
+                       ):
+    out = []
+    times = []
+
+    ## if label index map is not provided, it's wrong! 
+    if not label_index_map:
+        warnings.warn(f'No label to index map provided for evaluation, building a new map from train file.')
+        label_index_map = data_loader.dataset.label_index_map
     
+    with torch.no_grad():
+        with tqdm(data_loader, position=0, leave = False) as pbar:
+            for inp_data in tqdm(data_loader, position=0, leave = False):
+                st_time = time.time()
+                out.extend(model(inp_data))
+                tot_time = round((time.time() - st_time) / data_loader.batch_size, 3)
+                pbar.set_description(f"Batch inference time is {tot_time} seconds", refresh = True)
+                times.append(tot_time)
+
     token_id_field = 'words' if 'words' in model_output[0].keys() else 'input_ids'
 
     ## get indices of ignored tags/edges
-    ignore_tag_indices = [str(label_to_class_map['tag2class'][tag]) for tag in ignore_tags]
-    ignore_edge_label_indices = [str(label_to_class_map['edgelabel2class'][edge]) for edge in ignore_edge_labels]
+    ignore_tag_indices = [str(label_index_map['tag2class'].get(tag, '')) for tag in ignore_tags]
+    ignore_edge_label_indices = [str(label_index_map['edgelabel2class'].get(edge, '')) for edge in ignore_edge_labels]
     ignore_head_indices = ignore_edges
     
     # print('Using original evaluation!')
@@ -118,7 +137,6 @@ def evaluate_model(model_output, label_to_class_map, ignore_tags=[], ignore_edge
     parser_unlabeled_pred = [f'{i}-{j}-{word}-{head_pred}' for i, elem in enumerate(model_output) for j, (word, head_pred) in enumerate(zip(elem[token_id_field], elem['head_indices_pred']))]
     parser_unlabeled_gt = [f'{i}-{j}-{word}-{head_gt}' for i, elem in enumerate(model_output) for j, (word, head_gt) in enumerate(zip(elem[token_id_field], elem['head_indices_gt']))]
 
-    # Calculate metrics
     tagger_results = {}
     tagger_results['P'], tagger_results['R'], tagger_results['F1'], tagger_results['acc'] = filter_get_P_R_F1(tagger_gts,
                                                                                                             tagger_preds,
@@ -146,4 +164,36 @@ def evaluate_model(model_output, label_to_class_map, ignore_tags=[], ignore_edge
         'parser_labeled_results': parser_labeled_results,
         'parser_unlabeled_results': parser_unlabeled_results,
         'uas_las_results': uas_las_results,
+        'times': times,
     }
+
+def evaluate_model_graph(model, data_loader, eps=1e-8):
+    device = model.config['device']
+    tp = torch.tensor(0., device=device)
+    fp = torch.tensor(0., device=device)
+    fn = torch.tensor(0., device=device)
+
+    model.mode = "test"
+    model.eval()
+
+    with torch.no_grad():
+        for inp_data in data_loader:
+            out = model(inp_data)
+            preds = out['adj_m_pred'].to(torch.bool)      # (B, N, N)
+            golds = out['adj_m_gold'].to(torch.bool)      # (B, N, N)
+            node_mask = out['mask'].to(torch.bool)        # (B, N), 1s then 0s
+
+            edge_mask = node_mask.unsqueeze(2) & node_mask.unsqueeze(1)  # (B, N, N)
+
+            p = preds[edge_mask]
+            g = golds[edge_mask]
+
+            tp += (p & g).sum().float()
+            fp += (p & ~g).sum().float()
+            fn += ((~p) & g).sum().float()
+
+    precision = tp / (tp + fp + eps)
+    recall    = tp / (tp + fn + eps)
+    f1        = 2 * precision * recall / (precision + recall + eps)
+    return f1.item()
+

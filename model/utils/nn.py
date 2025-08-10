@@ -855,3 +855,48 @@ def get_encoder(config, embedding_dim):
         encoder = None
     print(f'Using {encoder.__class__} as parser encoder!')
     return encoder
+
+def square_pad_3d(input: list[torch.Tensor]):
+    d = input[0].dim()
+    assert d == 3                       # (1, L, L) -> add channel dim
+
+    L = max(x.shape[1] for x in input)  # square => use one side
+    out = input[0].new_zeros(len(input), L, L)  # device/dtype-safe
+
+    for i, x in enumerate(input):
+        l = x.shape[1]               # square => same for H/W
+        out[i, :l, :l] = x[0]
+    return out
+
+def square_pad_4d(input: list[torch.Tensor]):
+    d = input[0].dim()
+    assert d == 4                       # (1, L, L) -> add channel dim
+    C = input[0].shape[-1]
+    assert all(x.shape[-1] == C for x in input), "Mismatched channel counts"
+
+    L = max(x.shape[1] for x in input)  # square => use one side
+    out = input[0].new_zeros(len(input), L, L, C)  # device/dtype-safe
+
+    for i, x in enumerate(input):
+        l = x.shape[1]               # square => same for H/W
+        out[i, :l, :l, :] = x[0]
+    return out
+
+def pad_inputs(tensors: List[torch.Tensor]):
+    # Assume all tensors have shape (len_i, D)
+    L = max(t.shape[0] for t in tensors)
+    B = len(tensors)
+
+    # Pad each to length L, preserving dtype/device
+    padded = [
+        torch.cat([t, t.new_zeros((L - t.size(0), t.size(1)))], dim=0)
+        for t in tensors
+    ]
+    padded = torch.stack(padded, dim=0)  # (B, L, D)
+
+    # Boolean mask: True for real rows, False for padded rows
+    lengths = torch.tensor([t.size(0) for t in tensors], device=padded.device)
+    ar = torch.arange(L, device=padded.device)
+    mask = ar.unsqueeze(0) < lengths.unsqueeze(1)   # (B, L), dtype=bool
+    mask = mask.to(padded.dtype)
+    return padded, mask

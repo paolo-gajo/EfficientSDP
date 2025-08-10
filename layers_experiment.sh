@@ -136,7 +136,7 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-training_steps=20000
+train_steps=20000
 eval_steps=500
 
 save_suffix=10layers_seed2
@@ -186,7 +186,7 @@ while IFS= read -r combo; do
                 --parser_rnn_layers ${params[9]}
                 --parser_rnn_type ${params[10]}
                 --rnn_residual ${params[11]}
-                --training_steps $training_steps 
+                --train_steps $train_steps 
                 --eval_steps $eval_steps
                 --use_tagger_rnn $use_tagger_rnn
                 --use_parser_rnn $use_parser_rnn

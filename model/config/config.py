@@ -48,7 +48,7 @@ custom_config = {
     'tagger_dropout': 0.3,
 
     # parser options
-    'parser_type': 'simple', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', 'gat_unbatched', 'dgm', 'gnn2'
+    'parser_type': 'gat', # 'simple', 'mtrfg', 'gnn', 'gcn', 'gat', 'gat_unbatched', 'dgm', 'gnn2'
     'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
     'bma_init': 'xu', # 'xu', 'norm'
     'arc_norm': 1,
@@ -87,6 +87,7 @@ custom_config = {
     'graph_rnn_m': 20,
 
     # model options
+    'task_type': 'nlp', # 'nlp' or 'graph'
     'model_type': 'attn', # 'attn' or 'gen'
     'graph_rnn_pred_type': 'bilinear', # 'simple' or 'bilinear'
     'freeze_encoder': 1,
@@ -122,7 +123,7 @@ custom_config = {
     'grad_clip_norm': 1.0,
     'batch_size': 8,
     'training': 'steps',
-    'training_steps': 10000,
+    'train_steps': 10000,
     'eval_steps': 500,
     'eval_samples': 0, # 0 = all samples
     'epochs': 0 ,

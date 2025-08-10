@@ -35,7 +35,7 @@ class AttnParser(torch.nn.Module):
             self.parser = GATParserUnbatched.get_model(config)
         elif config['parser_type'] == 'graph_rnn':
             self.parser = GraphRNNBilinear(config)
-        self.decoder = GraphDecoder(config=config,
+        self.decoder = BilinearDecoder(config=config,
                                     tag_representation_dim=config['tag_representation_dim'],
                                     n_edge_labels = config['n_edge_labels'])
         self.tokenizer = AutoTokenizer.from_pretrained(config["model_name"])

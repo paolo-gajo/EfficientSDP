@@ -31,7 +31,6 @@ class GraphBiaffineAttention(nn.Module):
         self.dep_tag_feedforward = nn.Linear(config['feat_dim'], config['tag_representation_dim'])
 
         self._dropout = nn.Dropout(config['mlp_dropout'])
-        self._head_sentinel = torch.nn.Parameter(torch.randn(config['feat_dim']))
         self._run_inits(config['feat_dim'], config['arc_representation_dim'])
         self.tag_representation_dim = config['tag_representation_dim']
 
@@ -41,10 +40,6 @@ class GraphBiaffineAttention(nn.Module):
         mask: torch.LongTensor,
     ) -> Dict[str, torch.Tensor]:
 
-        batch_size, _, encoding_dim = input.size()
-        head_sentinel = self._head_sentinel.view(1, 1, -1).expand(batch_size, 1, encoding_dim)
-        
-        input = torch.cat([head_sentinel, input], dim=1)
         input = self._dropout(input)
             
         # shape (batch_size, sequence_length, config['arc_representation_dim'])

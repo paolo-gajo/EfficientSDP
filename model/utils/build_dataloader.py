@@ -22,7 +22,7 @@ DATASET_MAPPING = {"ade": "nlp",
 "UD_Japanese-GSD": "nlp",
 "UD_Spanish-AnCora": "nlp",
 "UD_Wolof-WTB": "nlp",
-"qm9": "graphs",
+"qm9": "graph",
 }
 
 GRAPH_DATASETS = {
@@ -39,7 +39,11 @@ def build_graph_dataloader(config):
     data_val, data_test = train_test_split(intermediate, test_size=0.5, random_state=config['seed'])
     dataset_train = GraphDataset(data_train)
     dataset_val = GraphDataset(data_val)
+    if config['eval_samples']:
+        dataset_val = dataset_val[:config['eval_samples']]
     dataset_test = GraphDataset(data_test)
+    if config['eval_samples']:
+        dataset_test = dataset_test[:config['eval_samples']]
     train_loader = pyg.loader.DataLoader(dataset_train,
                                 batch_size=config['batch_size'],
                                 shuffle = True)
@@ -109,7 +113,8 @@ def build_text_dataloader(config):
     }
 
 def build_dataloader(config):
-    if DATASET_MAPPING[config['dataset_name']] == 'nlp':
+    assert config['task_type'] == DATASET_MAPPING[config['dataset_name']]
+    if config['task_type'] == 'nlp':
         return build_text_dataloader(config)
     else:
         return build_graph_dataloader(config)

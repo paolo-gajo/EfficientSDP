@@ -1,4 +1,4 @@
-from model.net import AttnParser, GenParser, GraphParser
+from model.net import AttnParser, GenParser, LGI
 from model.utils import is_file
 import torch
 from peft import LoraConfig, get_peft_model, TaskType
@@ -7,8 +7,8 @@ from model.utils.train_utils import print_params
 MODEL_LIST = {
     'attn': AttnParser,
     'gen': GenParser,
-    'graph': GraphParser,
-}    
+    'graph': LGI,
+} 
 
 def build_model(config, model_start_path = None, verbose = False):
 
