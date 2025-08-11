@@ -66,18 +66,19 @@ declare -a arc_representation_dim_opts=(
     # 50
     100
     # 150
-    200
+    # 200
 )
 
 declare -a encoder_output_dim_opts=(
     # 50
     100
     # 150
-    200
+    # 200
 )
 
 declare -a dataset_name_opts=(
-    qm9
+    # qm9
+    cifar10
   )
 
 array_names=(
@@ -106,6 +107,9 @@ save_suffix=lgi
 learning_rate=0.001
 task_type=graph
 model_type=graph
+use_clip_grad_norm=1
+lgi_gat_type=base
+gat_norm=0
 
 declare -a commands=()
 while IFS= read -r combo; do
@@ -126,6 +130,9 @@ while IFS= read -r combo; do
                 --learning_rate $learning_rate
                 --task_type $task_type
                 --model_type $model_type
+                --use_clip_grad_norm $use_clip_grad_norm
+                --lgi_gat_type $lgi_gat_type
+                --gat_norm $gat_norm
                 "
     # echo ${cmd}
     commands+=("$cmd")

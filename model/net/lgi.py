@@ -26,16 +26,17 @@ class LGI(torch.nn.Module):
         layers = []
         for i in range(self.config['lgi_enc_layers']):
             in_dim = self.config['feat_dim'] if i == 0 else self.config['encoder_output_dim']
-            layers.append(GAT_DICT[self.config['lgi_gat_type']](
-                in_channels=in_dim,
-                out_channels=self.config['encoder_output_dim'],
-                heads=self.config['num_attn_heads'],
-                concat=False,
-                edge_dim=1,
-                residual=True,
-                score_norm=self.config['gat_norm'],
-                )
-            )
+            kwargs = {
+                "in_channels": in_dim,
+                "out_channels": self.config['encoder_output_dim'],
+                "heads": self.config['num_attn_heads'],
+                "concat": False,
+                "edge_dim": 1,
+                "residual": True,
+            }
+            if self.config['lgi_gat_type'] == 'norm':
+                kwargs.update({"score_norm": self.config['gat_norm']})
+            layers.append(GAT_DICT[self.config['lgi_gat_type']](**kwargs))
 
         self.encoder = nn.ModuleList(layers)
 
