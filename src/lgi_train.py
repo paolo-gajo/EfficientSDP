@@ -18,8 +18,8 @@ def main():
     # string_args = "--task_type graph --model_type graph --dataset_name qm9 --epochs 1 --eval_steps 10000 --eval_samples 0 --batch_size 64 --learning_rate 0.01 --arc_norm 0 --arc_representation_dim 200 --encoder_output_dim 200 --lgi_enc_layers 1"
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
-    # print('Config:\n\n', json.dumps(config, indent=4))
-    print('Args:\n\n', json.dumps(args, indent=4))
+    print('Config:\n\n', json.dumps(config, indent=4))
+    # print('Args:\n\n', json.dumps(args, indent=4))
     print(f"Will save to: {config['save_dir']}")
     
     # save config in advance in case training fails
