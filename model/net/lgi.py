@@ -35,7 +35,7 @@ class LGI(torch.nn.Module):
         self.parser = GraphBiaffineAttention(config)
         self.decoder = GraphDecoder(config=config,
                                     tag_representation_dim=config['tag_representation_dim'],
-                                    n_edge_labels = config['n_edge_labels'])
+                                    )
         self.tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
         self.mode = "train"
         self.parser.current_step, self._current_step = 0, 0        

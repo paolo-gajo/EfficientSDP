@@ -8,13 +8,13 @@ class GraphDecoder(nn.Module):
     def __init__(self,
                  config: Dict,
                  tag_representation_dim: int,
-                 n_edge_labels: int,
-                 use_mst_decoding_for_validation: bool = True,
                  ):
         super().__init__()
         self.config = config
-        self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
-        self.tag_bilinear = torch.nn.modules.Bilinear(tag_representation_dim, tag_representation_dim, n_edge_labels)
+        self.tag_bilinear = torch.nn.modules.Bilinear(tag_representation_dim,
+                                                      tag_representation_dim,
+                                                      config['edge_dim'] + 1,
+                                                      )
         self.softmax_multiplier = config["softmax_scaling_coeff"]
 
     def forward(self,
@@ -94,6 +94,14 @@ class GraphDecoder(nn.Module):
         # Safe average over valid entries
         denom = pair_mask.sum().clamp_min(1.0)
         arc_loss = per_edge_loss.sum() / denom
+        # i need to select the representations
+        # either based on the gold adjacency matrix
+        # or the (binary) predicted edges
+        selected_head_tag = self.select_heads(head_tag, dep_tag, edges=adj_m)
+        edge_label_logits = self.tag_bilinear(selected_head_tag, dep_tag)
+
+        probs=torch.sigmoid(arc_logits)
+        adj_m_preds = (probs >= 0.5).to(torch.int)
 
         # TODO: implement tag loss if you supervise labels
         tag_loss = torch.tensor(0.0, device=arc_logits.device)
@@ -101,3 +109,6 @@ class GraphDecoder(nn.Module):
         return arc_loss, tag_loss
 
 
+    def select_heads(self, head_tag, dep_tag, edges):
+        head_tag_logits = ...
+        return head_tag_logits
