@@ -38,10 +38,10 @@ cartesian_product() {
 
 declare -a seed=(
     0
-    # 1
-    # 2
-    # 3
-    # 4
+    1
+    2
+    3
+    4
 )
 
 declare -a lgi_enc_layers_opts=(
@@ -56,23 +56,23 @@ declare -a arc_norm_opts=(
     1
     )
 
-declare -a epoch_opts=(
+declare -a epochs_opts=(
     1
     # 2
     # 3
 )
 
 declare -a arc_representation_dim_opts=(
-    50
+    # 50
     100
-    150
+    # 150
     200
 )
 
 declare -a encoder_output_dim_opts=(
-    50
+    # 50
     100
-    150
+    # 150
     200
 )
 
@@ -84,7 +84,7 @@ array_names=(
             seed
             lgi_enc_layers_opts
             arc_norm_opts
-            epoch_opts
+            epochs_opts
             arc_representation_dim_opts
             encoder_output_dim_opts
             dataset_name_opts
@@ -117,7 +117,7 @@ while IFS= read -r combo; do
                 --seed ${params[0]}
                 --lgi_enc_layers ${params[1]}
                 --arc_norm ${params[2]}
-                --epoch ${params[3]}
+                --epochs ${params[3]}
                 --arc_representation_dim ${params[4]}
                 --encoder_output_dim ${params[5]}
                 --dataset_name ${params[6]}

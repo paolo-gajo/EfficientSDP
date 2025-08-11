@@ -26,7 +26,7 @@ class LGI(torch.nn.Module):
                 out_channels=self.config['encoder_output_dim'],
                 heads=self.config['num_attn_heads'],
                 concat=False,
-                edge_dim=self.config['edge_dim'],
+                edge_dim=1,
                 residual=True)
             )
 
@@ -43,17 +43,21 @@ class LGI(torch.nn.Module):
     def forward(self, model_input):
         graphs = model_input.to_data_list()
 
-        # Get the initial features and graph structure
-        x = model_input.x.to(self.config['device'])
-        edge_index = model_input.edge_index.to(self.config['device'])
-        edge_attr = model_input.edge_attr.to(self.config['device'])
+        # Always force FC proposal graph
+        batch = model_input.batch.to(self.config['device'])
+        edge_index = build_fc_edge_index(batch, device=self.config['device'])  # (2, E), long
 
+        # Geometric edge features (distance); requires edge_dim == 1 in GATv2Conv
+        pos = model_input.pos.to(self.config['device'])
+        row, col = edge_index
+        edge_attr = (pos[row] - pos[col]).norm(dim=-1, keepdim=True)  # (E, 1), float
+
+        x = model_input.x.to(self.config['device'])
         for i, layer in enumerate(self.encoder):
             x = layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
             if i < len(self.encoder) - 1:
                 x = F.relu(x)
-                # You might also add dropout here
-                # x = F.dropout(x, p=0.5, training=self.training)
+                # optional: x = F.dropout(x, p=0.5, training=self.training)
 
         x = list(unbatch(x, model_input.batch))
         x, mask = pad_inputs(x)
@@ -203,3 +207,22 @@ class LGI(torch.nn.Module):
         """Freeze parser if asked for!"""
         for param in self.parser.parameters():
             param.requires_grad = False
+
+def build_fc_edge_index(batch, device=None):
+    device = device or batch.device
+    sizes = torch.bincount(batch).tolist()                   # nodes per graph
+    offsets = torch.tensor([0] + sizes[:-1], device=device).cumsum(0)
+
+    chunks = []
+    for n, off in zip(sizes, offsets):
+        idx  = torch.arange(off, off + n, device=device)
+        row  = idx.repeat_interleave(n)
+        col  = idx.repeat(n)
+        mask = row != col                                    # drop diagonal
+        chunks.append(torch.stack((row[mask], col[mask]), 0))
+    if chunks:
+        ei = torch.cat(chunks, dim=1)
+    else:
+        ei = torch.empty(2, 0, dtype=torch.long, device=device)
+    return ei.long()
+

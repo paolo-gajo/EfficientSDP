@@ -60,15 +60,17 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}) -> Di
 
     config['save_dir'] = set_save_dir(config['save_dir'], config['save_suffix'], './results')
     config = set_lr(config)
-    config = set_labels(config)
 
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
-    for split in ['train', 'val', 'test']:
-        config[f'{split}_file_graphs'] = config[f'{split}_file_graphs'].format(dataset_name = config['dataset_name'])
-
     config['model_path'] = os.path.join(config['save_dir'], 'model.pth')
-    config['encoder_output_dim'] = AutoConfig.from_pretrained(config['model_name']).hidden_size
+    
+    config = set_labels(config)
+
+    if config['task_type'] == 'nlp':
+        for split in ['train', 'val', 'test']:
+            config[f'{split}_file_graphs'] = config[f'{split}_file_graphs'].format(dataset_name = config['dataset_name'])
+        if 'encoder_output_dim' not in args.keys():
+            config['encoder_output_dim'] = AutoConfig.from_pretrained(config['model_name']).hidden_size
     
     set_seeds(config['seed'])
 
@@ -76,15 +78,10 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}) -> Di
     return config
 
 def set_seeds(seed):
-    """
-        Enable deterministic behavior.
-        https://github.com/huggingface/transformers/blob/main/src/transformers/trainer_utils.py#L58
-    """
+    # enable deterministic behavior
     set_seed(seed)
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     torch.use_deterministic_algorithms(True)
-
-    # Enable CUDNN deterministic mode
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
