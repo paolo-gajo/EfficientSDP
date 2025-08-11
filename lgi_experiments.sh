@@ -103,7 +103,7 @@ combinations=$(cartesian_product array_names)
 eval_steps=10000
 batch_size=64
 save_suffix=lgi
-learning_rate=0.01
+learning_rate=0.001
 task_type=graph
 model_type=graph
 

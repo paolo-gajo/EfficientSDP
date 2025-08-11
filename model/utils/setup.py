@@ -58,7 +58,6 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}) -> Di
         config[key] = args[key]
 
     config['save_dir'] = set_save_dir(config['save_dir'], config['save_suffix'], './results')
-    config = set_lr(config)
 
     config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
     config['model_path'] = os.path.join(config['save_dir'], 'model.pth')
@@ -66,6 +65,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}) -> Di
     config = set_labels(config)
 
     if config['task_type'] == 'nlp':
+        config = set_lr(config)
         for split in ['train', 'val', 'test']:
             config[f'{split}_file_graphs'] = config[f'{split}_file_graphs'].format(dataset_name = config['dataset_name'])
         if 'encoder_output_dim' not in args.keys():

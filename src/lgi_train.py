@@ -19,7 +19,7 @@ def main():
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     print('Config:\n\n', json.dumps(config, indent=4))
-    # print('Args:\n\n', json.dumps(args, indent=4))
+    print('Args:\n\n', json.dumps(args, indent=4))
     print(f"Will save to: {config['save_dir']}")
     
     # save config in advance in case training fails
@@ -103,11 +103,12 @@ def main():
                                                 steps=current_step,)
                 # print(f'val F1:\t', json.dumps(val_results, indent=4))
                 val_results_list.append(val_results)
-                print(f'val_F1:', [el['parser_labeled_results'].get('F1', None) for el in val_results_list])
+                print(f'labeled_val_F1:', [el['parser_labeled_results'].get('F1', None) for el in val_results_list])
+                print(f'unlabeled_val_F1:', [el['parser_unlabeled_results'].get('F1', None) for el in val_results_list])
                 print(f'val_las:', [el['uas_las_results'].get('las', None) for el in val_results_list])
                 save_json(val_results_list, os.path.join(config['save_dir'], "val_results_partial.json"))
 
-                parser_f1 = val_results['parser_labeled_results']['F1']
+                parser_f1 = val_results['parser_unlabeled_results']['F1']
 
                 if config.get('early_stopping', False):
                     if parser_f1 > best_val_metric:
@@ -130,7 +131,8 @@ def main():
                                                 steps=current_step,)
 
                 test_results_list.append(test_results)
-                print(f'test_F1:', [el['parser_labeled_results'].get('F1', None) for el in test_results_list])
+                print(f'labeled_test_F1:', [el['parser_labeled_results'].get('F1', None) for el in test_results_list])
+                print(f'unlabeled_test_F1:', [el['parser_unlabeled_results'].get('F1', None) for el in test_results_list])
                 print(f'test_las:', [el['uas_las_results'].get('las', None) for el in test_results_list])
                 save_json(test_results_list, os.path.join(config['save_dir'], "test_results_partial.json"))
                 print('#' * 100)

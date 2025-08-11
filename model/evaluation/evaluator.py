@@ -199,15 +199,15 @@ def evaluate_model_graph(model, data_loader, eps=1e-8):
     precision = tp / (tp + fp + eps)
     recall    = tp / (tp + fn + eps)
     f1        = 2 * precision * recall / (precision + recall + eps)
-    parser_labeled_results = {
+    parser_unlabeled_results = {
         'P': precision.item(),
         'R': recall.item(),
         'F1': f1.item(),
     }
     return {
         'tagger_results': {},
-        'parser_labeled_results': parser_labeled_results,
-        'parser_unlabeled_results': {},
+        'parser_labeled_results': {},
+        'parser_unlabeled_results': parser_unlabeled_results,
         'uas_las_results': {},
         'times': times,
     }
