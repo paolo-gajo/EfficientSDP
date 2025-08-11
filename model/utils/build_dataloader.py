@@ -1,10 +1,11 @@
+import torch
 from torch.utils.data import DataLoader
 import torch_geometric as pyg
 from model.utils.data_utils import TextGraphCollator, TextGraphDataset, GraphDataset
 from transformers import AutoTokenizer
 from model.utils import load_json
 from model.utils.data_utils import get_mappings
-from torch_geometric.datasets import QM9, TUDataset, AQSOL, MalNetTiny
+from torch_geometric.datasets import QM9, TUDataset, AQSOL, MalNetTiny, GNNBenchmarkDataset
 import json
 import re
 from sklearn.model_selection import train_test_split
@@ -23,26 +24,40 @@ DATASET_MAPPING = {"ade": "nlp",
 "UD_Spanish-AnCora": "nlp",
 "UD_Wolof-WTB": "nlp",
 "qm9": "graph",
+"reddit": "graph",
+"aqsol": "graph",
+"malnettiny": "graph",
+"cifar10": "graph",
 }
 
 GRAPH_DATASETS = {
     'qm9': QM9(root='data/QM9'),
     'reddit': TUDataset(root='data', name='REDDIT-BINARY'),
     'aqsol': AQSOL(root='data/AQSOL'),
-    'malnettiny': MalNetTiny(root='data/MalNetTiny')
+    'malnettiny': MalNetTiny(root='data/MalNetTiny'),
+    'cifar10': GNNBenchmarkDataset(root='./data/CIFAR10_superpixel', name='CIFAR10'),
 }
 
 def build_graph_dataloader(config):
     data = GRAPH_DATASETS[config['dataset_name']]
-
-    config['feat_dim'] = data[0].x.shape[-1]
+    assert len(data) > 1
+    # concat rbg feats (x) and coords (pos) as features
+    if config['dataset_name'] == 'cifar10':
+        new_data = []
+        for graph in data:
+            # Concatenate RGB features (x) with 2D coordinates (pos)
+            graph.x = torch.cat([graph.x, graph.pos], dim=-1)
+            new_data.append(graph)
+        data = new_data
+    if data[0].x.dim() > 1:
+        config['feat_dim'] = data[0].x.shape[-1]
 
     # check if edge attributes exist before trying to access their shape
-    if data[0].edge_attr is not None:
+    if data[0].edge_attr.dim() > 1 and data[0].edge_attr is not None:
         config['edge_dim'] = data[0].edge_attr.shape[-1]
     else:
         # set a default value if no edge features are present
-        config['edge_dim'] = 0
+        config['edge_dim'] = 1
 
     data_train, intermediate = train_test_split(list(data), test_size=0.3, random_state=config['seed'])
     data_val, data_test = train_test_split(intermediate, test_size=0.5, random_state=config['seed'])

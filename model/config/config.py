@@ -92,6 +92,8 @@ custom_config = {
     # model options
     'task_type': 'nlp', # 'nlp' or 'graph'
     'model_type': 'attn', # 'attn' or 'gen'
+    'lgi_gat_type': 'base',
+    'gat_norm': 0,
     'graph_rnn_pred_type': 'bilinear', # 'simple' or 'bilinear'
     'freeze_encoder': 1,
     'use_lora': 0,

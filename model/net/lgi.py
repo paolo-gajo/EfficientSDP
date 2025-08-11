@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer
 from model.parser import GraphBiaffineAttention
 from torch_geometric.nn import GATv2Conv
+from model.gnn.custom_gat import GATv2ConvNormalized
 from torch_geometric.utils import unbatch, to_dense_adj
 from model.decoder import BilinearDecoder, masked_log_softmax, GraphDecoder
 from model.utils.nn import pad_inputs, square_pad_3d, square_pad_4d
@@ -13,21 +14,27 @@ from debug.model_debugging import nan_checker, check_param_norm, check_grad_norm
 from debug.viz import save_batch_heatmap, indices_to_adjacency_matrices
 import copy
 
+GAT_DICT = {
+    'base': GATv2Conv,
+    'norm': GATv2ConvNormalized,
+}
+
 class LGI(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         layers = []
-
         for i in range(self.config['lgi_enc_layers']):
             in_dim = self.config['feat_dim'] if i == 0 else self.config['encoder_output_dim']
-            layers.append(GATv2Conv(
+            layers.append(GAT_DICT[self.config['lgi_gat_type']](
                 in_channels=in_dim,
                 out_channels=self.config['encoder_output_dim'],
                 heads=self.config['num_attn_heads'],
                 concat=False,
                 edge_dim=1,
-                residual=True)
+                residual=True,
+                score_norm=self.config['gat_norm'],
+                )
             )
 
         self.encoder = nn.ModuleList(layers)

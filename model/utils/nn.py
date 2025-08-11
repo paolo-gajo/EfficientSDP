@@ -869,8 +869,9 @@ def square_pad_3d(input: list[torch.Tensor]):
     return out
 
 def square_pad_4d(input: list[torch.Tensor]):
-    d = input[0].dim()
-    assert d == 4                       # (1, L, L) -> add channel dim
+    if input[0].dim() < 4:
+        input = [el.unsqueeze(-1) for el in input]
+    assert input[0].dim() == 4                       # (1, L, L) -> add channel dim
     C = input[0].shape[-1]
     assert all(x.shape[-1] == C for x in input), "Mismatched channel counts"
 

@@ -97,8 +97,9 @@ class GraphDecoder(nn.Module):
         # i need to select the representations
         # either based on the gold adjacency matrix
         # or the (binary) predicted edges
+
         selected_head_tag = self.select_heads(head_tag, dep_tag, edges=adj_m)
-        edge_label_logits = self.tag_bilinear(selected_head_tag, dep_tag)
+        # edge_label_logits = self.tag_bilinear(selected_head_tag, dep_tag)
 
         probs=torch.sigmoid(arc_logits)
         adj_m_preds = (probs >= 0.5).to(torch.int)
