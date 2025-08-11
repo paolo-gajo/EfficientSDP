@@ -55,8 +55,7 @@ def setup_config(config : Dict, args: Dict = {}, custom_config: Dict = {}) -> Di
     for key in args:
         if key not in config and key not in custom_config:
             warnings.warn(f'{key} is passed as an input but not a valid key in current config. So it is ignored while overriding config.')
-        else:
-            config[key] = args[key]
+        config[key] = args[key]
 
     config['save_dir'] = set_save_dir(config['save_dir'], config['save_suffix'], './results')
     config = set_lr(config)

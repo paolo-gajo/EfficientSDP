@@ -141,7 +141,7 @@ default_cfg = {
     'early_stopping': True,
     'patience': 30,  ## patience period for early stopping
     'epochs': 100,
-    # 'learning_rate': 0.001,
+    'learning_rate': 0.001,
     'shuffle' : True, 
     'save_dir': '',
     'model_name': 'bert-base-uncased', ## model name, should be key in hugging face pretrained model zoo
