@@ -44,8 +44,6 @@ def build_graph_dataloader(config):
         # set a default value if no edge features are present
         config['edge_dim'] = 0
 
-    config['n_edge_labels'] = 1
-
     data_train, intermediate = train_test_split(list(data), test_size=0.3, random_state=config['seed'])
     data_val, data_test = train_test_split(intermediate, test_size=0.5, random_state=config['seed'])
     
