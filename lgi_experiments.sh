@@ -37,23 +37,11 @@ cartesian_product() {
 }
 
 declare -a seed=(
-<<<<<<< HEAD
-    # 0
-=======
     0
->>>>>>> refs/remotes/origin/dev
     # 1
     # 2
     # 3
     # 4
-<<<<<<< HEAD
-    5
-    6
-    7
-    8
-    9
-=======
->>>>>>> refs/remotes/origin/dev
 )
 
 declare -a lgi_enc_layers_opts=(
@@ -117,13 +105,8 @@ combinations=$(cartesian_product array_names)
 # Training parameters
 eval_steps=10000
 batch_size=64
-<<<<<<< HEAD
-save_suffix=lgi_cifar10
-learning_rate=0.001
-=======
 save_suffix=lgi
 learning_rate=0.01
->>>>>>> refs/remotes/origin/dev
 task_type=graph
 model_type=graph
 use_clip_grad_norm=1

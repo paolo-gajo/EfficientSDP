@@ -70,7 +70,9 @@ class LGI(torch.nn.Module):
         x, mask = pad_inputs(x)
         
         # get square adjacency matrices from edge indices
-        adj_m_labels_gold = [to_dense_adj(el.edge_index, edge_attr=el.edge_attr, max_num_nodes=el.num_nodes) for el in graphs]
+        adj_m_labels_gold = [to_dense_adj(el.edge_index,
+                                          edge_attr=el.edge_attr if hasattr(el, 'edge_attr') else None,
+                                          max_num_nodes=el.num_nodes) for el in graphs]
         adj_m_labels_gold = square_pad_4d(adj_m_labels_gold) # pad them to uniform dimensions
 
         # get binary adjacency by binaryzing edge features (which are one-hot classes)
