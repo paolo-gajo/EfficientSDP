@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
-#SBATCH --time=00:10:00
+#SBATCH --time=01:00:00
 #SBATCH --output=./.slurm/%A/%a_output.log
 #SBATCH --error=./.slurm/%A/%a_error.log
 #SBATCH --mem=64g
@@ -38,10 +38,10 @@ cartesian_product() {
 
 declare -a seed=(
     0
-    1
-    2
-    3
-    4
+    # 1
+    # 2
+    # 3
+    # 4
 )
 
 declare -a lgi_enc_layers_opts=(
@@ -49,6 +49,8 @@ declare -a lgi_enc_layers_opts=(
     1
     2
     3
+    4
+    5
     )
 
 declare -a arc_norm_opts=(
@@ -57,9 +59,9 @@ declare -a arc_norm_opts=(
     )
 
 declare -a epochs_opts=(
-    1
+    # 1
     # 2
-    # 3
+    3
 )
 
 declare -a arc_representation_dim_opts=(
@@ -104,7 +106,7 @@ combinations=$(cartesian_product array_names)
 eval_steps=10000
 batch_size=64
 save_suffix=lgi
-learning_rate=0.001
+learning_rate=0.01
 task_type=graph
 model_type=graph
 use_clip_grad_norm=1
