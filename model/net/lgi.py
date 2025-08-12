@@ -55,16 +55,15 @@ class LGI(torch.nn.Module):
         edge_index = build_fc_edge_index(batch, device=self.config['device'])  # (2, E), long
 
         # Geometric edge features (distance); requires edge_dim == 1 in GATv2Conv
-        pos = model_input.pos.to(self.config['device'])
-        row, col = edge_index
-        edge_attr = (pos[row] - pos[col]).norm(dim=-1, keepdim=True)  # (E, 1), float
-
+        # pos = model_input.pos.to(self.config['device'])
+        # row, col = edge_index
+        # edge_attr = (pos[row] - pos[col]).norm(dim=-1, keepdim=True)  # (E, 1), float
+        edge_attr = None
         x = model_input.x.to(self.config['device'])
         for i, layer in enumerate(self.encoder):
             x = layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
             if i < len(self.encoder) - 1:
                 x = F.relu(x)
-                # optional: x = F.dropout(x, p=0.5, training=self.training)
 
         x = list(unbatch(x, model_input.batch))
         x, mask = pad_inputs(x)

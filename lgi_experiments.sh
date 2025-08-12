@@ -37,11 +37,16 @@ cartesian_product() {
 }
 
 declare -a seed=(
-    0
-    1
-    2
-    3
-    4
+    # 0
+    # 1
+    # 2
+    # 3
+    # 4
+    5
+    6
+    7
+    8
+    9
 )
 
 declare -a lgi_enc_layers_opts=(
@@ -57,27 +62,28 @@ declare -a arc_norm_opts=(
     )
 
 declare -a epochs_opts=(
-    1
+    # 1
     # 2
-    # 3
+    3
 )
 
 declare -a arc_representation_dim_opts=(
     # 50
     100
     # 150
-    200
+    # 200
 )
 
 declare -a encoder_output_dim_opts=(
     # 50
     100
     # 150
-    200
+    # 200
 )
 
 declare -a dataset_name_opts=(
-    qm9
+    # qm9
+    cifar10
   )
 
 array_names=(
@@ -102,10 +108,13 @@ combinations=$(cartesian_product array_names)
 # Training parameters
 eval_steps=10000
 batch_size=64
-save_suffix=lgi
+save_suffix=lgi_cifar10
 learning_rate=0.001
 task_type=graph
 model_type=graph
+use_clip_grad_norm=1
+lgi_gat_type=base
+gat_norm=0
 
 declare -a commands=()
 while IFS= read -r combo; do
@@ -126,6 +135,9 @@ while IFS= read -r combo; do
                 --learning_rate $learning_rate
                 --task_type $task_type
                 --model_type $model_type
+                --use_clip_grad_norm $use_clip_grad_norm
+                --lgi_gat_type $lgi_gat_type
+                --gat_norm $gat_norm
                 "
     # echo ${cmd}
     commands+=("$cmd")

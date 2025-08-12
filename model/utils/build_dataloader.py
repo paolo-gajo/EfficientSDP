@@ -5,7 +5,7 @@ from model.utils.data_utils import TextGraphCollator, TextGraphDataset, GraphDat
 from transformers import AutoTokenizer
 from model.utils import load_json
 from model.utils.data_utils import get_mappings
-from torch_geometric.datasets import QM9, TUDataset, AQSOL, MalNetTiny, GNNBenchmarkDataset
+from torch_geometric.datasets import QM9, TUDataset, AQSOL, MalNetTiny, GNNBenchmarkDataset, RelLinkPredDataset
 import json
 import re
 from sklearn.model_selection import train_test_split
@@ -36,6 +36,7 @@ GRAPH_DATASETS = {
     'aqsol': AQSOL(root='data/AQSOL'),
     'malnettiny': MalNetTiny(root='data/MalNetTiny'),
     'cifar10': GNNBenchmarkDataset(root='./data/CIFAR10_superpixel', name='CIFAR10'),
+    'rlp': RelLinkPredDataset(root='./data/RelLinkPred', name='FB15k-237'),
 }
 
 def build_graph_dataloader(config):
