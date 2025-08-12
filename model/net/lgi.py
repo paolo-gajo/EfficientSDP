@@ -26,16 +26,17 @@ class LGI(torch.nn.Module):
         layers = []
         for i in range(self.config['lgi_enc_layers']):
             in_dim = self.config['feat_dim'] if i == 0 else self.config['encoder_output_dim']
-            layers.append(GAT_DICT[self.config['lgi_gat_type']](
-                in_channels=in_dim,
-                out_channels=self.config['encoder_output_dim'],
-                heads=self.config['num_attn_heads'],
-                concat=False,
-                edge_dim=1,
-                residual=True,
-                score_norm=self.config['gat_norm'],
-                )
-            )
+            kwargs = {
+                "in_channels": in_dim,
+                "out_channels": self.config['encoder_output_dim'],
+                "heads": self.config['num_attn_heads'],
+                "concat": False,
+                "edge_dim": 1,
+                "residual": True,
+            }
+            if self.config['lgi_gat_type'] == 'norm':
+                kwargs.update({"score_norm": self.config['gat_norm']})
+            layers.append(GAT_DICT[self.config['lgi_gat_type']](**kwargs))
 
         self.encoder = nn.ModuleList(layers)
 
@@ -176,33 +177,6 @@ class LGI(torch.nn.Module):
         new_arc_bilinear: nn.ModuleList = nn.ModuleList(new_layers + [trained_arc_bilinear])
         self.parser.arc_bilinear = new_arc_bilinear
         optimizer.add_param_group({"params": self.parser.arc_bilinear.parameters()})
-
-    def log_gradients(self):
-        """
-        Logs gradient norms for all components after backward pass
-        Call this method after loss.backward() but before optimizer.step()
-        """
-        grad_debug_dict = {}
-        
-        # Check gradient norms for each component
-        encoder_grad_norm = check_grad_norm(self.encoder)
-        grad_debug_dict['encoder_grad_norm'] = encoder_grad_norm.item()
-        
-        tagger_grad_norm = check_grad_norm(self.tagger)
-        grad_debug_dict['tagger_grad_norm'] = tagger_grad_norm.item()
-        
-        parser_grad_norm = check_grad_norm(self.parser)
-        grad_debug_dict['parser_grad_norm'] = parser_grad_norm.item()
-        
-        decoder_grad_norm = check_grad_norm(self.decoder)
-        grad_debug_dict['decoder_grad_norm'] = decoder_grad_norm.item()
-        
-        # Overall model gradient norm
-        overall_grad_norm = check_grad_norm(self)
-        grad_debug_dict['overall_grad_norm'] = overall_grad_norm.item()
-        
-        self.grad_debug_list.append(grad_debug_dict)
-        return grad_debug_dict
 
     def freeze_tagger(self):
         """Freeze tagger if asked for!"""
