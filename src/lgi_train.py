@@ -49,6 +49,7 @@ def main():
 
     val_results_list = []
     test_results_list = []
+    losses = []
     best_model_state = None
     best_val_metric = -np.inf
     patience_counter = 0
@@ -79,6 +80,7 @@ def main():
             model.set_mode('train')
             optimizer.zero_grad()
             loss = model(batch)
+            losses.append(loss.item())
 
             if torch.isnan(loss).item():
                 continue
@@ -155,6 +157,7 @@ def main():
     os.remove(os.path.join(config['save_dir'], "test_results_partial.json"))
     save_json(val_results_list, os.path.join(config['save_dir'], "val_results_series.json"))
     save_json(test_results_list, os.path.join(config['save_dir'], "test_results_series.json"))
+    save_json(losses, os.path.join(config['save_dir'], "losses.json"))
     if hasattr(dataloader['train'].dataset, 'label_index_map'):
         save_json(dataloader['train'].dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
 

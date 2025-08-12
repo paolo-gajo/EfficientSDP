@@ -28,11 +28,20 @@ DATASET_MAPPING = {"ade": "nlp",
 "aqsol": "graph",
 "malnettiny": "graph",
 "cifar10": "graph",
+"rlp": "graph",
+"COIL-RAG": "graph",
+"PROTEINS_full": "graph",
+"benzene": "graph",
+"FRANKENSTEIN": "graph",
 }
 
 GRAPH_DATASETS = {
     'qm9': QM9(root='data/QM9'),
-    'reddit': TUDataset(root='data', name='REDDIT-BINARY'),
+    'reddit': TUDataset(root='data', name='REDDIT-BINARY', use_node_attr=True, use_edge_attr=True),
+    'COIL-RAG': TUDataset(root='data', name='COIL-RAG', use_node_attr=True, use_edge_attr=True),
+    'PROTEINS_full': TUDataset(root='data', name='PROTEINS_full', use_node_attr=True, use_edge_attr=True),
+    'benzene': TUDataset(root='data', name='benzene', use_node_attr=True, use_edge_attr=True),
+    'FRANKENSTEIN': TUDataset(root='data', name='FRANKENSTEIN', use_node_attr=True, use_edge_attr=True),
     'aqsol': AQSOL(root='data/AQSOL'),
     'malnettiny': MalNetTiny(root='data/MalNetTiny'),
     'cifar10': GNNBenchmarkDataset(root='./data/CIFAR10_superpixel', name='CIFAR10'),
@@ -54,7 +63,7 @@ def build_graph_dataloader(config):
         config['feat_dim'] = data[0].x.shape[-1]
 
     # check if edge attributes exist before trying to access their shape
-    if data[0].edge_attr.dim() > 1 and data[0].edge_attr is not None:
+    if data[0].edge_attr is not None and data[0].edge_attr.dim() > 1:
         config['edge_dim'] = data[0].edge_attr.shape[-1]
     else:
         # set a default value if no edge features are present
