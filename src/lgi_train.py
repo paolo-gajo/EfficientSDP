@@ -15,7 +15,7 @@ def main():
 
     # get config
     # string_args = "" # used for debugging, leave empty for default behavior
-    string_args = "--task_type graph --model_type graph --dataset_name qm9 --epochs 3 --eval_steps 10000 --eval_samples 0 --batch_size 64 --learning_rate 0.001 --arc_norm 1 --arc_representation_dim 100 --encoder_output_dim 100 --lgi_enc_layers 1 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0"
+    string_args = "--task_type graph --model_type graph --dataset_name cifar10 --epochs 1 --eval_steps 10000 --eval_samples 0 --batch_size 64 --learning_rate 0.001 --arc_norm 1 --arc_representation_dim 100 --encoder_output_dim 100 --lgi_enc_layers 1 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0"
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     print('Config:\n\n', json.dumps(config, indent=4))
@@ -49,6 +49,7 @@ def main():
 
     val_results_list = []
     test_results_list = []
+    losses = []
     best_model_state = None
     best_val_metric = -np.inf
     patience_counter = 0
@@ -79,6 +80,7 @@ def main():
             model.set_mode('train')
             optimizer.zero_grad()
             loss = model(batch)
+            losses.append(loss.item())
 
             if torch.isnan(loss).item():
                 continue
@@ -155,6 +157,7 @@ def main():
     os.remove(os.path.join(config['save_dir'], "test_results_partial.json"))
     save_json(val_results_list, os.path.join(config['save_dir'], "val_results_series.json"))
     save_json(test_results_list, os.path.join(config['save_dir'], "test_results_series.json"))
+    save_json(losses, os.path.join(config['save_dir'], "losses.json"))
     if hasattr(dataloader['train'].dataset, 'label_index_map'):
         save_json(dataloader['train'].dataset.label_index_map, os.path.join(config['save_dir'], 'labels.json'))
 
