@@ -15,7 +15,6 @@ def main():
 
     # get config
     string_args = "" # used for debugging, leave empty for default behavior
-    # string_args = "--task_type graph --model_type graph --dataset_name cifar10 --epochs 3 --eval_steps 10000 --eval_samples 0 --batch_size 64 --learning_rate 0.001 --arc_norm 0 --arc_representation_dim 100 --encoder_output_dim 100 --lgi_enc_layers 3 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0"
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
     print('Config:\n\n', json.dumps(config, indent=4))

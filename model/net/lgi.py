@@ -31,7 +31,7 @@ class LGI(torch.nn.Module):
                 "out_channels": self.config['encoder_output_dim'],
                 "heads": self.config['num_attn_heads'],
                 "concat": False,
-                "edge_dim": 1,
+                "edge_dim": config['edge_dim'] if not config['use_fc'] else None,
                 "residual": True,
             }
             if self.config['lgi_gat_type'] == 'norm':
@@ -50,24 +50,26 @@ class LGI(torch.nn.Module):
     def forward(self, model_input):
         graphs = model_input.to_data_list()
 
-        # Always force FC proposal graph
-        batch = model_input.batch.to(self.config['device'])
-        edge_index = build_fc_edge_index(batch, device=self.config['device'])  # (2, E), long
+        if self.config['use_fc']:
+            batch = model_input.batch.to(self.config['device'])
+            edge_index = build_fc_edge_index(batch, device=self.config['device'])
+            edge_attr  = None
+        else:
+            edge_index, edge_attr, batch = _build_proposal_from_graphs(graphs, self.config['device'])
 
         # Geometric edge features (distance); requires edge_dim == 1 in GATv2Conv
         # pos = model_input.pos.to(self.config['device'])
         # row, col = edge_index
         # edge_attr = (pos[row] - pos[col]).norm(dim=-1, keepdim=True)  # (E, 1), float
-        edge_attr = None
         x = model_input.x.to(self.config['device'])
         for i, layer in enumerate(self.encoder):
-            x = layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
+            x = layer(x=x.float(), edge_index=edge_index, edge_attr=edge_attr)
             if i < len(self.encoder) - 1:
                 x = F.relu(x)
 
         x = list(unbatch(x, model_input.batch))
         x, mask = pad_inputs(x)
-        
+
         # get square adjacency matrices from edge indices
         adj_m_labels_gold = [to_dense_adj(el.edge_index,
                                           edge_attr=el.edge_attr if hasattr(el, 'edge_attr') else None,
@@ -85,6 +87,24 @@ class LGI(torch.nn.Module):
         elif self.mode == "test":
             adj_m_decoder = None
             adj_m_labels_decoder = None
+
+        if not self.config['use_fc']:
+            prop_dense = (to_dense_adj(edge_index, batch=batch) > 0)
+
+            # gold dense (bool) per-graph, then pad
+            gold_list = []
+            for g in graphs:
+                gd = to_dense_adj(g.edge_index, edge_attr=getattr(g, 'edge_attr', None),
+                                max_num_nodes=g.num_nodes) > 0
+                gd = gd.any(dim=-1).squeeze(0)
+                gold_list.append(gd)
+
+            B, Nmax, _ = prop_dense.shape
+            gold_dense = torch.zeros((B, Nmax, Nmax), dtype=torch.bool, device=prop_dense.device)
+            for i, gd in enumerate(gold_list):
+                n = gd.size(0); gold_dense[i, :n, :n] = gd
+
+            assert torch.equal(prop_dense, gold_dense), "Encoder proposal != gold (edge set mismatch)"
 
         decoder_output = self.decoder(
             arc_logits = parser_output['arc_logits'],
@@ -207,3 +227,40 @@ def build_fc_edge_index(batch, device=None):
         ei = torch.empty(2, 0, dtype=torch.long, device=device)
     return ei.long()
 
+def _canon_filter(ei, ea):
+    # ei: (2, E) local indices 0..n-1, ea: (E, d) or None
+    if ea is None:
+        return ei, None
+    if ea.dim() == 1:
+        ea = ea.unsqueeze(-1)
+    keep = (ea > 0).any(dim=-1).bool()
+    return ei[:, keep], ea[keep]
+
+def _build_proposal_from_graphs(graphs, device):
+    edge_indices, edge_attrs = [], []
+    sizes = []
+    off = 0
+    for el in graphs:
+        ei = el.edge_index.to(device)
+        ea = getattr(el, 'edge_attr', None)
+        if ea is not None: ea = ea.to(device)
+        ei, ea = _canon_filter(ei, ea)           # <-- SAME rule as gold
+        n = el.num_nodes
+        sizes.append(n)
+        edge_indices.append(ei + off)
+        if ea is not None: edge_attrs.append(ea)
+        off += n
+
+    if len(edge_indices) == 0:
+        E = torch.empty(2, 0, dtype=torch.long, device=device)
+        A = None
+    else:
+        E = torch.cat(edge_indices, dim=1)
+        A = torch.cat(edge_attrs, dim=0) if len(edge_attrs) == len(edge_indices) else None
+
+    # batch vector consistent with graphs
+    batch = torch.cat(
+        [torch.full((n,), i, dtype=torch.long, device=device) for i, n in enumerate(sizes)],
+        dim=0
+    )
+    return E, A, batch

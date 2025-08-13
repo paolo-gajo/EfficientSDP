@@ -88,6 +88,8 @@ custom_config = {
 
     # lgi options
     'lgi_enc_layers': 3,
+    'use_fc': 1,
+    'sanity_copy_gold': 0,
 
     # model options
     'task_type': 'nlp', # 'nlp' or 'graph'

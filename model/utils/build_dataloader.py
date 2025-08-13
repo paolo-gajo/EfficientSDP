@@ -5,7 +5,7 @@ from model.utils.data_utils import TextGraphCollator, TextGraphDataset, GraphDat
 from transformers import AutoTokenizer
 from model.utils import load_json
 from model.utils.data_utils import get_mappings
-from torch_geometric.datasets import QM9, TUDataset, AQSOL, MalNetTiny, GNNBenchmarkDataset, RelLinkPredDataset
+from torch_geometric.datasets import QM9, TUDataset, AQSOL, MalNetTiny, GNNBenchmarkDataset, RelLinkPredDataset, ZINC, LRGBDataset
 import json
 import re
 from sklearn.model_selection import train_test_split
@@ -24,76 +24,143 @@ DATASET_MAPPING = {"ade": "nlp",
 "UD_Spanish-AnCora": "nlp",
 "UD_Wolof-WTB": "nlp",
 "qm9": "graph",
-"reddit": "graph",
+"zinc": "graph",
+# "reddit": "graph",
 "aqsol": "graph",
-"malnettiny": "graph",
+# "malnettiny": "graph",
 "cifar10": "graph",
-"rlp": "graph",
+# "rlp": "graph",
 "COIL-RAG": "graph",
 "PROTEINS_full": "graph",
-"benzene": "graph",
-"FRANKENSTEIN": "graph",
+# "benzene": "graph",
+# "FRANKENSTEIN": "graph",
+"PCQM-Contact": "graph",
 }
 
 GRAPH_DATASETS = {
-    'qm9': QM9(root='data/QM9'),
-    'reddit': TUDataset(root='data', name='REDDIT-BINARY', use_node_attr=True, use_edge_attr=True),
-    'COIL-RAG': TUDataset(root='data', name='COIL-RAG', use_node_attr=True, use_edge_attr=True),
-    'PROTEINS_full': TUDataset(root='data', name='PROTEINS_full', use_node_attr=True, use_edge_attr=True),
-    'benzene': TUDataset(root='data', name='benzene', use_node_attr=True, use_edge_attr=True),
-    'FRANKENSTEIN': TUDataset(root='data', name='FRANKENSTEIN', use_node_attr=True, use_edge_attr=True),
-    'aqsol': AQSOL(root='data/AQSOL'),
-    'malnettiny': MalNetTiny(root='data/MalNetTiny'),
-    'cifar10': GNNBenchmarkDataset(root='./data/CIFAR10_superpixel', name='CIFAR10'),
-    'rlp': RelLinkPredDataset(root='./data/RelLinkPred', name='FB15k-237'),
+    'qm9': lambda: QM9(root='data/QM9'),
+    'zinc': lambda: ZINC(root='data/ZINC'),
+    'aqsol': lambda: AQSOL(root='data/AQSOL'),
+    'cifar10': lambda: GNNBenchmarkDataset(root='./data/CIFAR10_superpixel', name='CIFAR10'),
+    'COIL-RAG': lambda: TUDataset(root='data', name='COIL-RAG', use_node_attr=True, use_edge_attr=True),
+    'PROTEINS_full': lambda: TUDataset(root='data', name='PROTEINS_full', use_node_attr=True, use_edge_attr=True),
+    'PCQM-Contact': {
+        'train': lambda: LRGBDataset(root='data/PCQM-Contact', name='PCQM-Contact', split='train'),
+        'val': lambda: LRGBDataset(root='data/PCQM-Contact', name='PCQM-Contact', split='val'),
+        'test': lambda: LRGBDataset(root='data/PCQM-Contact', name='PCQM-Contact', split='test'),
+    }
 }
 
-def build_graph_dataloader(config):
-    data = GRAPH_DATASETS[config['dataset_name']]
-    assert len(data) > 1
-    # concat rbg feats (x) and coords (pos) as features
-    if config['dataset_name'] == 'cifar10':
-        new_data = []
-        for graph in data:
-            # Concatenate RGB features (x) with 2D coordinates (pos)
+# Datasets that should have positional features concatenated
+DATASETS_WITH_POS = ['cifar10', 'qm9']
+
+# Datasets with predefined splits
+PREDEFINED_SPLIT_DATASETS = ['PCQM-Contact']
+
+
+def add_positional_features(dataset, dataset_name):
+    """Add positional features to node features if available."""
+    if dataset_name not in DATASETS_WITH_POS:
+        return dataset
+    new_data = []
+    for graph in dataset:
+        if hasattr(graph, 'pos') and graph.pos is not None:
+            # Concatenate node features with positional coordinates
             graph.x = torch.cat([graph.x, graph.pos], dim=-1)
-            new_data.append(graph)
-        data = new_data
-    if data[0].x.dim() > 1:
-        config['feat_dim'] = data[0].x.shape[-1]
+        new_data.append(graph)
+    return new_data
 
-    # check if edge attributes exist before trying to access their shape
-    if data[0].edge_attr is not None and data[0].edge_attr.dim() > 1:
-        config['edge_dim'] = data[0].edge_attr.shape[-1]
+
+def load_dataset_splits(dataset_name):
+    """Load train/val/test splits for the given dataset."""
+    if dataset_name in PREDEFINED_SPLIT_DATASETS:
+        # Handle datasets with predefined splits (e.g., PCQM-Contact)
+        splits = GRAPH_DATASETS[dataset_name]
+        return splits['train'](), splits['val'](), splits['test']()
     else:
-        # set a default value if no edge features are present
-        config['edge_dim'] = 1
+        # Load single dataset and split manually
+        dataset = GRAPH_DATASETS[dataset_name]()
+        return dataset, None, None
 
-    data_train, intermediate = train_test_split(list(data), test_size=0.3, random_state=config['seed'])
-    data_val, data_test = train_test_split(intermediate, test_size=0.5, random_state=config['seed'])
+
+def split_dataset_manually(dataset, config):
+    """Split a single dataset into train/val/test."""
+    train_data, temp_data = train_test_split(
+        list(dataset), test_size=0.3, random_state=config['seed']
+    )
+    val_data, test_data = train_test_split(
+        temp_data, test_size=0.5, random_state=config['seed']
+    )
+    return train_data, val_data, test_data
+
+
+def update_config_dimensions(config, sample_data):
+    """Update config with feature and edge dimensions from sample data."""
+    # Set node feature dimension
+    if sample_data.x is not None and sample_data.x.dim() > 1:
+        config['feat_dim'] = sample_data.x.shape[-1]
     
-    dataset_train = GraphDataset(data_train)
-    dataset_val = GraphDataset(data_val)
-    if config['eval_samples']:
-        dataset_val = dataset_val[:config['eval_samples']]
-    dataset_test = GraphDataset(data_test)
-    if config['eval_samples']:
-        dataset_test = dataset_test[:config['eval_samples']]
-    train_loader = pyg.loader.DataLoader(dataset_train,
-                                batch_size=config['batch_size'],
-                                shuffle = True)
-    val_loader = pyg.loader.DataLoader(dataset_val,
-                                batch_size=config['batch_size'],
-                                shuffle = False)
-    test_loader = pyg.loader.DataLoader(dataset_test,
-                                batch_size=config['batch_size'],
-                                shuffle = False)
+    # Set edge feature dimension
+    if sample_data.edge_attr is not None and sample_data.edge_attr.dim() > 1:
+        config['edge_dim'] = sample_data.edge_attr.shape[-1]
+    else:
+        config['edge_dim'] = 1  # Default for geometric distance features
 
-    return {
-        'train': train_loader,
-        'val': val_loader,
-        'test': test_loader,
+
+def create_data_loaders(train_data, val_data, test_data, config):
+    """Create PyTorch Geometric data loaders."""
+    # Limit evaluation samples if specified
+    if config.get('eval_samples', 0):
+        val_data = val_data[:config['eval_samples']]
+        test_data = test_data[:config['eval_samples']]
+    
+    # Create datasets
+    datasets = {
+        'train': GraphDataset(train_data),
+        'val': GraphDataset(val_data),
+        'test': GraphDataset(test_data)
     }
+    
+    # Create data loaders
+    loaders = {}
+    for split, dataset in datasets.items():
+        shuffle = (split == 'train')
+        loaders[split] = pyg.loader.DataLoader(
+            dataset,
+            batch_size=config['batch_size'],
+            shuffle=shuffle
+        )
+    
+    return loaders
+
+
+def build_graph_dataloader(config):
+    """Build graph data loaders for the specified dataset."""
+    dataset_name = config['dataset_name']
+    
+    # Load dataset(s)
+    train_dataset, val_dataset, test_dataset = load_dataset_splits(dataset_name)
+    
+    # Validate dataset
+    assert len(train_dataset) > 1, f"Dataset {dataset_name} is too small"
+    
+    # Handle datasets that need manual splitting
+    if dataset_name not in PREDEFINED_SPLIT_DATASETS:
+        train_data, val_data, test_data = split_dataset_manually(train_dataset, config)
+    else:
+        train_data, val_data, test_data = list(train_dataset), list(val_dataset), list(test_dataset)
+    
+    # Add positional features if needed
+    train_data = add_positional_features(train_data, dataset_name)
+    val_data = add_positional_features(val_data, dataset_name)
+    test_data = add_positional_features(test_data, dataset_name)
+    
+    # Update config with dataset dimensions
+    update_config_dimensions(config, train_data[0])
+    
+    # Create and return data loaders
+    data_loaders = create_data_loaders(train_data, val_data, test_data, config)
+    return data_loaders
 
 
 def build_text_dataloader(config):

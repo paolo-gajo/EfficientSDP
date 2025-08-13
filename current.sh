@@ -1,0 +1,1 @@
+--task_type graph --model_type graph --dataset_name cifar10 --epochs 1 --eval_steps 10000 --eval_samples 0 --batch_size 16 --learning_rate 0.001 --arc_norm 1 --arc_representation_dim 100 --encoder_output_dim 100 --lgi_enc_layers 1 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0
