@@ -52,10 +52,15 @@ class LGI(torch.nn.Module):
 
         if self.config['use_fc']:
             batch = model_input.batch.to(self.config['device'])
+            # `edge_index` is fully connected with no self loops
+            # confirmed with matplotlib (see fc_edge_index.pdf)
             edge_index = build_fc_edge_index(batch, device=self.config['device'])
             edge_attr  = None
+            # save_batch_heatmap((to_dense_adj(edge_index, batch=batch) > 0).int(), 'fc_edge_index.pdf')
         else:
+            # here `edge_index` is exactly the same as `adj_m_gold` below
             edge_index, edge_attr, batch = _build_proposal_from_graphs(graphs, self.config['device'])
+            # save_batch_heatmap((to_dense_adj(edge_index, batch=batch) > 0).int(), 'not_fc_edge_index.pdf')
 
         # Geometric edge features (distance); requires edge_dim == 1 in GATv2Conv
         # pos = model_input.pos.to(self.config['device'])
@@ -78,7 +83,7 @@ class LGI(torch.nn.Module):
 
         # get binary adjacency by binaryzing edge features (which are one-hot classes)
         adj_m_gold = (adj_m_labels_gold > 0).any(dim=-1).to(torch.int).to(x.device)
-
+        # save_batch_heatmap(adj_m_gold, 'adj_m_gold.pdf')
         parser_output = self.parser(input=x, mask=mask)
 
         if self.mode in ["train", "validation"]:
