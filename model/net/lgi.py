@@ -23,9 +23,14 @@ class LGI(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        if config['num_embeddings']:
+            self.embedder = nn.Embedding(config['num_embeddings'], self.config['encoder_output_dim'] // self.config['num_node_feats'])
         layers = []
         for i in range(self.config['lgi_enc_layers']):
-            in_dim = self.config['feat_dim'] if i == 0 else self.config['encoder_output_dim']
+            if config['num_embeddings']:
+                in_dim = self.embedder.embedding_dim * self.config['num_node_feats']
+            else:
+                in_dim = self.config['feat_dim'] if i == 0 else self.config['encoder_output_dim']
             kwargs = {
                 "in_channels": in_dim,
                 "out_channels": self.config['encoder_output_dim'],
@@ -37,7 +42,6 @@ class LGI(torch.nn.Module):
             if self.config['lgi_gat_type'] == 'norm':
                 kwargs.update({"score_norm": self.config['gat_norm']})
             layers.append(GAT_DICT[self.config['lgi_gat_type']](**kwargs))
-
         self.encoder = nn.ModuleList(layers)
 
         self.parser = GraphBiaffineAttention(config)
@@ -67,8 +71,11 @@ class LGI(torch.nn.Module):
         # row, col = edge_index
         # edge_attr = (pos[row] - pos[col]).norm(dim=-1, keepdim=True)  # (E, 1), float
         x = model_input.x.to(self.config['device'])
+        if self.config['num_embeddings']:
+            x = self.embedder(x)
+            x = x.reshape(-1, self.embedder.embedding_dim * self.config['num_node_feats'], 1).squeeze(-1)
         for i, layer in enumerate(self.encoder):
-            x = layer(x=x.float(), edge_index=edge_index, edge_attr=edge_attr)
+            x = layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
             if i < len(self.encoder) - 1:
                 x = F.relu(x)
 

@@ -33,7 +33,7 @@ DATASET_MAPPING = {"ade": "nlp",
 "COIL-RAG": "graph",
 "PROTEINS_full": "graph",
 # "benzene": "graph",
-# "FRANKENSTEIN": "graph",
+"FRANKENSTEIN": "graph",
 "PCQM-Contact": "graph",
 }
 
@@ -44,6 +44,7 @@ GRAPH_DATASETS = {
     'cifar10': lambda: GNNBenchmarkDataset(root='./data/CIFAR10_superpixel', name='CIFAR10'),
     'COIL-RAG': lambda: TUDataset(root='data', name='COIL-RAG', use_node_attr=True, use_edge_attr=True),
     'PROTEINS_full': lambda: TUDataset(root='data', name='PROTEINS_full', use_node_attr=True, use_edge_attr=True),
+    'FRANKENSTEIN': lambda: TUDataset(root='data', name='FRANKENSTEIN', use_node_attr=True, use_edge_attr=True),
     'PCQM-Contact': {
         'train': lambda: LRGBDataset(root='data/PCQM-Contact', name='PCQM-Contact', split='train'),
         'val': lambda: LRGBDataset(root='data/PCQM-Contact', name='PCQM-Contact', split='val'),
@@ -140,7 +141,12 @@ def build_graph_dataloader(config):
     
     # Load dataset(s)
     train_dataset, val_dataset, test_dataset = load_dataset_splits(dataset_name)
-    
+    if train_dataset.x.dtype == torch.long:
+        config['num_embeddings'] = torch.max(train_dataset.x) + 1
+    else:
+        config['num_embeddings'] = 0
+    config['num_node_feats'] = train_dataset.x.shape[-1]
+
     # Validate dataset
     assert len(train_dataset) > 1, f"Dataset {dataset_name} is too small"
     
