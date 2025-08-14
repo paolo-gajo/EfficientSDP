@@ -59,9 +59,9 @@ declare -a arc_norm_opts=(
     )
 
 declare -a epochs_opts=(
-    # 1
+    1
     # 2
-    3
+    # 3
 )
 
 declare -a arc_representation_dim_opts=(
@@ -79,8 +79,9 @@ declare -a encoder_output_dim_opts=(
 )
 
 declare -a dataset_name_opts=(
-    # qm9
+    qm9
     cifar10
+    PCQM-Contact
   )
 
 array_names=(
@@ -104,7 +105,7 @@ combinations=$(cartesian_product array_names)
 
 # Training parameters
 eval_steps=10000
-batch_size=64
+batch_size=16
 save_suffix=lgi
 learning_rate=0.001
 task_type=graph
