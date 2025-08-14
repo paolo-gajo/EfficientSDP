@@ -27,10 +27,13 @@ class LGI(torch.nn.Module):
             self.embedder = nn.Embedding(config['num_embeddings'], self.config['encoder_output_dim'] // self.config['num_node_feats'])
         layers = []
         for i in range(self.config['lgi_enc_layers']):
-            if config['num_embeddings']:
-                in_dim = self.embedder.embedding_dim * self.config['num_node_feats']
+            if i == 0:
+                if config['num_embeddings']:
+                    in_dim = self.embedder.embedding_dim * self.config['num_node_feats']
+                else:
+                    in_dim = self.config['feat_dim']
             else:
-                in_dim = self.config['feat_dim'] if i == 0 else self.config['encoder_output_dim']
+                in_dim = self.config['encoder_output_dim']
             kwargs = {
                 "in_channels": in_dim,
                 "out_channels": self.config['encoder_output_dim'],
@@ -74,6 +77,7 @@ class LGI(torch.nn.Module):
         if self.config['num_embeddings']:
             x = self.embedder(x)
             x = x.reshape(-1, self.embedder.embedding_dim * self.config['num_node_feats'], 1).squeeze(-1)
+            # import pdb; pdb.set_trace()
         for i, layer in enumerate(self.encoder):
             x = layer(x=x, edge_index=edge_index, edge_attr=edge_attr)
             if i < len(self.encoder) - 1:

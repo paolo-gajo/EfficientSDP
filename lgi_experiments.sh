@@ -58,12 +58,6 @@ declare -a arc_norm_opts=(
     1
     )
 
-declare -a epochs_opts=(
-    1
-    # 2
-    # 3
-)
-
 declare -a arc_representation_dim_opts=(
     # 50
     100
@@ -79,8 +73,8 @@ declare -a encoder_output_dim_opts=(
 )
 
 declare -a dataset_name_opts=(
-    qm9
-    cifar10
+    # qm9
+    # cifar10
     PCQM-Contact
   )
 
@@ -88,7 +82,6 @@ array_names=(
             seed
             lgi_enc_layers_opts
             arc_norm_opts
-            epochs_opts
             arc_representation_dim_opts
             encoder_output_dim_opts
             dataset_name_opts
@@ -104,7 +97,9 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-eval_steps=10000
+epochs=1
+train_steps=10000
+eval_steps=1000
 batch_size=16
 save_suffix=lgi
 learning_rate=0.001
@@ -124,10 +119,11 @@ while IFS= read -r combo; do
                 --seed ${params[0]}
                 --lgi_enc_layers ${params[1]}
                 --arc_norm ${params[2]}
-                --epochs ${params[3]}
-                --arc_representation_dim ${params[4]}
-                --encoder_output_dim ${params[5]}
-                --dataset_name ${params[6]}
+                --arc_representation_dim ${params[3]}
+                --encoder_output_dim ${params[4]}
+                --dataset_name ${params[5]}
+                --epochs $epochs
+                --train_steps $train_steps
                 --eval_steps $eval_steps
                 --batch_size $batch_size
                 --learning_rate $learning_rate

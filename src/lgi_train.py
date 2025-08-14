@@ -14,8 +14,8 @@ from model.config import default_cfg, custom_config
 def main():
 
     # get config
-    # string_args = "" # used for debugging, leave empty for default behavior
-    string_args = "--task_type graph --model_type graph --eval_steps 10000 --eval_samples 0 --batch_size 16 --learning_rate 0.001 --arc_representation_dim 100 --encoder_output_dim 100 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0 --epochs 1 --use_fc 1 --arc_norm 0 --lgi_enc_layers 1 --dataset_name PCQM-Contact" # used for debugging, leave empty for default behavior
+    string_args = "" # used for debugging, leave empty for default behavior
+    # string_args = "--task_type graph --model_type graph --eval_steps 10000 --eval_samples 0 --batch_size 16 --learning_rate 0.001 --arc_representation_dim 100 --encoder_output_dim 100 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0 --epochs 1 --use_fc 1 --arc_norm 0 --lgi_enc_layers 1 --dataset_name PCQM-Contact" # used for debugging, leave empty for default behavior
     
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
@@ -54,22 +54,19 @@ def main():
     best_model_state = None
     best_val_metric = -np.inf
     patience_counter = 0
-
-    # we can either train for a number of epochs or steps
+    
     num_epochs = config.get('epochs', 0)
     if num_epochs:
-        train_steps = len(dataloader['train'].dataset) * num_epochs // config['batch_size']
-    else:
-        train_steps = config.get('train_steps', 10000)
-    config['eval_steps'] = min(train_steps, config['eval_steps'])
+        config['train_steps'] = len(dataloader['train'].dataset) * num_epochs // config['batch_size']
+    config['eval_steps'] = min(config['train_steps'], config['eval_steps'])
 
     patience = config.get('patience', 0.3)
     current_step = 0
     unfrozen = False
     train_iter = iter(dataloader['train'])  # create an initial iterator
 
-    with tqdm(total=train_steps, desc="Training Steps") as pbar:
-        while current_step < train_steps:
+    with tqdm(total=config['train_steps'], desc="Training Steps") as pbar:
+        while current_step < config['train_steps']:
             model.current_step = current_step
             try:
                 batch = next(train_iter)
@@ -122,9 +119,9 @@ def main():
                     else:
                         patience_counter += 1
 
-                    if patience_counter * config['eval_steps'] >= train_steps * patience:
+                    if patience_counter * config['eval_steps'] >= config['train_steps'] * patience:
                         print("Early stopping triggered.")
-                        current_step = train_steps
+                        current_step = config['train_steps']
                         break
 
                 test_results, _ = run_evaluation(model=model,
