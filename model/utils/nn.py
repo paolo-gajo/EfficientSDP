@@ -786,11 +786,11 @@ def adj_indices_to_adj_matrix(targets: torch.LongTensor) -> torch.Tensor:
     B, S = targets.shape
     device = targets.device
 
-    dep = torch.arange(S, device=device).expand(B, S)
+    dep = torch.arange(S * B, device=device)
     edge_index = torch.stack([dep.reshape(-1), targets.reshape(-1)], dim=0)  # (2, B*S)
     batch_vec  = torch.arange(B, device=device).repeat_interleave(S)         # (B*S,)
 
-    adj = to_dense_adj(edge_index, batch=batch_vec, max_num_nodes=S)         # (B, S, S)
+    adj = to_dense_adj(edge_index, batch=batch_vec)         # (B, S, S)
     return adj
 
 def graph_to_edge_index(graph: Set[Tuple]):

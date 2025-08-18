@@ -24,7 +24,7 @@ def save_heatmap(matrix, filename="heatmap.pdf", cmap="viridis"):
         matrix = matrix[0]
 
     plt.figure(figsize=(8, 8))
-    plt.imshow(matrix, cmap=cmap, aspect="auto")
+    plt.imshow(matrix, cmap=cmap, aspect="auto", interpolation='nearest')
     plt.colorbar()
     plt.title("Heatmap")
     

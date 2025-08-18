@@ -97,7 +97,6 @@ def compute_uas_las(
 
 def evaluate_model_nlp(model,
                        data_loader,
-                       model_output,
                        label_index_map,
                        ignore_tags=[],
                        ignore_edges = ['0'],
@@ -120,7 +119,7 @@ def evaluate_model_nlp(model,
                 pbar.set_description(f"Batch inference time is {tot_time} seconds", refresh = True)
                 times.append(tot_time)
 
-    token_id_field = 'words' if 'words' in model_output[0].keys() else 'input_ids'
+    token_id_field = 'words' if 'words' in out[0].keys() else 'input_ids'
 
     ## get indices of ignored tags/edges
     ignore_tag_indices = [str(label_index_map['tag2class'].get(tag, '')) for tag in ignore_tags]
@@ -128,14 +127,14 @@ def evaluate_model_nlp(model,
     ignore_head_indices = ignore_edges
     
     # print('Using original evaluation!')
-    tagger_preds = [f'{i}-{j}-{word}-{pred_tag}' for i, elem in enumerate(model_output) for j, (word, pred_tag) in enumerate(zip(elem[token_id_field], elem['pos_tags_pred']))]
-    tagger_gts = [f'{i}-{j}-{word}-{gt_tag}' for i, elem in enumerate(model_output) for j, (word, gt_tag) in enumerate(zip(elem[token_id_field], elem['pos_tags_gt']))]
+    tagger_preds = [f'{i}-{j}-{word}-{pred_tag}' for i, elem in enumerate(out) for j, (word, pred_tag) in enumerate(zip(elem[token_id_field], elem['pos_tags_pred']))]
+    tagger_gts = [f'{i}-{j}-{word}-{gt_tag}' for i, elem in enumerate(out) for j, (word, gt_tag) in enumerate(zip(elem[token_id_field], elem['pos_tags_gt']))]
     
-    parser_labeled_pred = [f'{i}-{j}-{word}-{head_pred}-{edge_pred}' for i, elem in enumerate(model_output) for j, (word, edge_pred, head_pred) in enumerate(zip(elem[token_id_field], elem['head_tags_pred'], elem['head_indices_pred']))]
-    parser_labeled_gt = [f'{i}-{j}-{word}-{head_gt}-{edge_gt}' for i, elem in enumerate(model_output) for j, (word, edge_gt, head_gt) in enumerate(zip(elem[token_id_field], elem['head_tags_gt'], elem['head_indices_gt']))]
+    parser_labeled_pred = [f'{i}-{j}-{word}-{head_pred}-{edge_pred}' for i, elem in enumerate(out) for j, (word, edge_pred, head_pred) in enumerate(zip(elem[token_id_field], elem['head_tags_pred'], elem['head_indices_pred']))]
+    parser_labeled_gt = [f'{i}-{j}-{word}-{head_gt}-{edge_gt}' for i, elem in enumerate(out) for j, (word, edge_gt, head_gt) in enumerate(zip(elem[token_id_field], elem['head_tags_gt'], elem['head_indices_gt']))]
     
-    parser_unlabeled_pred = [f'{i}-{j}-{word}-{head_pred}' for i, elem in enumerate(model_output) for j, (word, head_pred) in enumerate(zip(elem[token_id_field], elem['head_indices_pred']))]
-    parser_unlabeled_gt = [f'{i}-{j}-{word}-{head_gt}' for i, elem in enumerate(model_output) for j, (word, head_gt) in enumerate(zip(elem[token_id_field], elem['head_indices_gt']))]
+    parser_unlabeled_pred = [f'{i}-{j}-{word}-{head_pred}' for i, elem in enumerate(out) for j, (word, head_pred) in enumerate(zip(elem[token_id_field], elem['head_indices_pred']))]
+    parser_unlabeled_gt = [f'{i}-{j}-{word}-{head_gt}' for i, elem in enumerate(out) for j, (word, head_gt) in enumerate(zip(elem[token_id_field], elem['head_indices_gt']))]
 
     tagger_results = {}
     tagger_results['P'], tagger_results['R'], tagger_results['F1'], tagger_results['acc'] = filter_get_P_R_F1(tagger_gts,
@@ -157,7 +156,7 @@ def evaluate_model_nlp(model,
                                                                                                             ignore_edge_labels = ignore_edge_label_indices,
                                                                                                             )
     
-    uas_las_results = compute_uas_las(model_output, ignore_labels=[int(el) for el in ignore_edge_label_indices], missing_values={"_", None})
+    uas_las_results = compute_uas_las(out, ignore_labels=[int(el) for el in ignore_edge_label_indices], missing_values={"_", None})
 
     return {
         'tagger_results': tagger_results,
