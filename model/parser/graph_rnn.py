@@ -26,21 +26,21 @@ class GraphRNNBilinear(nn.Module):
         self.edge_l = config['graph_rnn_edge_layers']
         self.tag_representation_dim = config['tag_representation_dim']
         self.bidirectional = False
-        self.graph_rnn = nn.RNN(self.input_size,
+        self.graph_rnn = nn.LSTM(self.input_size,
                                 self.hidden_graph,
                                 num_layers=self.graph_l,
                                 batch_first=True,
                                 bidirectional=self.bidirectional,
                                 dropout=0,
                 )
-        self.edge_rnn_past = nn.RNN(1,
+        self.edge_rnn_past = nn.LSTM(1,
                                 self.hidden_edge,
                                 num_layers=self.edge_l,
                                 batch_first=True,
                                 bidirectional=self.bidirectional,
                                 dropout=0,
                 )
-        self.edge_rnn_future = nn.RNN(1,
+        self.edge_rnn_future = nn.LSTM(1,
                                 self.hidden_edge,
                                 num_layers=self.edge_l,
                                 batch_first=True,
@@ -170,12 +170,12 @@ class GraphRNNBilinear(nn.Module):
             logits = head(out)[:, :-1, :]               # drop BOS-shifted last
             return logits                                # [B*S, L, 1]
 
-        A_square    = adj_indices_to_adj_matrix(head_indices)
-        A_in_past   = self.make_adj_sequence(A_square, M=self.M, future=False).to(self.config['device'])
-        A_in_future = self.make_adj_sequence(A_square, M=self.M, future=True ).to(self.config['device'])
-
+        A_square     = adj_indices_to_adj_matrix(head_indices)
+        A_in_past    = self.make_adj_sequence(A_square, M=self.M, future=False).to(self.config['device'])
+        A_in_future  = self.make_adj_sequence(A_square, M=self.M, future=True ).to(self.config['device'])
         A_out_past   = run_seq(A_in_past,   future=False)
         A_out_future = run_seq(A_in_future, future=True)
+
         return A_out_past, A_out_future
 
     def edge_pass_test(self, graph_state: torch.Tensor, future: bool = False):
@@ -198,7 +198,8 @@ class GraphRNNBilinear(nn.Module):
 
         x = (self.bos_future if future else self.bos_past).view(1, 1).expand(B*S, 1, 1)
         preds = []
-        for _ in range(self.M):
+        steps = min(self.M, S - 1)
+        for _ in range(steps):
             if isinstance(rnn, nn.LSTM):
                 out, (h, c) = rnn(x, (h, c))         # (B*S, 1, H)
             else:
