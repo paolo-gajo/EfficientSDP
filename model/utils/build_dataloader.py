@@ -142,7 +142,7 @@ def build_graph_dataloader(config):
     # Load dataset(s)
     train_dataset, val_dataset, test_dataset = load_dataset_splits(dataset_name)
     if train_dataset.x.dtype == torch.long:
-        config['num_embeddings'] = torch.max(train_dataset.x) + 1
+        config['num_embeddings'] = int(torch.max(train_dataset.x) + 1)
     else:
         config['num_embeddings'] = 0
     config['num_node_feats'] = train_dataset.x.shape[-1]

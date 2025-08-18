@@ -51,12 +51,12 @@ declare -a lgi_enc_layers_opts=(
     3
     # 4
     # 5
-    )
+)
 
 declare -a arc_norm_opts=(
     0
     1
-    )
+)
 
 declare -a arc_representation_dim_opts=(
     # 50
@@ -76,7 +76,7 @@ declare -a dataset_name_opts=(
     # qm9
     # cifar10
     PCQM-Contact
-  )
+)
 
 array_names=(
             seed
@@ -85,7 +85,7 @@ array_names=(
             arc_representation_dim_opts
             encoder_output_dim_opts
             dataset_name_opts
-            )
+)
 combinations=$(cartesian_product array_names)
 
 {
@@ -97,8 +97,8 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-epochs=1
-train_steps=10000
+epochs=0
+train_steps=2000
 eval_steps=1000
 batch_size=16
 save_suffix=lgi
@@ -108,6 +108,8 @@ model_type=graph
 use_clip_grad_norm=1
 lgi_gat_type=base
 gat_norm=0
+use_fc=1
+eval_samples=0
 
 declare -a commands=()
 while IFS= read -r combo; do
@@ -132,6 +134,8 @@ while IFS= read -r combo; do
                 --use_clip_grad_norm $use_clip_grad_norm
                 --lgi_gat_type $lgi_gat_type
                 --gat_norm $gat_norm
+                --use_fc $use_fc
+                --eval_samples $eval_samples
                 "
     # echo ${cmd}
     commands+=("$cmd")
