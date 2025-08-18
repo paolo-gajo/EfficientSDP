@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from debug.viz import save_heatmap, save_batch_heatmap
 from model.utils.nn import adjust_for_sentinel, BilinearMatrixAttention, adj_indices_to_adj_matrix
-from model.utils.rnn_utils import make_adj_sequence, reshape_adj
 from typing import List, Dict, Any
 
 class GraphRNNBilinear(nn.Module):
@@ -34,29 +33,30 @@ class GraphRNNBilinear(nn.Module):
                                 bidirectional=self.bidirectional,
                                 dropout=0,
                 )
-        self.edge_rnn = nn.RNN(1,
+        self.edge_rnn_past = nn.RNN(1,
                                 self.hidden_edge,
                                 num_layers=self.edge_l,
                                 batch_first=True,
                                 bidirectional=self.bidirectional,
                                 dropout=0,
                 )
-        self.edge_cls = nn.Linear(self.hidden_edge, 1)
-
-        self._head_sentinel = torch.nn.Parameter(torch.randn(self.input_size))
+        self.edge_rnn_future = nn.RNN(1,
+                                self.hidden_edge,
+                                num_layers=self.edge_l,
+                                batch_first=True,
+                                bidirectional=self.bidirectional,
+                                dropout=0,
+                )
         
-        self.head_arc_feedforward = nn.Linear(self.hidden_graph * 2 if self.bidirectional else self.hidden_graph,
-                                        config['arc_representation_dim'])
-        self.dept_arc_feedforward = nn.Linear(self.hidden_graph * 2 if self.bidirectional else self.hidden_graph,
-                                        config['arc_representation_dim'])
+        self.edge_cls_past = nn.Linear(self.hidden_edge, 1)
+        self.edge_cls_future = nn.Linear(self.hidden_edge, 1)
 
-        self.arc_bilinear = BilinearMatrixAttention(config['arc_representation_dim'],
-                                    config['arc_representation_dim'],
-                                    activation = nn.ReLU() if self.config['biaffine_activation'] == 'relu' else None,
-                                    use_input_biases=True,
-                                    bias_type=self.config['bias_type'],
-                                    arc_norm=self.config['arc_norm'],
-                                    )
+        self.graph_to_edge = nn.Linear(self.hidden_graph, self.hidden_edge)
+
+        self.bos_past = nn.Parameter(torch.tensor([0.0]))
+        self.bos_future = nn.Parameter(torch.tensor([0.0]))
+        
+        self._head_sentinel = torch.nn.Parameter(torch.randn(self.input_size))
 
         self.head_tag_feedforward = nn.Linear(self.hidden_graph, self.tag_representation_dim)
         self.dep_tag_feedforward = nn.Linear(self.hidden_graph, self.tag_representation_dim)
@@ -96,18 +96,29 @@ class GraphRNNBilinear(nn.Module):
         # during training the input into the edgeRNN
         # needs to be [B, S, M]
         if mode == 'train':
-            A_batch = self.edge_pass_train(graph_state=graph_state, head_indices=head_indices)
+            A_past, A_future = self.edge_pass_train(graph_state=graph_state, head_indices=head_indices)
         else:
-            A_batch = self.edge_pass_test(graph_state=graph_state)
+            A_past = self.edge_pass_test(graph_state=graph_state, future=False)
+            A_future = self.edge_pass_test(graph_state=graph_state, future=True)
 
-        # NOTE: maybe we don't need it because masking should already be handled in the decoder 
-        # but here we could use lengths to zero out any adjacency predictions made for the padding
-        arc_logits = reshape_adj(A=A_batch, M=self.M)
+        neg_inf = torch.finfo(graph_state.dtype).min
+        Ap = A_past.reshape(B, S, -1)
+        Af = A_future.reshape(B, S, -1)
+        arc_logits = torch.full((B, S, S), neg_inf, device=graph_state.device, dtype=graph_state.dtype)
 
-        # head_arc = self._dropout(F.elu(self.head_arc_feedforward(graph_state)))
-        # dept_arc = self._dropout(F.elu(self.dept_arc_feedforward(graph_state)))
+        for i in range(S):
+            start = max(0, i - self.M)
+            length = i - start
+            if length > 0:
+                arc_logits[:, i, start:i] = Ap[:, i, :length]
+        for i in range(S):
+            end = min(S, i + 1 + self.M)
+            length = end - (i + 1)
+            if length > 0:
+                arc_logits[:, i, i+1:end] = Af[:, i, :length]
 
-        # arc_logits = self.arc_bilinear(head_arc, dept_arc)
+        diag = torch.eye(S, device=graph_state.device, dtype=torch.bool)
+        arc_logits.masked_fill_(diag.unsqueeze(0), neg_inf)
 
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(graph_state)))
         dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(graph_state)))
@@ -125,42 +136,104 @@ class GraphRNNBilinear(nn.Module):
         return output
 
     def graph_pass(self, seq: torch.Tensor, batch_size: int):
-        h_prev = torch.zeros((self.graph_l * (2 if self.bidirectional else 1),
-                            batch_size,
-                            self.hidden_graph)).to(self.config['device'])
-        y, lhs = self.graph_rnn(seq, h_prev)
-        return y, lhs
+        num_dirs = 2 if self.bidirectional else 1
+        if isinstance(self.graph_rnn, nn.LSTM):
+            h0 = torch.zeros(self.graph_l * num_dirs, batch_size, self.hidden_graph, device=self.config['device'])
+            c0 = torch.zeros_like(h0)
+            y, (hn, cn) = self.graph_rnn(seq, (h0, c0))
+            return y, (hn, cn)
+        else:  # nn.RNN or nn.GRU
+            h0 = torch.zeros(self.graph_l * num_dirs, batch_size, self.hidden_graph, device=self.config['device'])
+            y, hn = self.graph_rnn(seq, h0)
+            return y, (hn, None)
 
-    def edge_pass_train(self, graph_state: torch.Tensor, head_indices: torch.LongTensor):
+    def edge_pass_train(self, graph_state, head_indices):
         B, S, D = graph_state.shape
-        graph_state_tall = graph_state.reshape(B*S, D)
-        # A needs to be shape [B, S, M] (like in `edge_pass_test`)
-        A_square = adj_indices_to_adj_matrix(head_indices)
-        A = make_adj_sequence(A_square, M=self.M)
-        A = A.to(self.config['device'])
-        h_prev = torch.zeros(self.edge_l, B*S, self.hidden_edge, device=A.device)
-        h_prev[0, :, :] = graph_state_tall
-        out, h_prev = self.edge_rnn(A, h_prev)
-        pred = self.edge_cls(out)
-        # pred = F.sigmoid(pred)
-        A_out = pred
-        return A_out
-    
-    def edge_pass_test(self, graph_state: torch.Tensor):
-        B, S, D = graph_state.shape # [B, S, D]
-        graph_state_tall = graph_state.reshape(B*S, D) # [BS, D]
-        x = torch.ones(B*S, 1, 1, device = self.config['device'])
-        h_prev = torch.zeros(self.edge_l, B*S, self.hidden_edge, device=x.device)
-        h_prev[0, :, :] = graph_state_tall 
-        A_out = [x]
-        for _ in range(self.M): # produce M edges
-            out, h_prev = self.edge_rnn(x, h_prev)
-            pred = self.edge_cls(out)
-            # pred = F.sigmoid(pred)
-            x = pred
-            A_out.append(pred)
-        A_out = torch.cat(A_out, dim = 1)
-        return A_out
-    
-class GraphRNNSimple(nn.Module):
-    ...
+        proj = self.graph_to_edge(graph_state.reshape(B*S, D))
+
+        def run_seq(A_in, future: bool):
+            rnn  = self.edge_rnn_future if future else self.edge_rnn_past
+            head = self.edge_cls_future if future else self.edge_cls_past
+            L, H = self.edge_l, self.hidden_edge
+
+            # init hidden (and cell if LSTM)
+            if isinstance(rnn, nn.LSTM):
+                h0 = torch.zeros(L, B*S, H, device=A_in.device, dtype=proj.dtype)
+                c0 = torch.zeros_like(h0)
+                h0[0, :, :] = proj
+                out, _ = rnn(A_in, (h0, c0))            # [B*S, L+1, H]
+            else:  # nn.RNN / nn.GRU
+                h0 = torch.zeros(L, B*S, H, device=A_in.device, dtype=proj.dtype)
+                h0[0, :, :] = proj
+                out, _ = rnn(A_in, h0)                  # [B*S, L+1, H]
+
+            logits = head(out)[:, :-1, :]               # drop BOS-shifted last
+            return logits                                # [B*S, L, 1]
+
+        A_square    = adj_indices_to_adj_matrix(head_indices)
+        A_in_past   = self.make_adj_sequence(A_square, M=self.M, future=False).to(self.config['device'])
+        A_in_future = self.make_adj_sequence(A_square, M=self.M, future=True ).to(self.config['device'])
+
+        A_out_past   = run_seq(A_in_past,   future=False)
+        A_out_future = run_seq(A_in_future, future=True)
+        return A_out_past, A_out_future
+
+    def edge_pass_test(self, graph_state: torch.Tensor, future: bool = False):
+        B, S, D = graph_state.shape
+        proj = self.graph_to_edge(graph_state.reshape(B*S, D))
+        L, H = self.edge_l, self.hidden_edge
+
+        rnn  = self.edge_rnn_future if future else self.edge_rnn_past
+        head = self.edge_cls_future if future else self.edge_cls_past
+
+        # init hidden (and cell if LSTM)
+        if isinstance(rnn, nn.LSTM):
+            h = torch.zeros(L, B*S, H, device=self.config['device'], dtype=proj.dtype)
+            c = torch.zeros_like(h)
+            h[0, :, :] = proj
+        else:
+            h = torch.zeros(L, B*S, H, device=self.config['device'], dtype=proj.dtype)
+            h[0, :, :] = proj
+            c = None  # unused
+
+        x = (self.bos_future if future else self.bos_past).view(1, 1).expand(B*S, 1, 1)
+        preds = []
+        for _ in range(self.M):
+            if isinstance(rnn, nn.LSTM):
+                out, (h, c) = rnn(x, (h, c))         # (B*S, 1, H)
+            else:
+                out, h = rnn(x, h)                   # (B*S, 1, H)
+            logit = head(out)                        # (B*S, 1, 1)
+            preds.append(logit)
+            x = logit
+        return torch.cat(preds, dim=1)               # (B*S, M, 1)
+
+    def make_adj_sequence(self, adj_square: torch.LongTensor, M: int = 20, future: bool = False):
+        B, S, _ = adj_square.shape
+        L = min(M, S-1)
+        device = adj_square.device
+        gold = torch.zeros(B, S, L, 1, device=device, dtype=torch.float32)
+        for i in range(S):
+            if future:
+                end = min(S, i + 1 + M)
+                row = adj_square[:, i, i+1:end]
+            else:
+                start = max(0, i - M)
+                row = adj_square[:, i, start:i]
+            length = row.shape[-1]
+            if length > 0:
+                gold[:, i, :length, 0] = row.to(gold.dtype)
+
+        bos = (self.bos_future if future else self.bos_past).view(1, 1, 1, 1).expand(B, S, 1, 1)
+        return torch.cat([bos, gold], dim=2).reshape(B * S, L + 1, 1)
+
+    def reshape_adj(self, A: torch.Tensor, B: int, S: int):
+        L = A.shape[1]
+        A_reshaped = A.reshape(B, S, L)
+        A_new = torch.zeros((B, S, S)).to(A.device)
+        for b, el in enumerate(A_reshaped):
+            for i in range(el.shape[0]):
+                start = max(0, i-self.M)
+                length  = i - start
+                A_new[b, i, start:i] = el[i, :length]
+        return A_new

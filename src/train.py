@@ -10,12 +10,15 @@ from model.utils.sys_utils import save_python_command, save_reproduce_training_c
 from model.utils.io_utils import save_json
 from model.utils.train_utils import get_scheduler, print_params
 from model.config import default_cfg, custom_config
+from torch.utils.tensorboard import SummaryWriter
+import math
 
 def main():
 
     # get config
     string_args = "" # used for debugging, leave empty for default behavior
-    # string_args = "--task_type graph --model_type graph --eval_steps 1000 --eval_samples 0 --batch_size 16 --learning_rate 0.001 --arc_representation_dim 100 --encoder_output_dim 100 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0 --epochs 1 --use_fc 1 --arc_norm 0 --lgi_enc_layers 1 --dataset_name PCQM-Contact"
+    # string_args = "--task_type graph --model_type graph --eval_steps 100 --eval_samples 0 --batch_size 16 --learning_rate 0.001 --arc_representation_dim 100 --encoder_output_dim 100 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0 --train_steps 2000 --use_fc 1 --arc_norm 1 --lgi_enc_layers 1 --dataset_name qm9"
+    # string_args = "--task_type nlp --model_type gen --dataset_name scidtb --eval_steps 500 --graph_rnn_m 1000 --use_mst_decoding_for_validation 0"
     
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
@@ -64,6 +67,10 @@ def main():
     current_step = 0
     unfrozen = False
     train_iter = iter(dataloader['train'])  # create an initial iterator
+    
+    log_dir = os.path.join(config['save_dir'], "tb")
+    writer = SummaryWriter(log_dir=log_dir)
+    print(f"TensorBoard logging to: {log_dir}")
 
     with tqdm(total=config['train_steps'], desc="Training Steps") as pbar:
         while current_step < config['train_steps']:
@@ -79,14 +86,27 @@ def main():
             optimizer.zero_grad()
             loss = model(batch)
             losses.append(loss.item())
+            
+            current_lr = optimizer.param_groups[0]['lr']
+            writer.add_scalar("train/loss", loss.item(), current_step)
+            writer.add_scalar("train/lr", current_lr, current_step)
 
             if torch.isnan(loss).item():
                 continue
 
             loss.backward()
+
             if config['use_clip_grad_norm']:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=config['grad_clip_norm'])
-            
+                max_norm = config['grad_clip_norm']
+            else:
+                # No clipping, but still compute the norm (no-op for clipping)
+                max_norm = math.inf
+
+            total_grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
+            tn = total_grad_norm.item() if hasattr(total_grad_norm, "item") else float(total_grad_norm)
+            if np.isfinite(tn):
+                writer.add_scalar("train/grad_norm", tn, current_step)
+
             optimizer.step()
             if config['use_warmup']: scheduler.step()
 
@@ -101,7 +121,18 @@ def main():
                                                 config=config,
                                                 label_index_map=config.get('label_index_map', {}),
                                                 steps=current_step,)
-                # print(f'val F1:\t', json.dumps(val_results, indent=4))
+                
+                u_f1 = val_results['parser_unlabeled_results'].get('F1', None)
+                l_f1 = val_results['parser_labeled_results'].get('F1', None)
+                las  = val_results['uas_las_results'].get('las', None)
+
+                if u_f1 is not None:
+                    writer.add_scalar("val/F1_unlabeled", u_f1, current_step)
+                if l_f1 is not None:
+                    writer.add_scalar("val/F1_labeled", l_f1, current_step)
+                if las is not None:
+                    writer.add_scalar("val/LAS", las, current_step)
+                
                 val_results_list.append(val_results)
                 print(f'labeled_val_F1:', [el['parser_labeled_results'].get('F1', None) for el in val_results_list])
                 print(f'unlabeled_val_F1:', [el['parser_unlabeled_results'].get('F1', None) for el in val_results_list])
@@ -129,6 +160,17 @@ def main():
                                                 config=config,
                                                 label_index_map=config.get('label_index_map', {}),
                                                 steps=current_step,)
+                
+                tu_f1 = test_results['parser_unlabeled_results'].get('F1', None)
+                tl_f1 = test_results['parser_labeled_results'].get('F1', None)
+                tlas  = test_results['uas_las_results'].get('las', None)
+
+                if tu_f1 is not None:
+                    writer.add_scalar("test/F1_unlabeled", tu_f1, current_step)
+                if tl_f1 is not None:
+                    writer.add_scalar("test/F1_labeled", tl_f1, current_step)
+                if tlas is not None:
+                    writer.add_scalar("test/LAS", tlas, current_step)
 
                 test_results_list.append(test_results)
                 print(f'labeled_test_F1:', [el['parser_labeled_results'].get('F1', None) for el in test_results_list])
@@ -144,6 +186,9 @@ def main():
                 unfrozen = model.unfreeze_gnn()
                 model.init_gnn_biaffines(optimizer)
                 best_model_state = deepcopy(model.state_dict())
+
+    writer.flush()
+    writer.close()
 
     # save best model checkpoint
     if best_model_state is not None and config.get('save_model', False):

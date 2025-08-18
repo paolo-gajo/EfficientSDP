@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from typing import List, Dict, Any, Tuple, Set
 import numpy as np
 
-class BilinearDecoder(nn.Module):
+class TreeDecoder(nn.Module):
     def __init__(self,
                  config: Dict,
                  tag_representation_dim: int,

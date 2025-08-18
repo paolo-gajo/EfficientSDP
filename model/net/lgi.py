@@ -6,7 +6,7 @@ from model.parser import GraphBiaffineAttention
 from torch_geometric.nn import GATv2Conv
 from model.gnn.custom_gat import GATv2ConvNormalized
 from torch_geometric.utils import unbatch, to_dense_adj
-from model.decoder import BilinearDecoder, masked_log_softmax, GraphDecoder
+from model.decoder import TreeDecoder, masked_log_softmax, GraphDecoder
 from model.utils.nn import pad_inputs, square_pad_3d, square_pad_4d
 import numpy as np
 from typing import Set, Tuple, List
@@ -184,7 +184,7 @@ class LGI(torch.nn.Module):
                 for param in layer.parameters():
                     param.requires_grad = False
             print(f"Parser GNN conv layers FROZEN at step {self.current_step}!")
-            print(f"Parser tail bilinear layers FROZEN at step {self.current_step}!")
+            print(f"Parser iterative bilinear layers FROZEN at step {self.current_step}!")
 
     def unfreeze_gnn(self):
         assert self.config['model_type'] == 'attn'
@@ -201,7 +201,7 @@ class LGI(torch.nn.Module):
                 for param in layer.parameters():
                     param.requires_grad = True
             print(f"Parser GNN conv layers UNFROZEN at step {self.current_step}!")
-            print(f"Parser tail bilinear layers UNFROZEN at step {self.current_step}!")
+            print(f"Parser iterative bilinear layers UNFROZEN at step {self.current_step}!")
         return True
     
     def init_gnn_biaffines(self, optimizer):

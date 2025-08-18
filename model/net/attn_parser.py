@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from model.encoder import Encoder
 from model.parser import SimpleParser, TriParser, GNNParser, GCNParser, GATParser, GATParserUnbatched, GraphRNNBilinear
 from model.tagger import Tagger
-from model.decoder import BilinearDecoder, masked_log_softmax, GraphDecoder
+from model.decoder import TreeDecoder, masked_log_softmax, GraphDecoder
 import numpy as np
 import warnings
 from typing import Set, Tuple
@@ -35,7 +35,7 @@ class AttnParser(torch.nn.Module):
             self.parser = GATParserUnbatched.get_model(config)
         elif config['parser_type'] == 'graph_rnn':
             self.parser = GraphRNNBilinear(config)
-        self.decoder = BilinearDecoder(config=config,
+        self.decoder = TreeDecoder(config=config,
                                     tag_representation_dim=config['tag_representation_dim'],
                                     n_edge_labels = config['n_edge_labels'])
         self.tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
@@ -265,7 +265,7 @@ class AttnParser(torch.nn.Module):
                 for param in layer.parameters():
                     param.requires_grad = False
             print(f"Parser GNN conv layers FROZEN at step {self.current_step}!")
-            print(f"Parser tail bilinear layers FROZEN at step {self.current_step}!")
+            print(f"Parser iterative bilinear layers FROZEN at step {self.current_step}!")
 
     def unfreeze_gnn(self):
         if self.config['gnn_layers'] > 0:
@@ -281,7 +281,7 @@ class AttnParser(torch.nn.Module):
                 for param in layer.parameters():
                     param.requires_grad = True
             print(f"Parser GNN conv layers UNFROZEN at step {self.current_step}!")
-            print(f"Parser tail bilinear layers UNFROZEN at step {self.current_step}!")
+            print(f"Parser iterative bilinear layers UNFROZEN at step {self.current_step}!")
         return True
     
     def init_gnn_biaffines(self, optimizer):

@@ -39,7 +39,11 @@ DATASET_MAPPING = {"ade": "nlp",
 
 GRAPH_DATASETS = {
     'qm9': lambda: QM9(root='data/QM9'),
-    'zinc': lambda: ZINC(root='data/ZINC'),
+    'zinc': {
+        'train': lambda: ZINC(root='data/zinc', split='train'),
+        'val': lambda: ZINC(root='data/zinc', split='val'),
+        'test': lambda: ZINC(root='data/zinc', split='test'),
+    },
     'aqsol': lambda: AQSOL(root='data/AQSOL'),
     'cifar10': lambda: GNNBenchmarkDataset(root='./data/CIFAR10_superpixel', name='CIFAR10'),
     'COIL-RAG': lambda: TUDataset(root='data', name='COIL-RAG', use_node_attr=True, use_edge_attr=True),
@@ -56,7 +60,7 @@ GRAPH_DATASETS = {
 DATASETS_WITH_POS = ['cifar10', 'qm9']
 
 # Datasets with predefined splits
-PREDEFINED_SPLIT_DATASETS = ['PCQM-Contact']
+PREDEFINED_SPLIT_DATASETS = ['PCQM-Contact', 'zinc']
 
 
 def add_positional_features(dataset, dataset_name):

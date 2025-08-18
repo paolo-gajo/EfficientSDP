@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 from model.encoder import Encoder
-from model.parser import GraphRNNSimple, GraphRNNBilinear, SimpleParser
+from model.parser import GraphRNNBilinear, SimpleParser
 from model.tagger import Tagger
-from model.decoder import BilinearDecoder, masked_log_softmax, SimpleDecoder, GraphDecoder
+from model.decoder import TreeDecoder, masked_log_softmax, GraphDecoder
 import numpy as np
 import warnings
 from typing import Set, Tuple
@@ -19,15 +19,10 @@ class GenParser(torch.nn.Module):
         self.config = config
         self.encoder = Encoder(config)
         self.tagger = Tagger(config)
-        # the parser also needs to be different based on `graph_rnn_pred_type`
-        if config['graph_rnn_pred_type'] == 'simple':
-            self.parser = GraphRNNSimple(config)
-            self.decoder = SimpleDecoder(config=config)
-        elif config['graph_rnn_pred_type'] == 'bilinear':
-            self.parser = SimpleParser.get_model(config)
-            self.decoder = GraphDecoder(config=config,
-                                        tag_representation_dim=self.parser.tag_representation_dim,
-                                        n_edge_labels = self.config['n_edge_labels'])
+        self.parser = GraphRNNBilinear(config)
+        self.decoder = TreeDecoder(config=config,
+                                    tag_representation_dim=self.parser.tag_representation_dim,
+                                    n_edge_labels = self.config['n_edge_labels'])
         self.tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
         self.mode = "train"
 
@@ -189,5 +184,4 @@ class GenParser(torch.nn.Module):
             "test",
             "validation",
         ], f"Mode {mode} is not valid. Mode should be among ['train', 'test', 'validation'] "
-        self.tagger.set_mode(mode)
         self.mode = mode
