@@ -1,7 +1,7 @@
 from tqdm import tqdm
 import torch
 import numpy as np
-from transformers import get_linear_schedule_with_warmup
+from transformers import get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup
 
 def print_params(model):
     total_params = sum(p.numel() for p in model.parameters())
@@ -44,6 +44,10 @@ def get_scheduler(optimizer, warmup_steps: int, train_steps: int, scheduler_type
     if use_warmup:
         if scheduler_type == 'linear':
             return get_linear_schedule_with_warmup(optimizer=optimizer,
+                                                        num_warmup_steps=warmup_steps,
+                                                        num_train_steps=train_steps,)
+        elif scheduler_type == 'cosine':
+            return get_cosine_schedule_with_warmup(optimizer=optimizer,
                                                         num_warmup_steps=warmup_steps,
                                                         num_train_steps=train_steps,)
     else:

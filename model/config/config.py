@@ -80,10 +80,10 @@ custom_config = {
     'triaffine_activation': None,
     
     # graphrnn
-    'graph_rnn_hidden_graph': 500,
-    'graph_rnn_hidden_edge': 500,
-    'graph_rnn_node_layers': 4,
-    'graph_rnn_edge_layers': 4,
+    'graph_rnn_hidden_graph': 200,
+    'graph_rnn_hidden_edge': 200,
+    'graph_rnn_node_layers': 3,
+    'graph_rnn_edge_layers': 3,
     'graph_rnn_m': 20,
 
     # lgi options
@@ -125,7 +125,7 @@ custom_config = {
     # training options
     'use_warmup': 0,
     'warmup_ratio': 0.06, # percentage of steps over which to warm up
-    'scheduler_type': 'linear',
+    'scheduler_type': 'linear', # `linear` or `cosine`
     'use_clip_grad_norm': 0,
     'grad_clip_norm': 1.0,
     'batch_size': 8,

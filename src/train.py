@@ -18,7 +18,7 @@ def main():
     # get config
     # string_args = "" # used for debugging, leave empty for default behavior
     # string_args = "--task_type graph --model_type graph --eval_steps 100 --eval_samples 0 --batch_size 16 --learning_rate 0.001 --arc_representation_dim 100 --encoder_output_dim 100 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0 --train_steps 2000 --use_fc 1 --arc_norm 1 --lgi_enc_layers 1 --dataset_name qm9"
-    string_args = "--task_type nlp --model_type gen --dataset_name scidtb --eval_steps 500 --graph_rnn_m 1000 --use_mst_decoding_for_validation 0"
+    string_args = "--task_type nlp --model_type gen --dataset_name ade --eval_steps 100 --graph_rnn_m 1000 --use_mst_decoding_for_validation 0 --scheduler_type cosine"
     
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)

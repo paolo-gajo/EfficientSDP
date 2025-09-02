@@ -51,7 +51,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-def save_batch_heatmap(matrices, filename="batch_heatmap.pdf", cmap="viridis", titles=None):
+def save_batch_heatmap(matrices, filename="batch_heatmap.pdf", cmap="viridis", titles=None, dpi = 400, add_diag = False):
     """
     Saves heatmaps of a batch of matrices as subplots in a single PDF.
     
@@ -64,6 +64,9 @@ def save_batch_heatmap(matrices, filename="batch_heatmap.pdf", cmap="viridis", t
     - titles (list of str, optional): List of titles for each subplot. If None,
       uses "Matrix 0", "Matrix 1", etc.
     """
+
+    if add_diag:
+        matrices = matrices + torch.diag(torch.tensor([-torch.inf for _ in range(matrices.shape[1])])).to(matrices.device)
     
     # Handle input format - convert to list of 2D arrays
     processed_matrices = []
@@ -128,7 +131,7 @@ def save_batch_heatmap(matrices, filename="batch_heatmap.pdf", cmap="viridis", t
         axes[i].axis('off')
     
     plt.tight_layout()
-    plt.savefig(filename, format="pdf", bbox_inches="tight")
+    plt.savefig(filename, bbox_inches="tight", dpi = dpi)
     plt.close()
 
 def _process_single_matrix(matrix):

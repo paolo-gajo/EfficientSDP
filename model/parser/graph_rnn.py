@@ -25,41 +25,41 @@ class GraphRNNBilinear(nn.Module):
         self.graph_l = config['graph_rnn_node_layers']
         self.edge_l = config['graph_rnn_edge_layers']
         self.tag_representation_dim = config['tag_representation_dim']
-        self.bidirectional = False
-        self.graph_rnn = nn.LSTM(self.input_size,
+        self.bidirectional = True
+        self.graph_rnn = nn.RNN(self.input_size,
                                 self.hidden_graph,
                                 num_layers=self.graph_l,
                                 batch_first=True,
                                 bidirectional=self.bidirectional,
-                                dropout=0,
+                                dropout=0.3,
                 )
-        self.edge_rnn_past = nn.LSTM(1,
+        self.edge_rnn_past = nn.RNN(1,
                                 self.hidden_edge,
                                 num_layers=self.edge_l,
                                 batch_first=True,
-                                bidirectional=self.bidirectional,
-                                dropout=0,
+                                bidirectional=False,
+                                dropout=0.3,
                 )
-        self.edge_rnn_future = nn.LSTM(1,
+        self.edge_rnn_future = nn.RNN(1,
                                 self.hidden_edge,
                                 num_layers=self.edge_l,
                                 batch_first=True,
-                                bidirectional=self.bidirectional,
-                                dropout=0,
+                                bidirectional=False,
+                                dropout=0.3,
                 )
         
         self.edge_cls_past = nn.Linear(self.hidden_edge, 1)
         self.edge_cls_future = nn.Linear(self.hidden_edge, 1)
-
-        self.graph_to_edge = nn.Linear(self.hidden_graph, self.hidden_edge)
+        graph_rnn_output_dim = self.hidden_graph * 2 if self.bidirectional else self.hidden_graph
+        self.graph_to_edge = nn.Linear(graph_rnn_output_dim, self.hidden_edge)
 
         self.bos_past = nn.Parameter(torch.tensor([0.0]))
         self.bos_future = nn.Parameter(torch.tensor([0.0]))
         
         self._head_sentinel = torch.nn.Parameter(torch.randn(self.input_size))
 
-        self.head_tag_feedforward = nn.Linear(self.hidden_graph, self.tag_representation_dim)
-        self.dep_tag_feedforward = nn.Linear(self.hidden_graph, self.tag_representation_dim)
+        self.head_tag_feedforward = nn.Linear(graph_rnn_output_dim, self.tag_representation_dim)
+        self.dep_tag_feedforward = nn.Linear(graph_rnn_output_dim, self.tag_representation_dim)
         self._dropout = nn.Dropout(config['tag_dropout'])
 
     def forward(self,
@@ -104,7 +104,7 @@ class GraphRNNBilinear(nn.Module):
         neg_inf = torch.finfo(graph_state.dtype).min
         Ap = A_past.reshape(B, S, -1)
         Af = A_future.reshape(B, S, -1)
-        arc_logits = torch.full((B, S, S), neg_inf, device=graph_state.device, dtype=graph_state.dtype)
+        arc_logits = torch.full((B, S, S), 0, device=graph_state.device, dtype=graph_state.dtype)
 
         for i in range(S):
             start = max(0, i - self.M)
@@ -117,8 +117,8 @@ class GraphRNNBilinear(nn.Module):
             if length > 0:
                 arc_logits[:, i, i+1:end] = Af[:, i, :length]
 
-        diag = torch.eye(S, device=graph_state.device, dtype=torch.bool)
-        arc_logits.masked_fill_(diag.unsqueeze(0), neg_inf)
+        # diag = torch.eye(S, device=graph_state.device, dtype=torch.bool)
+        # arc_logits.masked_fill_(diag.unsqueeze(0), neg_inf)
 
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(graph_state)))
         dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(graph_state)))
@@ -196,9 +196,9 @@ class GraphRNNBilinear(nn.Module):
             h[0, :, :] = proj
             c = None  # unused
 
-        x = (self.bos_future if future else self.bos_past).view(1, 1).expand(B*S, 1, 1)
+        x = (self.bos_future if future else self.bos_past).view(1, 1).expand(B*S, 1, 1).to(self.config['device'])
         preds = []
-        steps = min(self.M, S - 1)
+        steps = min(self.M, S)
         for _ in range(steps):
             if isinstance(rnn, nn.LSTM):
                 out, (h, c) = rnn(x, (h, c))         # (B*S, 1, H)
@@ -210,23 +210,32 @@ class GraphRNNBilinear(nn.Module):
         return torch.cat(preds, dim=1)               # (B*S, M, 1)
 
     def make_adj_sequence(self, adj_square: torch.LongTensor, M: int = 20, future: bool = False):
+        '''
+        return:
+            A matrix where each row is a sequence that the RNN will have to learn.
+        '''
         B, S, _ = adj_square.shape
-        L = min(M, S-1)
+        L = min(M, S)
         device = adj_square.device
-        gold = torch.zeros(B, S, L, 1, device=device, dtype=torch.float32)
+        out = torch.zeros(B, S, L, 1, device=device, dtype=torch.float32)
         for i in range(S):
             if future:
                 end = min(S, i + 1 + M)
                 row = adj_square[:, i, i+1:end]
+                ...
             else:
                 start = max(0, i - M)
                 row = adj_square[:, i, start:i]
+                ...
             length = row.shape[-1]
             if length > 0:
-                gold[:, i, :length, 0] = row.to(gold.dtype)
+                out[:, i, :length, 0] = row.to(out.dtype)
+                ...
 
-        bos = (self.bos_future if future else self.bos_past).view(1, 1, 1, 1).expand(B, S, 1, 1)
-        return torch.cat([bos, gold], dim=2).reshape(B * S, L + 1, 1)
+        bos = (self.bos_future if future else self.bos_past).view(1, 1, 1, 1).expand(B, S, 1, 1).to(device)
+        # out = torch.cat([bos, out], dim=2)
+        out_reshaped = out.reshape(B * S, L, 1)
+        return out_reshaped
 
     def reshape_adj(self, A: torch.Tensor, B: int, S: int):
         L = A.shape[1]
