@@ -100,7 +100,7 @@ class GraphRNNBilinear(nn.Module):
         else:
             A_past = self.edge_pass_test(graph_state=graph_state, future=False)
             A_future = self.edge_pass_test(graph_state=graph_state, future=True)
-
+            ...
         neg_inf = torch.finfo(graph_state.dtype).min
         Ap = A_past.reshape(B, S, -1)
         Af = A_future.reshape(B, S, -1)
@@ -111,14 +111,11 @@ class GraphRNNBilinear(nn.Module):
             length = i - start
             if length > 0:
                 arc_logits[:, i, start:i] = Ap[:, i, :length]
-        for i in range(S):
-            end = min(S, i + 1 + self.M)
-            length = end - (i + 1)
-            if length > 0:
-                arc_logits[:, i, i+1:end] = Af[:, i, :length]
-
-        # diag = torch.eye(S, device=graph_state.device, dtype=torch.bool)
-        # arc_logits.masked_fill_(diag.unsqueeze(0), neg_inf)
+        # for i in range(S):
+        #     end = min(S, i + self.M)
+        #     length = end - i
+        #     if length > 0:
+        #         arc_logits[:, i, i:end] = Af[:, i, :length]
 
         head_tag = self._dropout(F.elu(self.head_tag_feedforward(graph_state)))
         dep_tag = self._dropout(F.elu(self.dep_tag_feedforward(graph_state)))
@@ -167,12 +164,11 @@ class GraphRNNBilinear(nn.Module):
                 h0[0, :, :] = proj
                 out, _ = rnn(A_in, h0)                  # [B*S, L+1, H]
 
-            logits = head(out)[:, :-1, :]               # drop BOS-shifted last
+            logits = head(out)[:, :, :]               # drop BOS-shifted last
             return logits                                # [B*S, L, 1]
 
         A_square     = adj_indices_to_adj_matrix(head_indices)
-        A_in_past    = self.make_adj_sequence(A_square, M=self.M, future=False).to(self.config['device'])
-        A_in_future  = self.make_adj_sequence(A_square, M=self.M, future=True ).to(self.config['device'])
+        A_in_past, A_in_future = self.make_adj_sequence(A_square, M=self.M)
         A_out_past   = run_seq(A_in_past,   future=False)
         A_out_future = run_seq(A_in_future, future=True)
 
@@ -217,27 +213,35 @@ class GraphRNNBilinear(nn.Module):
         B, S, _ = adj_square.shape
         L = min(M, S)
         device = adj_square.device
-        out = torch.zeros(B, S, L, 1, device=device, dtype=torch.float32)
+        out_past = torch.zeros(B, S, L, 1, device=device, dtype=torch.float32)
+        out_future = torch.zeros(B, S, L, 1, device=device, dtype=torch.float32)
         for i in range(S):
-            if future:
-                end = min(S, i + 1 + M)
-                row = adj_square[:, i, i+1:end]
-                ...
-            else:
-                start = max(0, i - M)
-                row = adj_square[:, i, start:i]
-                ...
-            length = row.shape[-1]
-            if length > 0:
-                out[:, i, :length, 0] = row.to(out.dtype)
-                ...
+            end = min(S, i + 1 + M)
+            row_future = adj_square[:, i, i+1:end]
+            start = max(0, i - M)
+            row_past = adj_square[:, i, start:i]
+            length_past = row_past.shape[-1]
+            length_future = row_future.shape[-1]
+            assert length_past <= L
+            assert length_future <= L
+            if length_past > 0:
+                out_past[:, i, :length_past, 0] = row_past.to(out_past.dtype)          # shape: (B, Lp)
+            if length_future > 0:
+                out_future[:, i, :length_future, 0] = row_future.to(out_future.dtype)      # shape: (B, Lf)
+            ...
 
         bos = (self.bos_future if future else self.bos_past).view(1, 1, 1, 1).expand(B, S, 1, 1).to(device)
         # out = torch.cat([bos, out], dim=2)
-        out_reshaped = out.reshape(B * S, L, 1)
-        return out_reshaped
+        out_reshaped_past = out_past.reshape(B * S, L, 1)
+        out_reshaped_past = out_reshaped_past.to(self.config['device'])
+        out_reshaped_future = out_future.reshape(B * S, L, 1)
+        out_reshaped_future = out_reshaped_future.to(self.config['device'])
+        return out_reshaped_past, out_reshaped_future
 
     def reshape_adj(self, A: torch.Tensor, B: int, S: int):
+        '''
+        Turns a [B*S, D] matrix [B, S, D] 
+        '''
         L = A.shape[1]
         A_reshaped = A.reshape(B, S, L)
         A_new = torch.zeros((B, S, S)).to(A.device)
