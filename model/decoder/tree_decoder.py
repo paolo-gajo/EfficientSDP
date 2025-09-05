@@ -38,6 +38,8 @@ class TreeDecoder(nn.Module):
             )
         else:
             arc_logits = arc_logits + minus_mask
+        
+        arc_logits = torch.clamp(arc_logits, minus_inf)
 
         if self.training or not self.use_mst_decoding_for_validation:
             predicted_heads, predicted_head_tags = self._greedy_decode(

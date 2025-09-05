@@ -85,6 +85,7 @@ custom_config = {
     'graph_rnn_node_layers': 3,
     'graph_rnn_edge_layers': 3,
     'graph_rnn_m': 20,
+    'graph_rnn_split': 0,
 
     # lgi options
     'lgi_enc_layers': 3,

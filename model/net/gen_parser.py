@@ -59,6 +59,7 @@ class GenParser(torch.nn.Module):
         # Tagging
         tagger_output = self.tagger(encoder_output, mask=mask, labels=tagger_labels)
         
+        self.parser.current_step = self.current_step
         parser_output = self.parser(encoder_output,
                                     mask=mask,
                                     tag_embeddings = tagger_output.tag_embeddings,
