@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J gnn
+#SBATCH -J cr-10l
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
@@ -39,16 +39,16 @@ declare -a seed=(
     0
     1
     2
-#    3
-#    4
+    3
+    4
 )
 # Define parameter arrays
 declare -a use_gnn_steps_opts=(0)
 declare -a rnn_layers_opts=(
-    # 0
-    # 1
-    # 2
-    # 3
+    0
+    1
+    2
+    3
     4
     5
     6
@@ -139,7 +139,7 @@ combinations=$(cartesian_product array_names)
 train_steps=20000
 eval_steps=500
 
-save_suffix=10layers_seed2
+save_suffix=camera_ready_10layers
 
 use_tagger_rnn=1
 use_parser_rnn=1
@@ -149,8 +149,8 @@ use_pred_tags=1
 model_name=bert-base-uncased
 # model_name=bert-base-multilingual-cased
 
-declare -i count=0
-declare -i threshold=292
+# declare -i count=0
+# declare -i threshold=292
 # Convert combinations to commands
 declare -a commands=()
 while IFS= read -r combo; do

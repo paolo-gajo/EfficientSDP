@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J gnn
+#SBATCH -J tagger_abls
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
@@ -84,23 +84,32 @@ declare -a gnn_dropout_opts=(
     )
 declare -a gnn_activation_opts=(tanh)
 declare -a dataset_name_opts=(
-    # ade
-    # conll04
-    # scierc
-    # erfgc
+    ade
+    conll04
+    scierc
+    erfgc
     # scidtb
     # enewt
-    UD_Arabic-PADT
-    UD_Chinese-GSD
-    UD_Italian-ISDT
-    UD_Japanese-GSD
-    UD_Spanish-AnCora
-    UD_Wolof-WTB
+    # UD_Arabic-PADT
+    # UD_Chinese-GSD
+    # UD_Italian-ISDT
+    # UD_Japanese-GSD
+    # UD_Spanish-AnCora
+    # UD_Wolof-WTB
   )
 
 declare -a rnn_residual=(
     0
     # 1
+    )
+
+use_tagger_rnn_opts=(
+    0
+    1
+    )
+use_parser_rnn_opts=(
+    0
+    1
     )
 
 # Generate all combinations
@@ -117,6 +126,8 @@ array_names=(
             rnn_layers_opts
             parser_rnn_type_opts
             rnn_residual
+            use_tagger_rnn_opts
+            use_parser_rnn_opts
             )
 combinations=$(cartesian_product array_names)
 
@@ -130,12 +141,10 @@ combinations=$(cartesian_product array_names)
 
 # Training parameters
 train_steps=2000
-eval_steps=500
+eval_steps=100
 
-save_suffix=multilingual
+save_suffix=camera_ready
 
-use_tagger_rnn=1
-use_parser_rnn=1
 
 use_pred_tags=1
 
@@ -151,6 +160,10 @@ while IFS= read -r combo; do
     fi
 
     # if [[ "${params[9]}" == 0 && "${params[10]}" != 'lstm' ]]; then
+    #     continue
+    # fi
+
+    # if [[ "${params[12]}" == 1 && "${params[13]}" != 1 ]]; then
     #     continue
     # fi
     
@@ -169,10 +182,10 @@ while IFS= read -r combo; do
                 --parser_rnn_layers ${params[9]}
                 --parser_rnn_type ${params[10]}
                 --rnn_residual ${params[11]}
+                --use_tagger_rnn ${params[12]}
+                --use_parser_rnn ${params[13]}
                 --train_steps $train_steps 
                 --eval_steps $eval_steps
-                --use_tagger_rnn $use_tagger_rnn
-                --use_parser_rnn $use_parser_rnn
                 --parser_rnn_hidden_size 400
                 --use_pred_tags $use_pred_tags
                 "
