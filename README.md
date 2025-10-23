@@ -1,4 +1,4 @@
-## Semantic Dependency Parsing is More Parameter-Efficient with Normalization
+## Dependency Parsing is More Parameter-Efficient with Normalization
 
 This repo hosts the code needed to reproduce the results for the NeurIPS 2025 publication ["Semantic Dependency Parsing is More Parameter-Efficient with Normalization"](https://neurips.cc/virtual/2025/poster/117860).
 
