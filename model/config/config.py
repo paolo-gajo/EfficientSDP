@@ -136,6 +136,9 @@ custom_config = {
     'eval_samples': 0, # 0 = all samples
     'epochs': 0 ,
     'patience': 0.3,
+
+    # sys utils
+    'show_mem': 0,
 }
 
 default_cfg = {

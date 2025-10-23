@@ -6,7 +6,7 @@ import json
 from copy import deepcopy
 from tqdm.auto import tqdm
 from model.utils import build_dataloader, setup_config, build_model, get_args, run_evaluation
-from model.utils.sys_utils import save_python_command, save_reproduce_training_cmd
+from model.utils.sys_utils import save_python_command, save_reproduce_training_cmd, get_mem
 from model.utils.io_utils import save_json
 from model.utils.train_utils import get_scheduler, print_params
 from model.config import default_cfg, custom_config
@@ -112,7 +112,7 @@ def main():
 
             current_step += 1
             pbar.update(1)
-            pbar.set_description(f"Steps: {current_step}, Loss: {loss.item()}")
+            pbar.set_description(f"Steps: {current_step}, Loss: {loss.item()}, Mem: {get_mem(config['show_mem'])}")
 
             if current_step % config['eval_steps'] == 0:
                 print(f'Metrics @ {current_step}:')
