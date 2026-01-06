@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH -J tagger_abls
+#SBATCH -J correlations
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
-#SBATCH --time=06:00:00
+#SBATCH --gres=gpu:h100:1
+#SBATCH --time=01:00:00
 #SBATCH --output=./.slurm/%A/%a_output.log
 #SBATCH --error=./.slurm/%A/%a_error.log
 #SBATCH --mem=64g
@@ -36,19 +36,19 @@ cartesian_product() {
     printf '%s\n' "${result[@]}"
 }
 declare -a seed=(
-    0
+    # 0
     1
     2
-    # 3
-    # 4
+    3
+    4
 )
 # Define parameter arrays
 declare -a use_gnn_steps_opts=(0)
 declare -a rnn_layers_opts=(
-    0
+    # 0
     # 1
     # 2
-    # 3
+    3
     )
 declare -a gnn_layers_opts=(
     0
@@ -87,9 +87,9 @@ declare -a dataset_name_opts=(
     # ade
     # conll04
     # scierc
-    erfgc
-    # scidtb
-    # enewt
+    # erfgc
+    scidtb
+    enewt
     # UD_Arabic-PADT
     # UD_Chinese-GSD
     # UD_Italian-ISDT
@@ -104,10 +104,10 @@ declare -a rnn_residual_opts=(
     )
 
 declare -a model_name_opts=(
-    # bert-base-uncased
+    bert-base-uncased
     # bert-base-multilingual-cased
     # microsoft/deberta-v3-base
-    microsoft/deberta-v3-large
+    # microsoft/deberta-v3-large
     # google-bert/bert-large-uncased
     )
 
@@ -142,9 +142,9 @@ epochs=0
 train_steps=3000
 eval_steps=500
 
-freeze_encoder=0
+freeze_encoder=1
 
-save_suffix=ft
+save_suffix=correlation
 
 
 use_pred_tags=1
@@ -159,14 +159,6 @@ while IFS= read -r combo; do
     else
         use_pred_tags=1
     fi
-
-    # if [[ "${params[9]}" == 0 && "${params[10]}" != 'lstm' ]]; then
-    #     continue
-    # fi
-
-    # if [[ "${params[12]}" == 1 && "${params[13]}" != 1 ]]; then
-    #     continue
-    # fi
     
     cmd="python ./src/train.py
                 --opts
@@ -194,10 +186,6 @@ while IFS= read -r combo; do
     if [[ "${params[1]}" -gt 0  && "${params[3]}" == 'simple' ]]; then
         continue
     fi
-    # if [[ "${params[2]}" == 0 && "${params[4]}" -gt 1 ]]; then
-    #     echo here
-    #     continue
-    # fi
     echo ${cmd}
     commands+=("$cmd")
 done <<< "$combinations"
@@ -218,6 +206,6 @@ elif [[ $1 ]]; then
     done
 else
     echo "This script should be run as a SLURM array job."
-    echo "Use: sbatch --array=0-$((total_combinations-1)) $0"
+    echo "Use: sbatch --array=0-$((total_combinations-1)) ${BASH_SOURCE[0]}"
     echo "This will distribute $total_combinations jobs across N GPUs."
 fi

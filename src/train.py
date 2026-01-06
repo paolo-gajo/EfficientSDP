@@ -16,10 +16,10 @@ import math
 def main():
 
     # get config
-    # string_args = "" # used for debugging, leave empty for default behavior
+    string_args = "" # used for debugging, leave empty for default behavior
     # string_args = "--task_type graph --model_type graph --eval_steps 100 --eval_samples 0 --batch_size 16 --learning_rate 0.001 --arc_representation_dim 100 --encoder_output_dim 100 --use_clip_grad_norm 1 --lgi_gat_type base --gat_norm 0 --train_steps 2000 --use_fc 1 --arc_norm 1 --lgi_enc_layers 1 --dataset_name qm9"
     # string_args = "--task_type nlp --model_type gen --dataset_name erfgc --eval_steps 100 --graph_rnn_m 1000 --use_mst_decoding_for_validation 0 --scheduler_type cosine --graph_rnn_split 0 --use_clip_grad_norm 1 --learning_rate 0.001 --batch_size 8 --eval_samples 8"
-    string_args = "--task_type nlp --dataset_name erfgc --train_steps 3000 --eval_steps 100 --learning_rate 0.001 --batch_size 8"
+    # string_args = "--task_type nlp --dataset_name erfgc --train_steps 3000 --eval_steps 100 --learning_rate 0.001 --batch_size 8"
     
     args = get_args(string_args=string_args)
     config = setup_config(default_cfg, args=args, custom_config=custom_config)
@@ -75,9 +75,6 @@ def main():
     writer = SummaryWriter(log_dir=log_dir)
     print(f"TensorBoard logging to: {log_dir}")
 
-    f1_list = []
-    edge_number_list = []
-
     with tqdm(total=config['train_steps'], desc="Training Steps") as pbar:
         while current_step < config['train_steps']:
             model.current_step = current_step
@@ -121,6 +118,11 @@ def main():
             pbar.set_description(f"Steps: {current_step}, Loss: {loss.item()}, Mem: {get_mem(config['show_mem'])}")
 
             if current_step % config['eval_steps'] == 0:
+                f1_list_val = []
+                f1_list_test = []
+                las_list_val = []
+                las_list_test = []
+                edge_number_list = []
                 save_json(losses, os.path.join(config['save_dir'], "losses.json"))
                 print(f'Metrics @ {current_step}:')
                 val_results, _ = run_evaluation(model=model,
@@ -145,6 +147,13 @@ def main():
                 print(f'unlabeled_val_F1:', [el['parser_unlabeled_results'].get('F1', None) for el in val_results_list])
                 print(f'val_las:', [el['uas_las_results'].get('las', None) for el in val_results_list])
                 save_json(val_results_list, os.path.join(config['save_dir'], "val_results_partial.json"))
+
+                if config['dataset_name'] in ['ade', 'conll04', 'scierc', 'erfgc']:
+                    val_correlation = np.corrcoef(val_results['f1_list'], val_results['edge_number_list'])[0, 1]
+                    print('Val f1 correlation:', val_correlation)
+                elif config['dataset_name'] in ['enewt', 'scidtb']:
+                    val_correlation = np.corrcoef(val_results['las_list'], val_results['edge_number_list'])[0, 1]
+                    print('Val las correlation:', val_correlation)
 
                 parser_f1 = val_results['parser_unlabeled_results']['F1']
 
@@ -186,10 +195,12 @@ def main():
                 save_json(test_results_list, os.path.join(config['save_dir'], "test_results_partial.json"))
                 print('#' * 100)
 
-                f1_list.extend(test_results['f1_list'])
-                edge_number_list.extend(test_results['edge_number_list'])
-                correlation = np.corrcoef(f1_list, edge_number_list)[0, 1]
-                print('correlation', correlation)
+                if config['dataset_name'] in ['ade', 'conll04', 'scierc', 'erfgc']:
+                    test_correlation = np.corrcoef(test_results['f1_list'], test_results['edge_number_list'])[0, 1]
+                    print('Test f1 correlation:', test_correlation)
+                elif config['dataset_name'] in ['enewt', 'scidtb']:
+                    test_correlation = np.corrcoef(test_results['las_list'], test_results['edge_number_list'])[0, 1]
+                    print('Test las correlation:', test_correlation)
                         
             if current_step >= config['use_gnn_steps'] \
                 and not unfrozen \
@@ -218,18 +229,21 @@ def main():
 
     # final evaluation on validation and test sets
     if config.get('save_model', False):
+
         model.load_state_dict(best_model_state)
         
         val_results, benchmark_metrics = run_evaluation(
             model, dataloader['val'], config, config.get('label_index_map', {}),
         )
 
-        f1_list.extend(val_results['f1_list'])
-        edge_number_list.extend(val_results['edge_number_list'])
-        correlation = np.corrcoef(f1_list, edge_number_list)[0, 1]
-        print('Correlation:', correlation)
+        if config['dataset_name'] in ['ade', 'conll04', 'scierc', 'erfgc']:
+            val_correlation = np.corrcoef(val_results['f1_list'], val_results['edge_number_list'])[0, 1]
+            print('Val f1 correlation:', val_correlation)
+        elif config['dataset_name'] in ['enewt', 'scidtb']:
+            val_correlation = np.corrcoef(val_results['las_list'], val_results['edge_number_list'])[0, 1]
+            print('Val las correlation:', val_correlation)
         
-        save_json(correlation, os.path.join(config['save_dir'], f"val_correlation.json"))
+        save_json(val_correlation, os.path.join(config['save_dir'], f"val_correlation.json"))
         save_json(val_results, os.path.join(config['save_dir'], f"val_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'val_results_benchmark.json'))
         print('Validation results:', val_results)
@@ -238,12 +252,14 @@ def main():
             model, dataloader['test'], config, config.get('label_index_map', {}),
         )
         
-        f1_list.extend(test_results['f1_list'])
-        edge_number_list.extend(test_results['edge_number_list'])
-        correlation = np.corrcoef(f1_list, edge_number_list)[0, 1]
-        print('Correlation:', correlation)
+        if config['dataset_name'] in ['ade', 'conll04', 'scierc', 'erfgc']:
+            test_correlation = np.corrcoef(test_results['f1_list'], test_results['edge_number_list'])[0, 1]
+            print('Test f1 correlation:', test_correlation)
+        elif config['dataset_name'] in ['enewt', 'scidtb']:
+            test_correlation = np.corrcoef(test_results['las_list'], test_results['edge_number_list'])[0, 1]
+            print('Test las correlation:', test_correlation)
         
-        save_json(correlation, os.path.join(config['save_dir'], f"test_correlation.json"))
+        save_json(test_correlation, os.path.join(config['save_dir'], f"test_correlation.json"))
         save_json(test_results, os.path.join(config['save_dir'], f"test_results.json"))
         save_json(benchmark_metrics, os.path.join(config['save_dir'], 'test_results_benchmark.json'))
         print('Test results:', test_results)

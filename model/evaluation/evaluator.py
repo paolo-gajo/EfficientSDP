@@ -161,6 +161,7 @@ def evaluate_model_nlp(model,
     uas_las_results = compute_uas_las(out, ignore_labels=[int(el) for el in ignore_edge_label_indices], missing_values={"_", None})
     edge_number_list = []
     f1_list = []
+    las_list = []
     for i, elem in enumerate(out):
         head_indices_sample = torch.tensor(elem['head_indices_gt'])
         edge_number = sum((head_indices_sample != 0).to(dtype = torch.long)).item()
@@ -168,7 +169,9 @@ def evaluate_model_nlp(model,
         parser_labeled_pred_sample = [f'{i}-{j}-{word}-{head_pred}-{edge_pred}' for j, (word, edge_pred, head_pred) in enumerate(zip(elem[token_id_field], elem['head_tags_pred'], elem['head_indices_pred']))]
         parser_labeled_gt_sample = [f'{i}-{j}-{word}-{head_gt}-{edge_gt}' for j, (word, edge_gt, head_gt) in enumerate(zip(elem[token_id_field], elem['head_tags_gt'], elem['head_indices_gt']))]
         P_sample, R_sample, F1_sample, acc_sample = filter_get_P_R_F1(parser_labeled_gt_sample, parser_labeled_pred_sample, type='edge_labels', ignore_edge_indices = ignore_head_indices, ignore_edge_labels = ignore_edge_label_indices)
+        uas_las_results_sample = compute_uas_las([elem], ignore_labels=[int(el) for el in ignore_edge_label_indices], missing_values={"_", None})
         f1_list.append(F1_sample)
+        las_list.append(uas_las_results_sample['las'])
 
     return {
         'tagger_results': tagger_results,
@@ -178,6 +181,7 @@ def evaluate_model_nlp(model,
         'times': times,
         'edge_number_list': edge_number_list,
         'f1_list': f1_list,
+        'las_list': las_list,
     }
 
 def evaluate_model_graph(model, data_loader, eps=1e-8):
