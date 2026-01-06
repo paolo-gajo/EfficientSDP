@@ -5,6 +5,15 @@ from datetime import datetime
 from typing import List
 from copy import deepcopy
 import json
+import torch
+import psutil
+
+def get_mem(show_mem: bool):
+    if not show_mem:
+        return None
+    process = psutil.Process()
+    mem_mb = process.memory_info().rss / 1024**2
+    return f"{mem_mb:.1f} MB"
 
 def write_text(file_path: str, text_data: str):
     """

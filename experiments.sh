@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J gnn
+#SBATCH -J tagger_abls
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
@@ -146,8 +146,6 @@ freeze_encoder=0
 
 save_suffix=ft
 
-use_tagger_rnn=1
-use_parser_rnn=1
 
 use_pred_tags=1
 
@@ -163,6 +161,10 @@ while IFS= read -r combo; do
     fi
 
     # if [[ "${params[9]}" == 0 && "${params[10]}" != 'lstm' ]]; then
+    #     continue
+    # fi
+
+    # if [[ "${params[12]}" == 1 && "${params[13]}" != 1 ]]; then
     #     continue
     # fi
     
@@ -184,8 +186,6 @@ while IFS= read -r combo; do
                 --model_name ${params[12]}
                 --train_steps $train_steps 
                 --eval_steps $eval_steps
-                --use_tagger_rnn $use_tagger_rnn
-                --use_parser_rnn $use_parser_rnn
                 --parser_rnn_hidden_size 400
                 --use_pred_tags $use_pred_tags
                 --freeze_encoder $freeze_encoder
