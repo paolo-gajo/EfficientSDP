@@ -75,8 +75,8 @@ class SimpleParser(nn.Module):
                 )
                 packed_output, _ = self.encoder_h(packed_input)
                 input, _ = pad_packed_sequence(packed_output,
-                                                            batch_first=True,
-                                                            total_length=input.size(1))
+                                                batch_first=True,
+                                                total_length=input.size(1))
             else:
                 # Transformer encoding
                 src_key_padding_mask = mask == 0

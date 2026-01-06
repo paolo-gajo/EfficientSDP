@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.utils import to_dense_adj
 from torch.nn.utils.rnn import PackedSequence, pad_packed_sequence, pack_padded_sequence
-from typing import List, Tuple, Optional, Set
+from typing import Dict, List, Tuple, Optional, Set
 import warnings
 import math
 
@@ -295,11 +295,12 @@ class BilinearMatrixAttention(nn.Module):
         self,
         matrix_1_dim: int,
         matrix_2_dim: int,
-        activation=None,
+        # activation=None,
+        config: Dict,
         use_input_biases: bool = False,
         out_features: int = 1,
-        bias_type: str = 'simple',
-        arc_norm: bool = True,
+        # bias_type: str = 'simple',
+        # arc_norm: bool = True,
     ) -> None:
         super().__init__()
         if use_input_biases:
@@ -313,11 +314,13 @@ class BilinearMatrixAttention(nn.Module):
                 torch.Tensor(out_features, matrix_1_dim, matrix_2_dim)
             )
         
-        self.arc_norm = arc_norm
-        self.scale_norm = math.sqrt((matrix_1_dim + matrix_2_dim) / 2) if arc_norm else 1
+        self.arc_norm = config['arc_norm']
+        self.scale_norm = math.sqrt((matrix_1_dim + matrix_2_dim) / 2) if self.arc_norm else 1
+
+        self.log_norm = config['log_norm']
         
         # Set up bias parameters based on the bias_type
-        self.bias_type = bias_type.lower()
+        self.bias_type = config['bias_type'].lower()
         if self.bias_type == "simple":
             self._bias = nn.Parameter(torch.Tensor(1))
             self._bias_1 = None
@@ -335,10 +338,9 @@ class BilinearMatrixAttention(nn.Module):
             self._bias_1 = None
             self._bias_2 = None
         else:
-            raise ValueError(f"Unsupported bias_type: {bias_type}."
+            raise ValueError(f"Unsupported bias_type: {self.bias_type}."
                            "Choose from 'simple', 'gnn', 'dozat', or 'none'.")
-
-        self.activation = activation or Passthrough()
+        self.activation = nn.ReLU() if config['biaffine_activation'] == 'relu' else Passthrough()
         self.use_input_biases = use_input_biases
         self.out_features = out_features
         self.reset_parameters()
@@ -354,6 +356,7 @@ class BilinearMatrixAttention(nn.Module):
             self._bias_2.data.fill_(0)
 
     def forward(self, matrix_1: torch.Tensor, matrix_2: torch.Tensor) -> torch.Tensor:
+        B, S, D = matrix_1.shape
         if self.use_input_biases:
             bias1 = matrix_1.new_ones(matrix_1.size()[:-1] + (1,))
             bias2 = matrix_2.new_ones(matrix_2.size()[:-1] + (1,))
@@ -383,14 +386,19 @@ class BilinearMatrixAttention(nn.Module):
             result = final + bias
         else:  # "none"
             result = final
-        
-        return self.normalize(self.activation(result))
+        normalized_activation = self.scale_normalize(self.activation(result))
+        normalized_activation = self.log_normalize(normalized_activation, torch.tensor(S, dtype=torch.float32))
+        return normalized_activation
 
-    def normalize(self, adj):
+    def scale_normalize(self, A):
         if self.arc_norm:
-                return adj / self.scale_norm
-        else:
-            return adj
+            A = A / self.scale_norm
+        return A
+    
+    def log_normalize(self, A, seq_len):
+        if self.log_norm:
+            A = A + torch.abs(torch.log(seq_len + EPS))
+        return A
 
 class TrilinearMatrixAttention(nn.Module):
     def __init__(
@@ -777,6 +785,14 @@ def adjust_for_sentinel(mask, head_indices, head_tags):
             [head_tags.new_zeros(head_tags.shape[0], 1), head_tags], dim=1
         )
     return mask, head_indices, head_tags
+
+def adj_matrix_to_adj_indices(matrix: torch.Tensor) -> torch.LongTensor:
+    """
+    matrix : (B, S, S) with adj[dep, head] = 1 (one-hot per dep)
+    returns: (B, S) head index per token
+    """
+    # works for float/bool/long; ties pick the first max (index 0..S-1)
+    return matrix.to(torch.float32).argmax(dim=-1).long()
 
 def adj_indices_to_adj_matrix(targets: torch.LongTensor) -> torch.Tensor:
     """

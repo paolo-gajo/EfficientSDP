@@ -51,10 +51,10 @@ class GenParser(torch.nn.Module):
             head_tags = model_input["head_tags_tokens"]
             step_indices = model_input["step_indices_tokens"]
 
-        if self.mode in ["train", "validation"]:
-            head_tags, head_indices = head_tags, head_indices
-        elif self.mode == "test":
-            head_tags, head_indices = None, None
+        # if self.mode in ["train", "validation"]:
+        #     head_tags, head_indices = head_tags, head_indices
+        # elif self.mode == "test":
+        #     head_tags, head_indices = None, None
 
         # Tagging
         tagger_output = self.tagger(encoder_output, mask=mask, labels=tagger_labels)
@@ -68,6 +68,12 @@ class GenParser(torch.nn.Module):
                                     mode=self.mode,
                                     )
 
+
+        if self.mode in ["train", "validation"]:
+            parser_output['head_tags'], parser_output['head_indices'] = parser_output['head_tags'], parser_output['head_indices']
+        elif self.mode == "test":
+            parser_output['head_tags'], parser_output['head_indices'] = None, None
+
         decoder_output = self.decoder(
             head_tag = parser_output['head_tag'],
             dep_tag = parser_output['dep_tag'],
@@ -80,16 +86,14 @@ class GenParser(torch.nn.Module):
 
         if self.mode in ["train", "validation"]:
             loss = (tagger_output.loss * self.config["tagger_lambda"]
-                    + decoder_output["loss"] * self.config["parser_lambda"]
-                    )
+                    + decoder_output["loss"] * self.config["parser_lambda"])
             return loss
         
         elif self.mode == "test":
             tagger_human_readable = self.tagger.make_output_human_readable(tagger_output, mask)
             decoder_human_readable = self.decoder.make_output_human_readable(decoder_output)
             output_as_list_of_dicts = self.get_output_as_list_of_dicts_words(
-                tagger_human_readable, decoder_human_readable, model_input
-                )
+                tagger_human_readable, decoder_human_readable, model_input)
             return output_as_list_of_dicts
 
     def freeze_tagger(self):

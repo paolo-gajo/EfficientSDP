@@ -39,16 +39,16 @@ declare -a seed=(
     0
     1
     2
-    3
-    4
+    # 3
+    # 4
 )
 # Define parameter arrays
 declare -a use_gnn_steps_opts=(0)
 declare -a rnn_layers_opts=(
     0
-    1
-    2
-    3
+    # 1
+    # 2
+    # 3
     )
 declare -a gnn_layers_opts=(
     0
@@ -75,7 +75,7 @@ declare -a top_k_opts=(
     # 4
     )
 declare -a arc_norm_opts=(
-    0
+    # 0
     1
     )
 declare -a gnn_dropout_opts=(
@@ -87,20 +87,28 @@ declare -a dataset_name_opts=(
     # ade
     # conll04
     # scierc
-    # erfgc
+    erfgc
     # scidtb
     # enewt
-    UD_Arabic-PADT
-    UD_Chinese-GSD
-    UD_Italian-ISDT
-    UD_Japanese-GSD
-    UD_Spanish-AnCora
-    UD_Wolof-WTB
+    # UD_Arabic-PADT
+    # UD_Chinese-GSD
+    # UD_Italian-ISDT
+    # UD_Japanese-GSD
+    # UD_Spanish-AnCora
+    # UD_Wolof-WTB
   )
 
-declare -a rnn_residual=(
+declare -a rnn_residual_opts=(
     0
     # 1
+    )
+
+declare -a model_name_opts=(
+    # bert-base-uncased
+    # bert-base-multilingual-cased
+    # microsoft/deberta-v3-base
+    microsoft/deberta-v3-large
+    # google-bert/bert-large-uncased
     )
 
 # Generate all combinations
@@ -116,7 +124,8 @@ array_names=(
             dataset_name_opts
             rnn_layers_opts
             parser_rnn_type_opts
-            rnn_residual
+            rnn_residual_opts
+            model_name_opts
             )
 combinations=$(cartesian_product array_names)
 
@@ -129,10 +138,13 @@ combinations=$(cartesian_product array_names)
 } > "${slurm_dir}/hyperparameters.txt"
 
 # Training parameters
-train_steps=2000
+epochs=0
+train_steps=3000
 eval_steps=500
 
-save_suffix=multilingual
+freeze_encoder=0
+
+save_suffix=ft
 
 use_tagger_rnn=1
 use_parser_rnn=1
@@ -169,12 +181,15 @@ while IFS= read -r combo; do
                 --parser_rnn_layers ${params[9]}
                 --parser_rnn_type ${params[10]}
                 --rnn_residual ${params[11]}
+                --model_name ${params[12]}
                 --train_steps $train_steps 
                 --eval_steps $eval_steps
                 --use_tagger_rnn $use_tagger_rnn
                 --use_parser_rnn $use_parser_rnn
                 --parser_rnn_hidden_size 400
                 --use_pred_tags $use_pred_tags
+                --freeze_encoder $freeze_encoder
+                --epochs $epochs
                 "
     if [[ "${params[1]}" -gt 0  && "${params[3]}" == 'simple' ]]; then
         continue
@@ -183,7 +198,7 @@ while IFS= read -r combo; do
     #     echo here
     #     continue
     # fi
-    # echo ${cmd}
+    echo ${cmd}
     commands+=("$cmd")
 done <<< "$combinations"
 

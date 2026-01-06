@@ -52,10 +52,11 @@ custom_config = {
     'parser_init': 'xu', # 'xu', 'norm', 'xu+norm'
     'bma_init': 'xu', # 'xu', 'norm'
     'arc_norm': 1,
+    'log_norm': 0,
     'mlp_dropout': 0.3,
 
     # gat
-    'gnn_layers': 1,
+    'gnn_layers': 0,
     'rnn_dropout': 0.3,
     'gnn_dropout': 0,
     'gnn_activation': 'tanh',
@@ -80,8 +81,8 @@ custom_config = {
     'triaffine_activation': None,
     
     # graphrnn
-    'graph_rnn_hidden_graph': 200,
-    'graph_rnn_hidden_edge': 200,
+    'graph_rnn_hidden_graph': 400,
+    'graph_rnn_hidden_edge': 400,
     'graph_rnn_node_layers': 3,
     'graph_rnn_edge_layers': 3,
     'graph_rnn_m': 20,
@@ -131,8 +132,8 @@ custom_config = {
     'grad_clip_norm': 1.0,
     'batch_size': 8,
     'training': 'steps',
-    'train_steps': 10000,
-    'eval_steps': 500,
+    'train_steps': 1000,
+    'eval_steps': 100,
     'eval_samples': 0, # 0 = all samples
     'epochs': 0 ,
     'patience': 0.3,
