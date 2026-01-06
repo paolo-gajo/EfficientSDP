@@ -167,7 +167,7 @@ def evaluate_model_nlp(model,
         edge_number_list.append(edge_number)
         parser_labeled_pred_sample = [f'{i}-{j}-{word}-{head_pred}-{edge_pred}' for j, (word, edge_pred, head_pred) in enumerate(zip(elem[token_id_field], elem['head_tags_pred'], elem['head_indices_pred']))]
         parser_labeled_gt_sample = [f'{i}-{j}-{word}-{head_gt}-{edge_gt}' for j, (word, edge_gt, head_gt) in enumerate(zip(elem[token_id_field], elem['head_tags_gt'], elem['head_indices_gt']))]
-        P_sample, R_sample, F1_sample, acc_sample = filter_get_P_R_F1(parser_labeled_gt, parser_labeled_pred, type='edge_labels', ignore_edge_indices = ignore_head_indices, ignore_edge_labels = ignore_edge_label_indices)
+        P_sample, R_sample, F1_sample, acc_sample = filter_get_P_R_F1(parser_labeled_gt_sample, parser_labeled_pred_sample, type='edge_labels', ignore_edge_indices = ignore_head_indices, ignore_edge_labels = ignore_edge_label_indices)
         f1_list.append(F1_sample)
 
     return {
